@@ -1,0 +1,141 @@
+
+#Установка подвесов для труб
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+	
+
+#a= show_var_(dm.int_res)
+
+#dm.create_point(dm.int_res.XYZPoint)
+
+import dm_connect_2 as dm
+reload(dm)
+
+import dm_nearest_geometry as dm1	
+reload(dm1)
+
+#ng = dm1.dm_Nearest_Geometry([bic.OST_Floors, bic.OST_Roofs])
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+#dm.connect_sprinkler_man()
+
+#__window__.Close()
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+#pipe = uidoc.Selection.GetElementIds()[0]
+pipeid = 2648338
+pipe = doc.GetElement(ElementId(pipeid))
+
+def print_dict(d) :
+	for n, k in enumerate(d) :
+		print("{}: {:25} : {}".format(n, k, d[k]))
+		
+def set_hanger_num(i) :
+	global hanger_symb
+	
+	hanger_symb = fdict[list(fdict.keys())[i]]
+	
+fcoll = FilteredElementCollector(doc).OfCategory(bic.OST_PipeFitting).WhereElementIsElementType().ToElements()
+fdict = {}
+for f in fcoll :
+	n = dm.en(f)
+	if n.lower().Contains("крепление") :
+		fdict[n] = f
+		fid = f.Id
+		fam_sym = f
+hanger_symb = None		
+print_dict(fdict)
+set_hanger_num(2)
+
+
+
+if True :
+	pipes =  [doc.GetElement(id_) for id_ in uidoc.Selection.GetElementIds()]
+	hangers = []
+	for pipe in pipes :
+		nh = dm1.hang_pipe(pipe, hanger_symb)
+		try :
+			hangers.extend(nh)
+		except :
+			pass
+	
+	
+		
+	with trans(doc) :
+		for h in hangers :
+			p = h.Location.Point
+			p2 = ng.nearest(p)
+			d = p.DistanceTo(p2)
+			h.LookupParameter("Расстояние_до_перекрытия").Set(d)
+		
+	
+if False :
+	hng =  [doc.GetElement(id_) for id_ in uidoc.Selection.GetElementIds()]
+	
+	for h in hng :
+		with trans(doc) :
+			p = h.Location.Point
+			p2 = ng.nearest(p)
+			d = p.DistanceTo(p2)
+			h.LookupParameter("Расстояние_до_перекрытия").Set(d+70*dut)
+			#h.LookupParameter("Расстояние_до_перекрытия").Set(800 * dut)
+		
+	
+	
+
+			
+		
+	
+	
+	

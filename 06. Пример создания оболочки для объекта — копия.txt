@@ -1,0 +1,29 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+tr = Transaction(doc, "solid_bbox_direct_shape")
+tr.Start()
+
+sketch = SketchPlane.Create(doc, face2.GetSurface())
+for cl in face2.GetEdgesAsCurveLoops() :
+	for l in cl :
+		mline = doc.Create.NewModelCurve(l, sketch)
+		
+	cl2 = CurveLoop.CreateViaOffset(cl, -500 * dut, face2.FaceNormal)
+	
+	for l in cl2 :
+		mline = doc.Create.NewModelCurve(l, sketch)
+
+
+print(3)
+
+tr.Commit()

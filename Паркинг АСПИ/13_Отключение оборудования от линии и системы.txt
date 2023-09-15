@@ -1,0 +1,49 @@
+from Autodesk.Revit import *
+equipment_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+equipment = doc.GetElement(equipment_ref)
+
+tr = Transaction(doc)
+tr.Start("plug off an equipment")
+
+systemsToDivide = []
+
+for c1 in equipment.MEPModel.ConnectorManager.Connectors :
+	if not c1.IsConnected : continue
+	pipe = None
+	for c2 in c1.AllRefs :
+		if c2.ConnectorType & ConnectorType.Physical\
+				and c2.Owner.Id != equipment.Id  and type(c2.Owner) == Plumbing.Pipe :
+			pipe = c2.Owner
+
+	if not pipe : continue
+	
+	systemsToDivide.append(c1.MEPSystem)
+	
+	
+	
+	
+	c1.DisconnectFrom(c2)
+	pipeLocation = pipe.Location.Curve
+	pipeEnd0, pipeEnd1 = sorted([c3.Origin for c3 in pipe.ConnectorManager.Connectors 
+									if c3.ConnectorType == ConnectorType.End], 
+									key = lambda x : c1.Origin.DistanceTo(x))
+	pipeEnd0Modified = pipeEnd0 + c1.CoordinateSystem.BasisZ * 0.01
+	newPipeLocation = Line.CreateBound(pipeEnd0Modified, pipeEnd1)
+	pipe.Location.Curve = newPipeLocation
+tr.Commit()
+tr.Start("delete system")
+for system in systemsToDivide :
+	try :
+		system.DivideSystem(doc)
+	except :
+		pass
+
+	
+for c1 in equipment.MEPModel.ConnectorManager.Connectors :
+	if c1.MEPSystem :
+		doc.Delete(c1.MEPSystem.Id)
+	
+tr.Commit()
+	
+	
+			

@@ -1,0 +1,144 @@
+"""
+***************************************************************
+*** Простановка марок на отверстия для заданий по АР и КЖ
+*** СОЮЗ
+*** СОЮЗ\работа с заданиями\01_Маркировка заданий.txt
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с заданиями\01_Маркировка заданий.txt"
+***************************************************************
+* 
+***************************************************************
+"""
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+OT = UI.Selection.ObjectType
+
+
+
+class dmCheckProjection(object) :
+	def __init__(self, av) :
+		self.av = av
+		
+		mng = uidoc.ActiveView.GetCropRegionShapeManager()
+		cl = mng.GetCropShape()
+		
+		try :
+			pl = cl[0].GetPlane()
+			pl_n = pl.Normal
+		
+			
+		
+			
+			
+			sld = GeometryCreationUtilities.CreateExtrusionGeometry(cl, pl_n, 0.01)
+			f = None
+			for f_ in sld.Faces :
+				if f_.FaceNormal.IsAlmostEqualTo(pl_n) :
+					self.f = f_
+					
+			self.all = False
+		except :
+			self.all = True
+	def is_inside(self, p1) :
+		print("Проверяем")
+		if self.all : 
+			return True 
+		else :
+			return self.f.Project(p1)
+		
+def is_tagged(hole, flt) :
+	
+	return any([True for e in hole.GetDependentElements(flt) if isinstance(doc.GetElement(e), IndependentTag)])
+	
+
+def create_tags_on_view(av, check) :
+
+	holes = FilteredElementCollector(doc, av.Id).OfCategory(bic.OST_GenericModel).ToElements()
+	
+	tr = Transaction(doc)
+	tr.Start("Add tag for pipe")
+	view_r_dir = av.RightDirection
+	trf = Transform.CreateRotation(av.ViewDirection, math.pi / 4)
+	tag_dir = trf.OfVector(view_r_dir)
+	flt = ElementOwnerViewFilter(av.Id, False)
+	
+	
+	for hole in holes :
+		if is_tagged(hole, flt) : continue
+		p1 = hole.Location.Point
+		
+		m = p1 + tag_dir * 25 * dut * av.Scale
+		ref = Reference(hole)
+		
+			
+		tag = IndependentTag.Create(doc, av.Id, ref, True, 
+									TagMode.TM_ADDBY_CATEGORY,
+									TagOrientation.Horizontal,
+									p1)
+									
+		tag.LeaderEndCondition = LeaderEndCondition.Free
+		tag.LeaderElbow = (m + p1) * 0.5
+		
+		tag.TagHeadPosition = m
+		
+									
+
+			
+		
+	tr.Commit()
+			
+	
+	
+fc = FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()
+plans = []
+
+for plan in fc :
+	if plan.Name.StartsWith("Э_ПТ_Задание_АР") :
+		plans.append(plan)
+
+print(len(plans))
+
+
+
+#tr = Transaction(doc)
+#tr.Start("put pipe tags")
+
+
+for av in plans :
+	print(1)
+	check = dmCheckProjection(av)
+	create_tags_on_view(av, check)
+	
+
+
+
+

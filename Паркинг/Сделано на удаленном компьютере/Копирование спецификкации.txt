@@ -1,0 +1,10 @@
+v = uidoc.ActiveView
+
+tr = Transaction(doc)
+
+tr.Start("copy specs")
+for i in range(3) :
+	print(1)
+	ElementTransformUtils.CopyElement(doc, v.Id, XYZ.Zero)
+	
+tr.Commit()

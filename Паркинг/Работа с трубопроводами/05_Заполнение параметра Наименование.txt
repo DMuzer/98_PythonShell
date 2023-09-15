@@ -1,0 +1,131 @@
+"""
+***************************************************************
+*** Заполнение параметров для труб и прочих семейств
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\08_Заполнение параметров.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+fc = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+
+tr = Transaction(doc)
+tr.Start("Update parameters")
+
+pipe_names = {
+	15.0 * dut : "Трубы водогазопроводные DN15 21,3х2,5",
+	20.0 * dut : "Трубы водогазопроводные DN20 26,8х2,5",
+	25.0 * dut : "Трубы водогазопроводные DN25 33,5х2,8",
+	32.0 * dut : "Трубы водогазопроводные DN32 42,3х2,8",
+	40.0 * dut : "Трубы водогазопроводные DN40 48х3",
+	50.0 * dut : "Трубы водогазопроводные DN50 60х3",
+	65.0 * dut : "Трубы электросварные DN65 76х2,8",
+	80.0 * dut : "Трубы электросварные DN80 89х2,8",
+	100.0 * dut : "Трубы электросварные DN100 108х3",
+	125.0 * dut : "Трубы электросварные DN125 133х3,2",
+	150.0 * dut : "Трубы электросварные DN150 159х3,2",
+	200.0 * dut : "Трубы электросварные DN200 219х4",
+	225.0 * dut : "Трубы электросварные DN225 244,5х4",
+	250.0 * dut : "Трубы электросварные DN250 273х4",
+	
+}
+pipe_gost = {
+	15.0 * dut : "ГОСТ 3262",
+	20.0 * dut : "ГОСТ 3262",
+	25.0 * dut : "ГОСТ 3262",
+	32.0 * dut : "ГОСТ 3262",
+	40.0 * dut : "ГОСТ 3262",
+	50.0 * dut : "ГОСТ 3262",
+	65.0 * dut : "ГОСТ 10704",
+	80.0 * dut : "ГОСТ 10704",
+	100.0 * dut : "ГОСТ 10704",
+	125.0 * dut : "ГОСТ 10704",
+	150.0 * dut : "ГОСТ 10704",
+	200.0 * dut : "ГОСТ 10704",
+	225.0 * dut : "ГОСТ 10704",
+	250.0 * dut : "ГОСТ 10704",
+	
+}
+
+k_len = 1.1
+
+for p in fc :
+	try :
+		naim_param = p.LookupParameter("ADSK_Наименование")
+		
+		if naim_param :
+			d = p.Diameter 
+			naim_param.Set(pipe_names[d])
+			
+		p_len = round(p.Location.Curve.Length * k_len / dut / 100) / 10
+		len_param = p.LookupParameter("ADSK_Количество")
+		if len_param :
+			len_param.Set(p_len)
+			
+		unit = p.LookupParameter("ADSK_Единица измерения")
+		if unit :
+			unit.Set("м.")
+		
+		gr_par = p.LookupParameter("ADSK_Группирование")
+		if gr_par :
+			gr_par.Set("50_Трубы")
+			
+	except :
+		continue
+		
+			
+	
+
+tr.Commit()
+	
+
+
+
+
+
+

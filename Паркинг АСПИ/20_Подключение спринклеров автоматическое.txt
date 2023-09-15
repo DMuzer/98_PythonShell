@@ -1,0 +1,51 @@
+"""
+Присоединение неподключенных спринклеров
+"D:\18_проектирование\98_PythonShell\Паркинг АСПИ\20_Подключение спринклеров автоматическое.txt"
+"""
+dut = 0.0032808398950131233
+def getConnector(sprinkler) :
+	return list(sprinkler.MEPModel.ConnectorManager.Connectors)[0]
+def connectSprinkler(connector, pipeRef) :
+	pipe = doc.GetElement(pipeRef)зщ
+	pipeCopyId = ElementTransformUtils.CopyElement(doc, pipeRef.ElementId, XYZ.Zero)[0]
+	pipeCopy = doc.GetElement(pipeCopyId)
+	
+	newPipeLocation = Line.CreateBound(connector.Origin, pipeRef.GlobalPoint)
+	pipeCopy.Location.Curve = newPipeLocation
+	pipeCopy.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(20 * dut)
+	connectors = sorted(pipeCopy.ConnectorManager.Connectors, 
+								key = lambda x : connector.Origin.DistanceTo(x.Origin))
+	connector.ConnectTo(connectors[0])
+	doc.Create.NewTakeoffFitting(connectors[1], pipe)
+	
+	
+refView = {view.Name : view for view in FilteredElementCollector(doc).OfClass(View3D).ToElements()}["DM_Вид для подключения"]
+pipeFilter  = ElementClassFilter(Plumbing.Pipe)
+sprinklerIds = list(uidoc.Selection.GetElementIds())
+if len(sprinklerIds) == 0 :
+	sprinklerIds = FilteredElementCollector(doc, uidoc.ActiveView.Id)\
+						.OfCategory(BuiltInCategory.OST_Sprinklers).ToElementIds()
+						
+print(len(sprinklerIds))
+
+
+ri = ReferenceIntersector(pipeFilter, FindReferenceTarget.All, refView)
+tr = Transaction(doc, "connecting sprinklers")
+tr.Start()
+i = 0 
+for sprinklerId in sprinklerIds :
+	sprinkler = doc.GetElement(sprinklerId)
+	if sprinkler.Category.Id.IntegerValue != int(BuiltInCategory.OST_Sprinklers) : continue
+	connector = getConnector(sprinkler)
+	if connector.IsConnected : continue
+	originPnt = connector.Origin
+	direction = connector.CoordinateSystem.BasisZ
+	
+	pipeGRef = ri.FindNearest(originPnt, direction)
+	if not pipeGRef : continue
+	pipeRef = pipeGRef.GetReference()
+	print(pipeRef)
+	i += 1
+	connectSprinkler(connector, pipeRef)
+print(f"i = {i}")
+tr.Commit()

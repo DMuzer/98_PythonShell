@@ -1,0 +1,154 @@
+from collections import deque
+def get_code(e) :
+	#Возврат кода элемента
+	param = e.LookupParameter("ADSK_Имя устройства")
+	if param :
+		return param.AsString()
+	else :
+		t = doc.GetElement(e.GetTypeId())
+		param = t.LookupParameter("ADSK_Имя устройства")
+		if param :
+			return param.AsString()
+	return ""
+	
+class dmElement(object) :
+	def __init__(self, e) :
+		self.e = e
+	def get_parameter_value(self, name) :
+		#Возврат кода элемента
+		param = self.e.LookupParameter(name)
+
+		if param is None :
+			t = doc.GetElement(self.e.GetTypeId())
+			param = t.LookupParameter(name)
+			
+		if param is None : return
+			
+		if param.StorageType == StorageType.Integer :
+			return param.AsInteger()
+		elif param.StorageType == StorageType.String :
+			return param.AsString()
+		elif param.StorageType == StorageType.Double :
+			return param.AsDouble()
+		elif param.StorageType == StorageType.ElementId :
+			return param.AsElementId()
+			
+	def set_parameter(self, name, value) :
+		#Возврат кода элемента
+		param = self.e.LookupParameter(name)
+
+		if param is None :
+			t = doc.GetElement(self.e.GetTypeId())
+			param = t.LookupParameter(name)
+			
+		if param :
+			param.Set(value)
+		
+
+			
+		
+#формируем фильтр для типов систем - целочисленный
+bi_param = BuiltInParameter.RBS_ELEC_CIRCUIT_TYPE
+par_val_provider = ParameterValueProvider(ElementId(int(bi_param)))
+value = int(Electrical.ElectricalSystemType.FireAlarm)
+rule_evaluator = FilterNumericEquals()
+
+f_rule = FilterIntegerRule(par_val_provider, rule_evaluator, value)
+flt = ElementParameterFilter(f_rule)
+
+#подготавливаем фильтр для нагрузки 
+load_param_name = BuiltInParameter.RBS_ELEC_CIRCUIT_NAME
+
+f2_parameter_value_provider = ParameterValueProvider(ElementId(int(load_param_name)))
+f2_value = "RS485"
+f2_rule_evaluator = FilterStringBeginsWith()
+f2_rule = FilterStringRule(f2_parameter_value_provider, f2_rule_evaluator, f2_value, False)
+f2 = ElementParameterFilter(f2_rule)
+
+
+fc = FilteredElementCollector(doc).OfClass(Electrical.ElectricalSystem)
+fc.WherePasses(flt).WherePasses(f2)
+fc.ToElements()
+
+panels = {}
+
+for e in fc :
+	print(e.SystemType)
+	print(e.LoadName)
+	print(e.BaseEquipment.Id)
+	try :
+		panels[e.BaseEquipment.Id].append(e)
+	except :
+		panels[e.BaseEquipment.Id] = [e]
+print(100*"*")	
+
+tr1 = Transaction(doc)
+
+for panel_id in panels :
+	panel = dmElement(doc.GetElement(panel_id))
+	panel_num = panel.get_parameter_value("ADSK_Имя панели")
+	interfaces = panels[panel_id]
+	elements = {intf.LoadName : list(intf.Elements) for intf in interfaces}
+	addresses = [str(i) for i in range(1, 127)]
+	to_address = []
+	for load_name in sorted(elements.keys()) :
+		addresses = deque([str(i) for i in range(1, 127)])
+		to_address = []
+		print(100*"|")
+		print(load_name)
+		print(100*"-")
+		els = elements[load_name]
+		for el in els :
+			e = dmElement(el)
+			mark = e.get_parameter_value("Марка")
+			el_name = e.get_parameter_value("ADSK_Имя устройства")
+			cont_num = e.get_parameter_value("ADSK_Номер контроллера")
+			
+			if cont_num is None or cont_num == "" :
+				to_address.append(el)
+			else :
+				try :
+					addresses.remove(cont_num)
+				except :
+					print("{}\n{}".format(cont_num, addresses))
+					
+				
+				e_name = e.get_parameter_value("ADSK_Имя устройства")
+				e_panel = e.get_parameter_value("ADSK_Номер панели")
+				
+				pos = "{}.{}.{}".format(e_name, panel_num, cont_num)
+				
+				tr1.Start("Установка имени панели")
+				#e.set_parameter("ADSK_Номер контроллера", "")
+				
+				e.set_parameter("Марка", pos)
+				e.set_parameter("Имя панели", pos)
+				tr1.Commit()
+					
+				
+			
+			print("{} : {}| Id = {}| cont_num = {}".format(mark, get_code(el), el.Id, cont_num))
+			
+		print("Свободные адреса {}".format(addresses))
+		print("Требуется проадресовать :  {}".format(to_address))
+		
+		for e1 in to_address :
+			e = dmElement(e1)
+			e_name = e.get_parameter_value("ADSK_Имя устройства")
+			e_panel = e.get_parameter_value("ADSK_Номер панели")
+			e_num = addresses.popleft()
+			pos = "{}.{}.{}".format(e_name, panel_num, e_num)
+			
+			tr1.Start("Установка марки")
+			e.set_parameter("ADSK_Номер контроллера", e_num)
+			e.set_parameter("Марка", pos)
+			e.set_parameter("Имя панели", pos)
+			tr1.Commit()
+			
+			
+			
+	
+	#max_id = 
+		
+
+	

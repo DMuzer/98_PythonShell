@@ -1,0 +1,112 @@
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+from System import Array
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+def get_rooms_from_link(l) :
+	ldoc = l.GetLinkDocument()
+	fc = FilteredElementCollector(ldoc).OfCategory(bic.OST_Rooms).ToElements()
+	return fc
+	
+def create_direct_shape(g) :
+	with dm.trans(doc) :
+		ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+		dm.set_workset(ds, ws, True)
+		for g1 in g :
+			try :
+				ds.AppendShape(Array[GeometryObject]([g1]))
+			except Exception as ex:
+				print(ex)
+				pass
+				
+	return ds
+	
+mcf = ElementMulticategoryFilter(
+			System.Array[BuiltInCategory](
+					[bic.OST_PipeCurves, 
+						bic.OST_PipeFitting, 
+						bic.OST_Walls, 
+						bic.OST_GenericModel]), True)
+						
+	
+	
+
+
+app = dm.dmApp(doc)
+
+ws = app.worksets['Построения']
+
+sp = app.spaces['5']
+
+view = app.views['DM_ОТМЕТКИ']
+
+flt = FilteredElementCollector(doc).WherePasses(mcf)
+objs = flt.ToElements()
+
+fref_targ = FindReferenceTarget.Element
+
+ref_int = ReferenceIntersector(mcf, fref_targ, view)
+ref_int.FindReferencesInRevitLinks = True
+
+cont = sp.get_contours()
+g = []
+for cl in cont :
+	for c in cl :
+		g.append(c)
+		
+ds = create_direct_shape(g)
+sp.CalculateSprinklerPositions(max_step = 3900*dut)
+
+elevation = sp.space.Level.Elevation + 500 * dut
+dist = 150 * dut
+
+pl = []
+for p in sp.sprinkler_points_list :
+	p_ = XYZ(p.X, p.Y, elevation)
+	z_found = ref_int.FindNearest(p_, XYZ.BasisZ).GetReference().GlobalPoint.Z - dist
+	p_upd = XYZ(p.X, p.Y, z_found)
+	
+	pl.append(Point.Create(p_upd))
+
+ds1 = create_direct_shape(pl)
+	
+
+
+

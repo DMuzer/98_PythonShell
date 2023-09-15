@@ -1,0 +1,208 @@
+st = """
+Создание расчетного графа для трубопровода и 
+Создание параллельной линии трубопровода
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Построение графа трубопроводов\04_Построение параллельной линии.txt"
+"""
+print(st)
+dut = 0.0032808398950131233
+copyOffset = -200
+import itertools
+
+class dmElement :
+	def __init__(self, element) :
+		if isinstance(element, Element) :
+			self.element = element
+		elif isinstance(element, ElementId) :
+			self.element = doc.GetElement(element)
+		elif isinstance(element, Reference) :
+			self.element = doc.GetElement(element)	
+		elif isinstance(element, int) :
+			self.element = doc.GetElement(ElementId(element))
+	def __repr__(self) :
+		if hasattr(self.element, "MEPModel") : 
+			return f"Элемент id {self.element.Id} {self.element.Category.Name} {self.element.MEPModel.PartType}"
+			
+		return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+	def __hash__(self) :
+		return self.element.Id.IntegerValue
+	def __eq__(self, other) :
+		if isinstance(other, dmElement) :
+			return other.element.Id == self.element.Id
+		elif isinstance(other, Element) :
+			return other.Id == self.element.Id
+	def _getNeighbors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		neighbors = []
+		for connector in connectors :
+			if connector.ConnectorType == ConnectorType.End :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id :
+							neighbors.append(dmElement(c2.Owner))
+		return neighbors
+	neighbors = property(_getNeighbors)
+	
+	def _getLocation(self) :
+		return self.element.Location
+	Location = property(_getLocation)
+	
+	def _getId(self) :
+		return self.element.Id
+	Id = property(_getId)
+	
+	def _getNotConnectedConnector(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return [c for c in connectors if c.ConnectorType == ConnectorType.End and not c.IsConnected][0]
+	notConnectedConnector = property(_getNotConnectedConnector)
+	
+	def getLocationStartedAt(self, connector) :
+		location = self.Location.Curve
+		if location.GetEndPoint(0).DistanceTo(connector.Origin)\
+			< location.GetEndPoint(1).DistanceTo(connector.Origin) :
+			return location
+		else :
+			return location.CreateReversed() 
+	
+	def getAnotherConnector(self, connector) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		for connector2 in connectors :
+			if connector2.ConnectorType == ConnectorType.End and connector2.Id != connector.Id :
+				return connector2
+				
+	def _getConnectors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return connectors
+	Connectors = property(_getConnectors)
+	
+	def _getEndConnectors(self) :
+		return [connector for connector in self.Connectors if connector.ConnectorType == ConnectorType.End]
+	EndConnectors = property(_getEndConnectors)
+		
+	def nearestConnector(self, connector1) :
+		return min(self.EndConnectors, key = lambda x : x.Origin.DistanceTo(connector1.Origin))
+		
+	def connectToPipe(self, pipe2) :
+		ec10, ec11 = self.EndConnectors
+		ec20, ec21 = pipe2.EndConnectors
+		
+		c1, c2 = min(itertools.product(self.EndConnectors, pipe2.EndConnectors), 
+						key = lambda x : x[0].Origin.DistanceTo(x[1].Origin))
+		doc.Create.NewElbowFitting(c1, c2)
+	
+		
+		
+	
+		
+		
+				
+			
+
+raise
+pipe1 = dmElement(uidoc.Selection.GetElementIds()[0])
+toVisit = [pipe1]
+tree = {pipe1 : None}
+i = 0 
+while toVisit :
+	i += 1
+	if i > 10000 : raise
+	current = toVisit.pop()
+	for next in current.neighbors :
+		if next not in tree :
+			tree[next] = current
+			toVisit.append(next)
+
+from collections import deque
+ends = {e for e in tree.keys() if e not in tree.values()}
+print(ends)
+print(len(ends))
+#print(found)
+start = ends.pop()
+sequence = []
+
+toVisit = deque([start])
+visited = set()
+sequence = []
+i = 0
+while toVisit :
+	i += 1
+	if i > 10000 : raise
+	current = toVisit.popleft()
+	
+	visited.add(current)
+	sequence.append(current)
+	
+	for next in current.neighbors :
+		if next not in visited :
+			toVisit.append(next)
+			
+	
+
+print(start)
+print(len(sequence))
+print(sequence)
+pipes = [e for e in sequence if type(e.element) == Plumbing.Pipe]
+
+start, pipes = pipes[0], deque(pipes[1:])
+startConnector = start.notConnectedConnector
+current = start
+currentStartConnector = startConnector
+currentEndConnector = current.getAnotherConnector(currentStartConnector)
+elbowConnectors = []
+
+
+tr = Transaction(doc, "copy sequence")
+tr.Start()
+prevLocation = None
+newPipes = []
+while True :
+	pipeLocation = current.getLocationStartedAt(currentStartConnector)	
+	newLocation = pipeLocation.CreateOffset(copyOffset * dut, XYZ.BasisZ)
+	
+	newPipeId = ElementTransformUtils.CopyElement(doc, current.Id, XYZ.Zero)[0]
+	newPipe = doc.GetElement(newPipeId)
+	newPipe.Location.Curve = newLocation
+	newPipeElement = dmElement(newPipe)
+	newPipes.append(newPipeElement)
+	
+	
+	if not pipes : break
+	current = pipes.popleft()
+	currentStartConnector = current.nearestConnector(currentEndConnector)
+	elbowConnectors.append((currentEndConnector, currentStartConnector))
+	currentEndConnector = current.getAnotherConnector(currentStartConnector)
+	
+for pipe1, pipe2 in zip(newPipes[:-1], newPipes[1:]) :
+	try :
+		print(0)
+		pipe1.connectToPipe(pipe2)
+	except Exception as ex:
+		print(ex)
+		continue
+	
+	
+tr.Commit()
+
+
+	
+print(st)
+print("завершено...")
+	
+	
+	
+
+
+

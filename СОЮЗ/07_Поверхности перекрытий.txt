@@ -1,0 +1,370 @@
+"""
+***************************************************************
+*** Анализ пространств и вычисление нижних поверхностей плит
+*** 
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+floors = []
+levels = set()
+l_lines = []
+
+def get_max_z(f) :
+ 	zz = []
+ 	if type(f) == PlanarFace :
+ 		cls = f.GetEdgesAsCurveLoops()
+ 	else :
+ 		cls = f
+	for cl in  cls:
+		for c in cl :
+				zz.append(c.GetEndPoint(0).Z)
+				
+	return max(zz)
+	
+def get_min_z(f) :
+ 	zz = []
+ 	if type(f) == PlanarFace :
+ 		cls = f.GetEdgesAsCurveLoops()
+ 	else :
+ 		cls = f
+	for cl in  cls:
+		for c in cl :
+				zz.append(c.GetEndPoint(0).Z)
+				
+	return min(zz)
+	
+def get_faces(e) :
+	if type(e) != Solid :
+		g = e.Geometry[Options()]
+	else :
+		g = [e]
+	res = []
+	for eg in g :
+		if type(eg) == Solid :
+			for f in eg.Faces :
+				if type(f) == PlanarFace :
+					if f.FaceNormal.Z < -0.1 :
+						res.append(f)
+	return res
+	
+def get_space_solid(s , height = 10000*dut) :	
+	g = sp.space.Geometry[Options()]	
+	contour = sp.get_contours()	
+	solid = GeometryCreationUtilities.CreateExtrusionGeometry(contour, XYZ.BasisZ, height)
+	return solid
+	
+	
+def set_color(e, r=0,g=0,b=0, a=0) :
+	color = Color(r,g,b)
+	view = uidoc.ActiveView
+	ogs = OverrideGraphicSettings()
+	ogs.SetProjectionLineColor(color)
+	ogs.SetSurfaceTransparency(a)
+	ogs.SetSurfaceForegroundPatternColor(color)
+	ogs.SetSurfaceForegroundPatternId(ElementId(19))
+	
+	tr = Transaction(doc)
+	tr.Start("set color")
+	view.SetElementOverrides(e.Id, ogs)
+	tr.Commit()
+	
+	
+	
+
+	
+
+ds = doc.GetElement(ElementId(6305061))
+
+
+
+#sp = mapp.spaces["В1_-1_Т1_44"]
+sp1 = mapp.spaces["0-1.ОА.08"]
+
+	
+def get_free_solid(sp) :
+	space_solid_height = 10000*dut
+	max_solid_elevation = sp.space.Location.Point.Z + space_solid_height
+	solid1 = get_space_solid(sp, height = space_solid_height)
+		
+	import time
+	
+	t1 = time.time()
+	
+	fc = FilteredElementCollector(doc).OfClass(DirectShape).ToElements()
+	g1 = []
+	for e in fc :
+		g = e.Geometry[Options()]	
+		for s in g :
+			if type(s)== Solid :
+				s2 = BooleanOperationsUtils.ExecuteBooleanOperation(s, solid1, BooleanOperationsType.Intersect)
+				if s2.Volume > 0 :
+					g1.append(s2)
+					#ds1 = dm.create_ds(s2)
+					#set_color(ds1, r=20, g=200, b=20, a=70)
+	
+	t2 = time.time()
+	print("Время выполнения {:0.2f} c".format(t2-t1))
+	print("Количество тел {}".format(len(g1)))
+	
+	faces = []
+	
+	
+	print(50*"*")
+	# Вытаскиваем в список faces все грани, которые направлены вниз
+	for g in g1 :
+		fs = get_faces(g)
+		faces.extend(fs)
+		
+		for f in fs :
+			cl = f.GetEdgesAsCurveLoops()
+			#ds2 = dm.create_ds(cl)
+			#set_color(ds2, r=0, g=0, b=255, a=70)
+	
+			#ds2 = dm.create_ds(f)
+			#set_color(ds2, r=0, g=255, b=0, a=70)
+			
+		
+		
+	
+	
+	# сделаем из граней небольшой solid для вычисления проекций
+		
+	thin_solids = []
+	for f in faces :
+		cnt1 = f.GetEdgesAsCurveLoops()
+		sf = f.GetSurface()
+		print(sf.Normal)
+		solid = GeometryCreationUtilities.CreateExtrusionGeometry(cnt1, XYZ.BasisZ, 15000*dut)
+		thin_solids.append((solid, f))
+		#ds3 = dm.create_ds(solid)
+		#set_color(ds3, r=0, g=255, b =255, a = 70)
+		
+	
+	
+	# сделаем проекцию каждой поверхности на максимальную высоту рассматриваемого объема помещения
+	sp_max_proj = sp.space.Level.Elevation + 15000 * dut
+	plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ(0,0, sp_max_proj))
+	sol_opts = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+	
+	
+	
+	for solid_3, face_3 in thin_solids[:0]:
+		ex_analyzer1 = ExtrusionAnalyzer.Create(solid_3, face_3.GetSurface(),face_3.GetSurface().Normal)
+		new_face2 = ex_analyzer1.GetExtrusionBase()
+		
+		ex_analyzer = ExtrusionAnalyzer.Create(solid_3, plane , XYZ.BasisZ)
+		
+		new_face = ex_analyzer.GetExtrusionBase()
+		
+		cl1 = new_face.GetEdgesAsCurveLoops()
+		pg1 = dm.get_PolygonFromCurveLoops(cl1).Buffer(-0.1).Buffer(0.2).Buffer(-0.1)
+		if pg1.IsEmpty :
+			print("cl1 is empty")
+			continue
+		cl11 = dm.get_CurveLoopsFromPolygon(pg1)[0]
+		
+		cl2 = new_face2.GetEdgesAsCurveLoops()
+		pg2 = dm.get_PolygonFromCurveLoops(cl2).Buffer(-0.1).Buffer(0.2).Buffer(-0.1)
+		if pg2.IsEmpty :
+			print("cl2 empty")
+			continue
+			
+		cl21 = dm.get_CurveLoopsFromPolygon(pg2)[0]
+		
+		prof_loops = System.Array[CurveLoop]([cl1[0], cl2[0]])
+		try :
+			new_solid = GeometryCreationUtilities.CreateLoftGeometry(prof_loops, sol_opts)
+			
+			#dm.create_ds(new_solid)
+			solids_2.append(new_solid)
+			
+			ds4 = dm.create_ds(new_solid)
+			set_color(ds4, r=0, g=0, b=255, a =80)
+			
+			ds1 = dm.create_ds(cl1)
+			set_color(ds1, r=0, g=255, b=0, a =80)
+			ds2 = dm.create_ds(cl2)
+			set_color(ds2, r=0, g=0, b=255, a =80)
+			
+		except Exception as ex:
+			ds1 = dm.create_ds(cl1)
+			set_color(ds1, r=255, g=0, b=0, a =80)
+			ds2 = dm.create_ds(cl2)
+			set_color(ds2, r=255, g=0, b=0, a =80)
+			print(ex)
+			raise
+		
+			
+			pass
+			
+		
+			
+	
+			
+	
+		
+
+	res = solid1
+	
+	
+	for s in thin_solids[:] :
+		try :
+		
+			#ds_res = dm.create_ds(res)
+			#set_color(ds_res, 200,100,100,80)
+			#ds_s = dm.create_ds(s[0])
+			#set_color(ds_res, 100,200,100,80)
+			
+			res = BooleanOperationsUtils.ExecuteBooleanOperation(res, s[0], BooleanOperationsType.Difference)
+			
+			#time.sleep(1)
+			
+			#doc.Delete(ds_res.Id)
+			#doc.Delete(ds_s.Id)
+			
+			
+			
+			
+		except Exception as ex:
+			
+			s4 = dm.create_ds(s[0])
+			set_color(s4, 255,0,0,0)
+			
+	return res
+			
+			
+def create_space_solid(sp) :
+	res = get_free_solid(sp)	
+	print("Создаем солид результата")
+	s4 = dm.create_ds(res)
+	set_color(s4, 255,255,0,80)
+	faces_4 = []
+	
+	
+	for face_4 in res.Faces :
+		if type(face_4) == PlanarFace :
+			if face_4.FaceNormal.Z > 0.2 :
+				if get_min_z(face_4) < max_solid_elevation :
+					print(get_min_z(face_4))
+					faces_4.append(face_4)
+			
+	cont_4 = []
+	for f in faces_4 :
+		fcont = f.GetEdgesAsCurveLoops()
+		dm.create_ds(fcont)
+		
+
+			
+		
+
+		
+		
+			
+		
+	
+problems = []	
+spr1_id = ElementId(7723417)
+
+
+for sp in mapp.spaces_not_protected[:] :
+	print(sp.Name)
+	#sp.is_protected = True
+	
+	fs = dm.dmFreeSpaceSolid(sp)
+	fs.calc_solid()
+	#fs.show_space_solid()
+	fs.find_slabs()
+	#fs.show_slabs()
+	fs.calc_down_faces()
+	
+	#fs.show_slabs_faces()
+	fs.calc_faces_shadow_solids()
+	#fs.show_shadow_solids()
+	fs.calc_unshadow_space()
+	fs.calc_unshadow_faces()
+	#fs.show_unshadow_faces()
+	fs.calc_sprinkler_pos()
+	fs.show_sprinkler_pos()
+	fs.show_unshadow_solid()
+	fs.create_sprinklers_copy(spr1_id)
+	
+	
+	try :
+		pass
+		#create_space_solid(sp)
+	except :
+		problems.append(sp)
+		s4 = dm.create_ds(sp._get_geometry())
+		set_color(s4, 255,0,0,80)
+		
+	sp.is_protected = 1
+
+
+
+	
+	
+
+
+	
+
+	
+	
+
+
+	
+
+	
+
+
+	
+	
+
+

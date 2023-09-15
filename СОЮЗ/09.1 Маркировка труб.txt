@@ -1,0 +1,90 @@
+"""
+***************************************************************
+*** ПРОСТАНОВКА ОБОЗНАЧЕНИЙ ТРУБ
+*** 
+***************************************************************
+* 
+***************************************************************
+"""
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+OT = UI.Selection.ObjectType
+
+pipe1_id = uidoc.Selection.PickObject(OT.Element)
+pipe1 = doc.GetElement(pipe1_id)
+
+av = uidoc.ActiveView
+
+cns1 = list(pipe1.ConnectorManager.Connectors)
+p1 = pipe1.Location.Curve.GetEndPoint(0)
+
+cns1 = sorted(cns1, key = lambda x : p1.DistanceTo(x.Origin))
+
+for c in cns1 :
+	print(c.Id)
+	print(c.ConnectorType)
+	print(p1.DistanceTo(c.Origin))
+	
+
+cns2 = [(cns1[i].Origin, cns1[i+1].Origin) for i in range(len(cns1)-1)]
+
+p0 = (cns2[1][1] + cns2[1][0]) * 0.5 
+
+tr = Transaction(doc)
+tr.Start("Add tag for pipe")
+
+for seg in cns2 :
+
+	v = seg[1] - seg[0]
+	m = (seg[1] + seg[0]) * 0.5
+	
+	if v.GetLength() / av.Scale < 10 * dut :
+		continue
+		
+	
+	
+
+	
+	tag = IndependentTag.Create(doc, av.Id, Reference(pipe1), False, 
+								TagMode.TM_ADDBY_CATEGORY,
+								TagOrientation.Horizontal,
+								m)
+	
+
+tr.Commit()
+	
+
+
+
+
+

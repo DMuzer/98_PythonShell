@@ -1,0 +1,88 @@
+import System
+import clr
+bic = BuiltInCategory
+
+f_categories = System.Array[bic]([bic.OST_PipeCurves, 
+						bic.OST_PipeAccessory, 
+						bic.OST_PipeFitting, 
+						bic.OST_MechanicalEquipment])
+class Vertex :
+	def __init__(self, e) :
+		self.e = e
+		self.key = e.Id.IntegerValue
+		self.connections = {}
+		
+	def __repr__(self) :
+		return "Вершина элемент {}".format(self.e.Id)
+		
+	def _get_connections(self) :
+		try :
+			conns = self.e.MEPModel.ConnectorManager.Connectors 
+		except :
+			conns = self.e.ConnectorManager.Connectors 
+		for c1 in conns :
+			for c2 in c1.AllRefs :
+				if not (c2.ConnectorType & ConnectorType.Physical) : continue
+				if c2.Owner.Id != self.e.Id :
+					yield Vertex(c2.Owner)
+					
+	def show_id(self) :
+		av = uidoc.ActiveView
+		if isinstance(self.e.Location, LocationPoint) :
+			textLoc = self.e.Location.Point
+		elif isinstance(self.e.Location, LocationCurve) :
+			lc = self.e.Location.Curve
+			textLoc = (lc.GetEndPoint(0) + lc.GetEndPoint(1)) * 0.5
+			
+		tt_id = doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType)
+		tnopts = TextNoteOptions(tt_id)
+		tnopts.HorizontalAlignment = HorizontalTextAlignment.Left
+		
+		tr = Transaction(doc)
+		tr.Start("create id")
+		
+		tn = TextNote.Create(doc, av, textLoc, notWidth, "{}".format(self.key), tnopts)
+		tr.Commit()
+		
+					
+class Graph :
+	def __init__(self) :
+		self.vertex_dict = {}
+		
+		flt = ElementMulticategoryFilter(f_categories)
+		fc = FilteredElementCollector(doc, uidoc.ActiveView.Id).WherePasses(flt).WhereElementIsNotElementType()
+		
+		for e in fc :
+			self.vertex_dict[e.Id.IntegerValue] = Vertex(e)
+			
+	def wfs(self, start, end) :
+		pass
+		from collections import deque
+		start_v = self.vertex_dict[start]
+		end_v = self.vertex_dict[end]
+		
+		visited = set()
+		to_visit = deque([start_v])
+		prev = {start_v.key : None}
+		i = 0
+		
+		while to_visit :
+			i = 0 
+			i += 1
+			if i > 10000 : return
+			current = to_visit.popleft()
+			if currrent.key in visited : continue
+			for v in current._get_connections() :
+				if not v.key in prev :
+					prev[v.key] = current
+			
+		
+					
+e = doc.GetElement(ElementId(1046089))
+
+g = Graph()
+
+v1 = Vertex(e)
+print(v1)
+print(list(v1._get_connections()))
+		

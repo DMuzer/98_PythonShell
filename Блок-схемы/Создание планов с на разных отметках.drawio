@@ -1,0 +1,49 @@
+<mxfile host="65bd71144e">
+    <diagram id="napUjmTzNLrqRI5-6qIw" name="Page-1">
+        <mxGraphModel dx="1435" dy="991" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="Скопировать активный вид" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="150" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="Создание копии активного плана на разных отметках" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="110" y="40" width="380" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="Изменить секущий диапазон" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="370" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="Изменить название копии вида" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="250" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="&lt;a href=&quot;https://help.autodesk.com/view/RVT/2022/ENU/?guid=Revit_API_Revit_API_Developers_Guide_Basic_Interaction_with_Revit_Elements_Views_View_Types_ViewPlan_html&quot;&gt;Статья в помощи DevelopersGuide&amp;nbsp;&lt;br&gt;Статья&lt;br&gt;&lt;/a&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="120" width="370" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="&lt;a href=&quot;https://www.revitapidocs.com/2021.1/0520580a-74ec-ed8c-35ea-5274c42276a3.htm&quot;&gt;ViewPlan Class revitapi&lt;/a&gt;&amp;nbsp;&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://www.revitapidocs.com/2021.1/7edc5f13-a5fa-5c7a-9a03-ac6cbed1f005.htm&quot;&gt;PlanViewRange - класс для доступа к информации по секущим плоскостям&lt;/a&gt;&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://www.revitapidocs.com/2021.1/80d20187-97ea-f6c0-a3a8-d5545e0b3863.htm&quot;&gt;PlanViewPlane - перечисление для доступа к типам плоскостей&lt;/a&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="190" width="380" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="Взять объект ссмещений - &lt;br&gt;view_range = view.GetViewRange()" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="170" y="450" width="360" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="Установить смещение для вида&lt;br&gt;view_range.SetOffset(PlanViewPlane)&amp;nbsp;&lt;br&gt;передавать &lt;br&gt;PlanViewPlane.TopClipPlane&lt;br&gt;PlanViewPlane.BottomClipPlane&lt;br&gt;PlanViewPlanne.CutPlane&lt;br&gt;PlanViewPlane.ViewDepthPlane" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="170" y="530" width="290" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="Задать смещения для вида при помощи метода&amp;nbsp;&lt;br&gt;SetViewRange(view_range)" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="170" y="670" width="290" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="Сместить видимые границы" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="720" y="190" width="380" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="&lt;a href=&quot;https://help.autodesk.com/view/RVT/2022/ENU/?guid=Revit_API_Revit_API_Developers_Guide_Basic_Interaction_with_Revit_Elements_Views_View_Cropping_html&quot;&gt;Статья помощи по обрезке вида&lt;/a&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontSize=20;" vertex="1" parent="1">
+                    <mxGeometry x="690" y="120" width="210" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="&lt;font size=&quot;1&quot;&gt;ViewCropRegionShapeManager&lt;br&gt;&lt;br&gt;Взять из вида GetCropRegionShapeManager()&lt;br&gt;Установить новый контур SetCropShape&lt;br&gt;&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontSize=20;" vertex="1" parent="1">
+                    <mxGeometry x="630" y="400" width="240" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="Text" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=15;" vertex="1" parent="1">
+                    <mxGeometry x="940" y="445" width="60" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

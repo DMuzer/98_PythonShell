@@ -1,0 +1,11 @@
+
+fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Sprinklers).WhereElementIsNotElementType().ToElements()
+
+fc = list(fc) [:20]
+free = []
+
+for spr in fc :
+	print("{}\n{}\n{}".format(50 * "*", "*", 50*"*"))
+	c = list(spr.MEPModel.ConnectorManager.Connectors)[0]
+	print(c.MEPSystem.Id)
+	print(len(spr.MEPModel.ConnectorManager.UnusedConnectors))

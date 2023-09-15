@@ -1,0 +1,110 @@
+class dmElement:
+	def __init__(self, e) :
+		if isinstance(e, Element) :
+			self.e = e
+		elif isinstance(e, ElementId) :
+			self.e = doc.GetElement(e)
+		elif isinstance(e, int) :
+			self.e = doc.GetElement(ElementId(e))
+	def __repr__(self) :
+		return "dmElement Id {} категория {}".format(self.e.Id, self.e.Category.Name)
+	def _getConnectors(self) :
+		try :
+			for c in self.e.MEPModel.ConnectorManager.Connectors :
+				yield c
+		except :
+			for c in self.e.ConnectorManager.Connectors :
+				yield c
+	connectors = property(_getConnectors)
+	
+	def _getConnectedElements(self) :
+		for c in self.connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.e.Id :
+					yield dmElement(c1.Owner)
+	connectedElements = property(_getConnectedElements)
+	
+	def _getPipeSystem(self) :
+		if hasattr(self.e, "MEPSystem") :
+			return self.e.MEPSystem
+	pipeSystem = property(_getPipeSystem)
+	
+	def _getPipeSystemType(self) :
+		pSystem = self.pipeSystem
+		if pSystem :
+			return doc.GetElement(pSystem.GetTypeId())
+	pipeSystemType = property(_getPipeSystemType)
+
+	def _checkIfPipe(self) :
+		return self.e.Category.Id.IntegerValue == int(BuiltInCategory.OST_PipeCurves)
+	IsPipe = property(_checkIfPipe)
+	
+	def Set(self, paramName, paramValue) :
+		param = self.e.LookupParameter(paramName)
+		if param :
+			tr = None
+			if not doc.IsModifiable :
+				tr = Transaction(doc, "Установка параметра")
+			tr.Start()
+			param.Set(paramValue)
+			if tr : tr.Commit()
+	def Value(self, paramName) :
+		param = self.e.LookupParameter(paramName)
+		if param :
+			if param.StorageType == StorageType.String :
+				return param.AsString()
+			elif param.SorageType == StorageType.Double :
+				return param.AsDouble()	
+			elif param.SorageType == StorageType.ElementId :
+				return param.AsElementId()	
+			elif param.SorageType == StorageType.Integer :
+				return param.AsInteger()	
+				
+	def setSystemName(self) :
+		try :
+			if self.IsPipe :
+				self.Set("ИмяСистемы", self.pipeSystemType.Abbreviation)
+			else :
+				pass
+				systems = set()
+				for ce in self.connectedElements :
+					if ce.IsPipe :
+						systems.add(ce.pipeSystemType.Abbreviation)
+						
+				print(",".join(systems))
+				systems = ",".join(systems)
+				self.Set("ИмяСистемы", systems)
+				for ss in self.subComponents :
+					ss.Set("ИмяСистемы", systems)
+		except :
+			return
+			
+	def _getSubComponents(self) :
+		for e in self.e.GetSubComponentIds() :
+			yield dmElement(e)
+	
+	subComponents = property(_getSubComponents)
+	
+	def _getSuperComponent(self) :
+		if self.IsPipe : return
+		return self.e.SuperComponent
+	superComponent = property(_getSuperComponent)
+import System
+bic = BuiltInCategory
+
+flt = ElementMulticategoryFilter(System.Array[bic]([
+			bic.OST_PipeCurves, 
+			bic.OST_PipeFitting,
+			bic.OST_PipeAccessory, 
+			bic.OST_MechanicalEquipment
+			]))
+elements = [dmElement(e) for e in FilteredElementCollector(doc, uidoc.ActiveView.Id).WherePasses(flt).ToElementIds()]
+
+for element in elements :
+	if not element.superComponent :
+		element.setSystemName()
+			
+			
+	
+		
+

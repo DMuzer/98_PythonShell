@@ -1,0 +1,13 @@
+<mxfile host="65bd71144e">
+    <diagram id="eoEgJ54BwkvMcLgNiag_" name="Page-1">
+        <mxGraphModel dx="1435" dy="991" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="Ссылки на статьи&lt;br&gt;&lt;br&gt;&lt;h1 class=&quot;entry-title&quot; style=&quot;font-weight: normal ; font-stretch: normal ; font-size: 25px ; line-height: normal ; font-family: &amp;#34;normal georgia&amp;#34; , &amp;#34;times new roman&amp;#34; , &amp;#34;times&amp;#34; , serif ; color: rgb(79 , 153 , 141) ; margin-bottom: 5px ; background-color: rgb(50 , 47 , 40)&quot;&gt;&lt;a href=&quot;https://ericgazoni.wordpress.com/2010/05/03/ironpython-wpf/&quot;&gt;IronPython and WPFIronPython and WPF&lt;/a&gt;&lt;/h1&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;h1 class=&quot;gh-header-title mb-2 lh-condensed f1 mr-0 flex-auto wb-break-word&quot; style=&quot;box-sizing: border-box ; margin: 0px 150px 0px 0px ; font-weight: 400 ; line-height: 1.125 ; overflow-wrap: break-word ; color: rgb(36 , 41 , 47) ; font-family: , &amp;#34;blinkmacsystemfont&amp;#34; , &amp;#34;segoe ui&amp;#34; , &amp;#34;helvetica&amp;#34; , &amp;#34;arial&amp;#34; , sans-serif , &amp;#34;apple color emoji&amp;#34; , &amp;#34;segoe ui emoji&amp;#34; ; background-color: rgb(255 , 255 , 255) ; font-size: 32px ; word-break: break-word&quot;&gt;&lt;a href=&quot;https://github.com/pythonnet/pythonnet/issues/730&quot;&gt;&lt;span class=&quot;js-issue-title markdown-title&quot; style=&quot;box-sizing: border-box&quot;&gt;Event handling with WPF application&lt;/span&gt;Event handling with WPF application&lt;/a&gt;&lt;/h1&gt;&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="30" y="50" width="770" height="290" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

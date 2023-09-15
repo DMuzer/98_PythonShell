@@ -1,0 +1,34 @@
+<mxfile host="65bd71144e">
+    <diagram id="FyNC1G7qF2EC0NjBAmr8" name="Page-1">
+        <mxGraphModel dx="1436" dy="992" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="&lt;a href=&quot;https://help.autodesk.com/view/RVT/2022/ENU/?guid=Revit_API_Revit_API_Developers_Guide_Revit_Geometric_Elements_Annotation_Elements_Tags_html&quot;&gt;Хелп Автодеск&lt;br&gt;Марки&lt;/a&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="70" y="40" width="150" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="&lt;a href=&quot;https://www.revitapidocs.com/2021.1/e52073e2-9d98-6fb5-eb43-288cf9ed2e28.htm&quot;&gt;Independent Tag&lt;/a&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="100" y="90" width="110" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" style="edgeStyle=none;html=1;" edge="1" parent="1" source="4" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="4" target="8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="Создание IndependentTag&lt;br&gt;IndependentTag.Create(doc, viewId, reference,&amp;nbsp;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="180" width="170" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="Создание IndependentTag&lt;br&gt;IndependentTag.Create(doc, viewId, reference,&amp;nbsp;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="120" y="310" width="170" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="&lt;a href=&quot;https://www.revitapidocs.com/2021.1/b8e8eec2-8e3b-08f2-a9a5-89f24465c8b9.htm&quot;&gt;2 Перегрузка Можно указать семейство тега&lt;br&gt;IndependentTag.Create&lt;/a&gt;" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="414" y="310" width="320" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="&lt;a href=&quot;https://www.revitapidocs.com/2021.1/0f1faf70-46a4-71a1-63c0-3425dfc691a0.htm&quot;&gt;TagOrientation&lt;/a&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="40" width="140" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

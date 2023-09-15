@@ -1,0 +1,28 @@
+pages = FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()
+trans = Transaction(doc)
+for page in pages :
+	#print(page.SheetNumber)
+	#print(page.Name)
+	
+	project_part = page.LookupParameter("Раздел проекта").AsString()
+	#print(project_part)
+	
+	if not project_part  :
+		prefix = "---"
+	else :
+		prefix = project_part
+		
+	trans.Start("Перенумерация листов")
+	try :
+		
+		int(page.SheetNumber)
+		page.SheetNumber = prefix + " - " + page.SheetNumber
+		print("Число перенумеруем")
+	except :
+		print('не число')
+		pass
+	trans.Commit()
+	
+	
+	
+	

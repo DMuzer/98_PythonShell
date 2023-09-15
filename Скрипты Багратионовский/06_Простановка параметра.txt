@@ -1,0 +1,26 @@
+eq_ids = uidoc.Selection.GetElementIds()
+
+tr = Transaction(doc)
+tr.Start("Change section")
+
+for eq_id in eq_ids :
+	eq = doc.GetElement(eq_id)
+	try :
+		e.LookupParameter("DM_Раздел спецификации").Set("02_Материалы")
+	except :
+		pass
+	
+	
+	dep_elements = eq.GetDependentElements(None)
+	
+	for e_id in dep_elements :
+		e = doc.GetElement(e_id)
+		print(Element.Name.GetValue(e))
+		try :
+			e.LookupParameter("DM_Раздел спецификации").Set("02_Материалы")
+		except Exception as ex:
+			print(ex)
+			pass
+		
+	
+tr.Commit()

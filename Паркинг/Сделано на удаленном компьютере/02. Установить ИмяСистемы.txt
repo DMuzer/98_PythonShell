@@ -1,0 +1,164 @@
+"""
+***************************************************************
+*** Заполнение параметра Имя системы в трубах, семействах 
+*** и во вложенных семействах
+***************************************************************
+*  
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+cats_search = System.Array[BuiltInCategory]([
+	bic.OST_PipeCurves,
+	bic.OST_PipeFitting,
+	bic.OST_Sprinklers,
+	bic.OST_PipeAccessory,
+	bic.OST_MechanicalEquipment
+                            ])
+                            
+cat_flt = ElementMulticategoryFilter(
+	cats_search
+)
+
+fc = FilteredElementCollector(doc).WherePasses(cat_flt).WhereElementIsNotElementType().ToElements()
+
+tr = Transaction(doc)
+tr.Start("update system name")
+name = ""
+error_num = 0
+succ_num = 0
+is_f = False
+for e in fc :
+	try : 
+		sys_p = e.LookupParameter("Имя системы")
+		if not sys_p :
+			continue
+		sys_name = sys_p.AsString()
+		up = e.LookupParameter("ИмяСистемы")
+		
+		
+		if not sys_name :
+			continue
+			
+		bnum_param = e.LookupParameter("ADSK_Номер здания")
+		if bnum_param :
+			bnum = bnum_param.AsString()
+			#print(bnum)	
+	
+			
+		if type(e) == Plumbing.Pipe :
+			if up :
+				up.Set(sys_name)
+	
+			
+		elif type(e) == FamilyInstance :
+			if not e.SuperComponent :
+				#Если у элемента отсутствует хозяин
+				print(20*"--")
+				name_p = e.LookupParameter("ADSK_Наименование")
+				if name_p :
+					print(name_p.AsString())
+					name = name_p.AsString()
+				else :
+					e_type = doc.GetElement(e.GetTypeId())
+					name_p = e_type.LookupParameter("ADSK_Наименование")
+					if name_p :
+						name = name_p.AsString()
+					else :	
+						print("Нет параметра имени")
+					
+				# У элемента у которого отсутствует хозяин переберем все подчиненные элементы
+					
+					
+				for e1_id in e.GetDependentElements(None) :
+					#Это для подчиненного элемента
+					e1 = doc.GetElement(e1_id)
+					up2 = e1.LookupParameter("ИмяСистемы")
+					if up2 :	
+						try :
+							up2.Set(sys_name)
+						except Exception as ex:
+							print("ошибка")
+							print(ex)
+							print(e1.Id)
+							print("sys_name {}".format(sys_name))
+							print(Element.Name.GetValue(e1))
+							
+					name_par_2 = e1.LookupParameter("ADSK_Наименование")
+					if not name_par_2 :
+						e_type = doc.GetElement(e1.GetTypeId())
+						name_par_2 = e_type.LookupParameter("ADSK_Наименование")
+						if name_par_2 :
+							name2 = name_par_2.AsString()
+						else :
+							name2 = ""
+						
+		
+	
+					bnum_param_2 = e1.LookupParameter("ADSK_Номер здания")
+					if bnum_param_2 and bnum:
+						try :
+							bnum_param_2.Set(bnum)
+						except :
+							print("Ошибка при установке номер здания")
+							
+							
+						succ_num += 1
+						if is_f :
+							print("успешно установка номера здания {}".format(name2))
+	
+						
+					
+			else :	
+				# Если у компонента есть хозяин то устанавливаем название системы
+				print("-")
+				up.Set(sys_name)
+				bnum_param_2 = e.LookupParameter("ADSK_Номер здания")
+				if bnum_param_2 and bnum:
+				
+					bnum_param_2.Set(bnum)
+					succ_num += 1
+					print("успешно установка номера здания {}".format(name2))
+				
+			
+		
+			print("элемент {}".format(sys_name))
+	except :
+		pass
+		
+
+		
+	
+tr.Commit()
+
+print("финиш...")
+		
+		

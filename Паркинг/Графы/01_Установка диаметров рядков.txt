@@ -1,0 +1,101 @@
+from Autodesk.Revit import *
+dut = 0.0032808398950131233
+
+class dmElement :
+	def __init__(self, e) :
+		self.e = e
+
+class dmConnector :
+	def __init__(self, connector) :
+		self.c = connector
+	def set_diameter(self, d) :
+		self.connectorInfo = self.c.GetMEPConnectorInfo()
+		print(self.c.Owner.Id)
+		diameter = True
+		ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_DIAMETER))
+		print(ass_par_id)
+		if ass_par_id == ElementId(-1): 
+			diameter = False
+			ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_RADIUS))
+		print(ass_par_id)
+		
+		if not ass_par_id :
+			return
+		ass_par = self.c.Owner.Document.GetElement(ass_par_id)
+		ass_par = self.c.Owner.LookupParameter(ass_par.GetDefinition().Name)
+		
+		if not ass_par : return
+		
+		if diameter :
+			ass_par.Set(d)
+		else :
+			ass_par.Set(d/2)
+	
+	def get_sprinkler_count(self) :
+		connected = set()
+		to_visit = set()
+		visited = set([self.c.Owner.Id])
+		for c1 in self.c.AllRefs :
+			if c1.ConnectorType & ConnectorType.Physical and c1.Owner != self.c.Owner :
+				to_visit.add(c1.Owner.Id)
+		i = 0
+		while to_visit :
+			i =+ 1
+			if i > 10000 : return 
+			current_id = to_visit.pop()
+			visited.add(current_id)
+			current = dmElement(doc.GetElement(current_id))
+			#for e in current.con
+			
+			
+				
+		return 0
+		
+		
+		
+		
+		
+		
+
+class dmPipe:
+	def __init__(self, pipe) :
+		self.pipe = pipe
+	def get_end_fittings(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			if not c.ConnectorType == ConnectorType.End :
+				continue
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(c1.Owner)
+		return res
+	def get_outer_connectors(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(dmConnector(c1))
+		return res
+		
+	def get_inner_connectors(self) :
+		return [dmConnector(c) for c in self.pipe.ConnectorManager.Connectors]
+	def set_diameter(self, d) :
+		tr = Transaction(doc, "change diam")
+		tr.Start()
+		print(self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].AsDouble())
+		self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(d * dut)
+		for c in self.get_outer_connectors() :
+			try :
+				c.set_diameter(d * dut)
+			except :
+				pass
+		tr.Commit()
+
+pipe_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe = dmPipe(doc.GetElement(pipe_ref))
+print(pipe.get_end_fittings())
+#pipe.set_diameter(40)
+
+new_d = 32 * dut
+new_r = new_d / 2		
+

@@ -1,0 +1,110 @@
+import sys
+import clr
+import math
+
+
+from Autodesk.Revit.DB import *
+
+doc = __revit__.ActiveUIDocument.Document
+
+dut = 0.0032808398950131233
+
+def n(el) :
+	return Element.Name.GetValue(el)
+def xyz(x, y, z) :
+	return XYZ(x * 0.0032808398950131233, y *0.0032808398950131233, z * 0.0032808398950131233)	
+def print_elements(c) :
+	global n
+	for e in c :
+		name = n(e)
+		print(name)
+		
+def create_sprinkler(pos, single = True, point = False) :
+	
+	spr_t_col = FilteredElementCollector(doc)
+	spr_t_col.OfClass(FamilySymbol).OfCategory(BuiltInCategory.OST_Sprinklers)
+	level_col = FilteredElementCollector(doc).OfClass(Level).ToElements()
+	
+	spr_t_id = spr_t_col.FirstElement()
+	level_id = level_col[0]
+	
+	
+	
+	str_t = Structure.StructuralType.NonStructural
+	
+	tr = Transaction(doc)
+	tr.Start("1")
+	
+	
+	if single :
+		if point :
+			location = pos
+		else :
+			location = xyz(*pos)
+		doc.Create.NewFamilyInstance(location, spr_t_id, level_id, level_id, str_t)
+	else :
+		for p in pos :
+			if point :
+				location = p
+			else :
+				location = xyz(*p)
+			doc.Create.NewFamilyInstance(location, spr_t_id, level_id, level_id, str_t)
+				
+		
+									
+	tr.Commit()
+	
+"""
+pos = (1000, 1000, 1000)
+pos2 = [(2000 + i * 500, 1000, 1000) for i in range(10)]
+create_sprinkler(pos2, single = False)
+"""
+def duct_params(d) :
+
+	ps = d.ParametersMap
+	loc = d.Location.Curve
+
+	res = {
+		'type' : "Воздуховод",
+		"height" : ps["Высота"].AsDouble(),
+		'length' : loc.Length,
+		'p1' : loc.GetEndPoint(0),
+		'd' : loc.Direction
+	}
+	return res
+
+duct_c = FilteredElementCollector(doc).OfClass(Mechanical.Duct)
+print(duct_c)
+ducts = duct_c.ToElements()
+
+params = duct_params(ducts[0])
+print(params)
+
+max_dist = 3000 * dut
+dh = 50 * dut
+dH = params['height'] + dh
+dZ = XYZ(0,0,-dH)
+
+numb = int(math.ceil(params['length']/max_dist))
+
+fdist = params['length'] / numb /2
+
+
+pos = [params['p1'] + params['d'] * (fdist + i * fdist * 2) + dZ for i in range(numb)]
+
+create_sprinkler(pos, single=False, point=True)
+
+print(len(pos))
+print(pos)
+
+
+
+print('1')
+
+# Выбираем воздуховоды
+
+
+print('2')	
+	
+
+

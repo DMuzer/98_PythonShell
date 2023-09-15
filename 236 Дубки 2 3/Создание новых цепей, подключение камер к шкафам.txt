@@ -1,0 +1,110 @@
+
+#  coding: utf-8 
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.Exceptions
+import System 
+import clr
+
+import math, sys
+import clr
+
+import re
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+lib_path = r"D:\18_проектирование\98_PythonShell\Создание фильтров"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+def gn(x) :
+	return Element.Name.GetValue(x)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+
+tr = Transaction(doc)
+
+
+#Находим панели
+pn1 = None
+pn2 = None
+panels = FilteredElementCollector(doc).OfCategory(bic.OST_ElectricalEquipment)
+
+for panel in panels :
+	if gn(panel) == "ШТ 1" :
+		pn1 = panel
+	if gn(panel) == "ШТ 8.1" :
+		pn2 = panel
+		
+
+
+
+elems = FilteredElementCollector(doc).OfCategory(bic.OST_SecurityDevices)
+elems = elems.WhereElementIsNotElementType().ToElements()
+num = 0
+for elem in elems :
+	if gn(elem).Contains("амера") :
+		num += 1
+		print(gn(elem))
+		elev1 = doc.GetElement(elem.LevelId).Elevation
+		if elev1 < 9500 * dut :
+			print("На первый этаж")
+			panel = pn1
+		else :
+			print("На восьмой этаж")
+			panel = pn2
+		
+		con1 = None 
+		
+		for cn1 in elem.MEPModel.ConnectorManager.UnusedConnectors :
+			if cn1.Domain == Domain.DomainElectrical :
+				print("Можно подключить")
+				print(elem)
+				con1 = cn1
+				
+		if con1 :
+			mrk = elem.LookupParameter("Марка").AsString()
+			tr.Start("New curcuit")
+			new_circuit = Electrical.ElectricalSystem.Create(con1, Electrical.ElectricalSystemType.Data)
+
+			new_circuit.SelectPanel(panel)
+			tr.Commit()
+			tr.Start("change circuit")
+			
+			new_circuit.LookupParameter("ADSK_Имя панели").Set(gn(panel))
+			print(new_circuit.CircuitNumber)
+			new_circuit.LookupParameter("ADSK_Номер линии").Set(int(new_circuit.CircuitNumber))
+			new_circuit.LookupParameter("Имя нагрузки").Set(mrk)
+
+			tr.Commit()		
+			
+

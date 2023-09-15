@@ -1,0 +1,52 @@
+from Autodesk.Revit import UI as UI
+import math
+dut = 0.0032808398950131233
+try :
+	sensor_id = uidoc.Selection.GetElementIds()[0]
+	sensor = doc.GetElement(sensor_id)
+except :
+	sensor_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+	sensor = doc.GetElement(sensor_id)
+	
+max_dist = 4000 * dut
+	
+p1 = uidoc.Selection.PickPoint()
+p2 = uidoc.Selection.PickPoint()
+
+d = p2 - p1
+
+location_point = sensor.Location.Point
+
+if abs(d.X) > abs(d.Y) :
+	v = XYZ(d.X,0,0)
+	p0 = XYZ(p1.X, location_point.Y, location_point.Z)
+	distance = abs(d.X)
+else :
+	v = XYZ(0, d.Y,0)
+	p0 = XYZ(location_point.X, p1.Y, location_point.Z)
+	distance = abs(d.Y)
+	
+sensor_num = int(math.ceil(distance / max_dist))
+step = distance / sensor_num
+offset_vec = step * v.Normalize()
+
+
+trans = Transaction(doc)
+trans.Start("Расстановка датчиков")
+#переносим датчик
+
+new_loc_1 = p0 + offset_vec * 0.5
+sensor.Location.Point = new_loc_1
+new_sensor_id = sensor.Id
+for i in range(sensor_num-1) :	
+	new_sensor_id = ElementTransformUtils.CopyElement(doc, new_sensor_id, offset_vec)[0]
+
+trans.Commit()
+
+	
+
+	
+
+
+
+

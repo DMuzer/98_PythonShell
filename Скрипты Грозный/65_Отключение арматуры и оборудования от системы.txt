@@ -1,0 +1,54 @@
+import Autodesk.Revit.UI as UI
+et = UI.Selection.ObjectType
+dut = 0.0032808398950131233
+
+accessory_ref = uidoc.Selection.PickObject(et.Element)
+accessory = doc.GetElement(accessory_ref)
+
+connected = []
+
+tr1 = Transaction(doc)
+tr1.Start("Disconnect accessory")
+for c in accessory.MEPModel.ConnectorManager.Connectors :
+	for c1 in c.AllRefs :
+		if (c1.Owner.Id != accessory.Id) and (type(c1.Owner) == Plumbing.Pipe) :
+			connected.append((c1.Owner, c1))
+			c.DisconnectFrom(c1)
+			
+			pipe2 = c1.Owner 
+			
+			lc = pipe2.Location.Curve
+			
+			p2 = c1.Origin
+			
+			if lc.GetEndPoint(0).DistanceTo(p2) < lc.GetEndPoint(1).DistanceTo(p2) :
+				p1 = lc.GetEndPoint(1)
+				p2_ = p2 - 100 * dut * c1.CoordinateSystem.BasisZ
+				pipe2.Location.Curve = Line.CreateBound(p2_, p1)
+			else :
+				p1 = lc.GetEndPoint(0)
+				p2_ = p2 - 50 * dut * c1.CoordinateSystem.BasisZ
+				pipe2.Location.Curve = Line.CreateBound(p1, p2_ )
+	
+	MEPsys = c.MEPSystem
+	if MEPsys : 
+		print(MEPsys.Name)
+		cs = ConnectorSet()
+		cs.Insert(c)
+		try :
+			
+			MEPsys.Remove(cs)
+		except : 
+			raise
+			pass
+				
+		
+			
+			
+			
+print(len(connected))
+
+tr1.Commit()
+
+
+	

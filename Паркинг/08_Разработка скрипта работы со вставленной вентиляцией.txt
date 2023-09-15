@@ -1,0 +1,121 @@
+"""
+***************************************************************
+*** Анализ пространств и вычисление нижних поверхностей плит
+*** работа над отладкой доступа к объектам модели и формирование
+*** поверхностей которые где можно и нужно расставить спринклеры
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+import time
+tt1 = time.time()
+
+mapp = dm.dmApp(doc)
+
+def show_linked_names(self) :
+	for n in self.linked_instances_dict.keys() :
+		print(n)
+	
+dm.dmApp.show_linked_names = show_linked_names
+
+def show_faces2protect(self) :
+	for f in self.faces2protect :
+		dm.create_ds(f)
+dm.dmDirectShapeSpace.show_faces2protect = show_faces2protect
+
+
+sp = mapp.ds_spaces[0]
+
+#li = mapp.linked_instances_dict["СТ_01_Р_ОВ2_S4_1_S4_2_S4_3_W23_1_R21_отсоединено.rvt : 123 : позиция <Не общедоступное>"]
+#li = mapp.linked_instances_dict["СТ-01_Р_ОВ2_S2.1.S2.2_W23.1_R21_отсоединено.rvt : 129 : позиция Встроенный"]
+#li = mapp.linked_instances_dict["СТ-01_Р_ОВ2_S1.1.S1.2_W23.1_R21_отсоединено.rvt : 128 : позиция Встроенный"]
+#li = mapp.linked_instances_dict["СТ-01_Р_ОВ2_S.3_W23.1_R21_отсоединено.rvt : 125 : позиция Встроенный"]
+li = mapp.linked_instances_dict["СТ-01_Р_ОВ2_S.5_W23.1_R21_отсоединено.rvt : 126 : позиция Встроенный"]
+
+for li in mapp.linked_instances_dict.values() :
+
+	li.FilterGeometry = sp.ds.Geometry[Options()]
+	print(len(li.duct_elements))
+	print(len(li.duct_elements_filtered))
+
+	spr1_id = ElementId(8647027)
+	#continue
+	
+	
+	
+	for d1 in li.duct_elements_filtered[:] :
+		try :
+			d1.modify_solids()
+			#ds = d1.create_ds_with_space()
+			s1 = d1.solid_mod
+			ds = dm.create_ds(s1)
+			dm.set_color(ds, 0, 125, 0, 75)
+			
+			sp.substract_solid(s1)
+			#sp.update_geometry()
+			#break	
+		except Exception as ex:
+			print(20*"-")
+			print(ex)
+			print(20*"*")
+			
+			ds = d1.create_ds()
+			dm.set_color(ds, 125, 0,0, 75)
+			
+			
+			pass
+		
+		
+	
+	sp.update_geometry()
+
+tt2 = time.time()
+
+print("Время выполнения {} c.".format(tt2-tt1))
+
+

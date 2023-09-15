@@ -1,0 +1,15 @@
+templ = "В2.2-{}"
+start = 1
+import Autodesk.Revit.UI as UI
+tr = Transaction(doc)
+while True :
+	try :
+		o = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+		if isinstance(o, TextNote) :
+			tr.Start("Set text {}".format(start))
+			o.Text = templ.format(start)
+			tr.Commit()
+			start += 1
+			
+	except :
+		break

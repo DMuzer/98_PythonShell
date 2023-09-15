@@ -1,0 +1,260 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+#el_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+
+#el = doc.GetElement(el_ref.ElementId)
+
+m_pipe = doc.GetElement(ElementId(2501285))
+
+mcf = ElementMulticategoryFilter(System.Array[BuiltInCategory]([bic.OST_PipeCurves, bic.OST_PipeFitting
+																	]), True)
+flt = FilteredElementCollector(doc).WherePasses(mcf)
+objs = flt.WhereElementIsNotElementType().ToElements()
+
+fref_targ = FindReferenceTarget.Element
+mapp = dm.dmApp(doc)
+view = mapp.views['DM_ОТМЕТКИ']
+ref_int = ReferenceIntersector(mcf, fref_targ, view)
+ref_int.FindReferencesInRevitLinks = True
+
+class dm_Segment(object) :
+	def __init__(self, p1, p2, resolver) :
+		self.p1 = p1
+		self.p2 = p2
+		self.d = (p2 - p1).Normalize()
+		self.mid_point = (p1 + p2)*0.5
+		self.resolver = resolver
+		
+	def find_elevation(self) :
+		if hasattr(self, '_elevation') : 
+			return self._elevation
+		view_point = XYZ(self.mid_point.X, self.mid_point.Y, self.resolver.look_elevation)
+		fp = self.resolver.find_nearest(view_point, XYZ.BasisZ)
+		self._elevation = fp.Z - resolver.margin
+		self.p1e = XYZ(self.p1.X, self.p1.Y, self._elevation)
+		self.p2e = XYZ(self.p2.X, self.p2.Y, self._elevation)
+		return self._elevation
+		
+	elevation = property(find_elevation)
+		
+		
+	def _get_length(self) :
+		try :
+			return self.p1e.DistanceTo(self.p2e)
+		except :
+			return self.p1.DistanceTo(self.p2)
+			
+	length = property(_get_length)
+		
+	def correct_length(self, new_length) :
+		"""
+		Исправляем длину участка. устанавливаем его за счет уменьшения длины соседних участков
+		функция выполняется только для увеличения длины сегмента, если нужная длина меньше, то ничего не делаем
+		"""
+		# Определяем, сколько надо добавить
+		try :
+			print("correct_length\nnew_length = {}\nself.length = {}".format(new_length, self.length))
+			print(self.p1, self.p2, self.p1e, self.p2e)
+			elev = self.elevation
+			d_l = new_length - self.length
+			if d_l < 0 : return
+			print("d_l = {}".format(d_l))
+			
+			if self.prev and self.next : 
+				d_l_1 = d_l / 2
+				print("Устанавливаем длину для двух соседей")
+				
+				self.prev.correct_end(-d_l_1)
+				self.correct_start(d_l_1)
+			
+				self.next.correct_start(-d_l_1)
+				self.correct_end(d_l_1)
+				
+			elif self.prev :
+				d_l_1 = d_l
+				self.prev.correct_end(d_l_1)
+				self.correct_start(d_l_1)
+			elif self.next :
+				d_l_1 = d_l
+				self.next.correct_start(-d_l_1)
+				self.correct_end(d_l_1)
+			else :
+				d_l_1 = d_l / 2
+				self.correct_start(d_l_1)
+				self.correct_end(d_l_1)
+			
+				
+
+			print("Новая длина {}".format(self.length))
+			print(80*"-")
+				
+		except Exception as ex :
+			print(self.length)
+			print(ex)
+			raise
+				
+	def correct_start(self, d_l) :
+		print("Корректировка начала\n{}\n{}\n{}".format(self.p1e, self.d, d_l))
+		if -d_l < self.length :
+			self.p1e = self.p1e - self.d * d_l
+		else :
+			self.p1e = self.p2e
+		
+		
+	def correct_end(self, d_l) :
+		print("Корректировка коца\n{}\n{}\n{}".format(self.p2e, self.d, d_l))
+		if -d_l < self.length :
+			self.p2e = self.p2e + self.d * d_l
+		else :
+			self.p2e = self.p1e
+			
+		
+	
+	
+	def _get_line(self) :
+		try :
+			return Line.CreateBound(self.p1, self.p2)
+		except :
+			return
+		
+	line = property(_get_line)
+	
+	def _get_line_corrected(self) :
+		elevation = self.elevation
+		try :
+			return Line.CreateBound(self.p1e, self.p2e)
+		except Exception as ex :
+			print(ex)
+			
+	line_corrected = property(_get_line_corrected)
+
+class dm_Resolver(object) :
+	def __init__(self, pipe, view, margin = 100 * dut) :
+		self.pipe = pipe
+		lc = pipe.Location.Curve 
+		self.p1 = lc.GetEndPoint(0)
+		self.p1 = lc.GetEndPoint(0)
+		self.d = lc.Direction
+		self.l = lc.Length
+		self.view = view
+		self.margin = margin
+		self.diameter = pipe.Diameter
+		
+		
+		
+		
+		
+		mcf = ElementMulticategoryFilter(
+					System.Array[BuiltInCategory](
+							[bic.OST_PipeCurves, 
+								bic.OST_PipeFitting, 
+								bic.OST_Walls, 
+								bic.OST_GenericModel]), True)
+								
+							
+		flt = FilteredElementCollector(doc).WherePasses(mcf)
+		objs = flt.ToElements()
+		
+		fref_targ = FindReferenceTarget.Element
+
+
+		self.ref_int = ReferenceIntersector(mcf, fref_targ, view)
+		self.ref_int.FindReferencesInRevitLinks = True
+		
+		#Вычисляем отметку начала трубы
+		
+		
+		
+	def find_nearest(self, p, d) :
+		ref = self.ref_int.FindNearest(p, d)
+		p = ref.GetReference().GlobalPoint
+		return p
+		
+	def draw_segments(self) :
+		lines = []
+		for s in self.segments :
+			try :
+				l = s.line_corrected
+				if l :
+					lines.append(l)
+			except Exception as ex:
+				print("ошибка при вычислении линии")
+				print(ex)
+				
+		for s in self.v_segments :
+			try :
+				l = s.line
+				if l :
+					lines.append(l)
+			except Exception as ex:
+				print("ошибка при вычислении линии")
+				print(ex)
+				
+					
+		lines = System.Array[GeometryObject](lines)
+		
+		with dm.trans(doc) :
+			ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+			ds.SetShape(lines)
+		return ds
+			
+	
+				
+def get_nearest_connector(pipe, pnt) :
+	for c in pipe.ConnectorManager.Connectors :
+		if c.Origin.IsAlmostEqualTo(pnt) :
+			return c
+			
+				
+pipe_id = ElementId(2504254)
+pipe = doc.GetElement(pipe_id)
+
+resolver = dm_Resolver(pipe)
+
+
+
+
+	
+	
+
+
+
+
+
+	
+

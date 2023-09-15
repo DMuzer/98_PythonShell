@@ -1,0 +1,17 @@
+view = uidoc.ActiveView
+
+flt = VisibleInViewFilter(doc, view.Id, False)
+import System
+bic = BuiltInCategory
+categs = System.Array[BuiltInCategory]([bic.OST_PipeCurves, bic.OST_PipeFitting, bic.OST_Sprinklers, bic.OST_RevitLinks])
+flt2 = ElementMulticategoryFilter(categs)
+
+fc = FilteredElementCollector(doc).WherePasses(flt).WherePasses(flt2).ToElementIds()
+
+trans = Transaction(doc)
+trans.Start("delete all")
+
+doc.Delete(fc)
+
+trans.Commit()
+

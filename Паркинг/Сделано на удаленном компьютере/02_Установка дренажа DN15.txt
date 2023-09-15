@@ -1,0 +1,18 @@
+import Autodesk.Revit
+import Autodesk.Revit.UI.Selection
+from Autodesk.Revit.UI.Selection import ObjectType
+to_copy_id = ElementId(-1)
+
+pipe_ref = uidoc.Selection.PickObject(ObjectType.Element)
+pnt = uidoc.Selection.PickPoint()
+
+pipe = doc.GetElement(pipe_ref)
+ploc = pipe.Location.Curve
+
+pnt0 = ploc.Project(pnt).XYZPoint
+pnt1 = pnt0 - XYZ.BasisZ 
+
+tr = Transaction(doc)
+tr.Start("Add drain valve")
+
+tr.Commit()

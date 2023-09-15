@@ -1,0 +1,80 @@
+"""
+Переподключение шкафа к боковым коннекторам
+"""
+bic = BuiltInCategory
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+
+def reconnectCabinet(cabinet):
+	tr = Transaction(doc, "reconnect cabinets")
+	tr.Start()
+	cabinetConnectors = {connector.Id : connector for connector in cabinet.MEPModel.ConnectorManager.Connectors}
+	
+	if not (cabinetConnectors[5].IsConnected and cabinetConnectors[2].IsConnected) :
+		return
+	for connector in cabinet.MEPModel.ConnectorManager.Connectors :
+		print(connector.IsConnected)
+		print(connector.Id)
+		if connector.IsConnected :
+			for c2 in connector.AllRefs :
+				print(c2.Owner)
+				if c2.ConnectorType & ConnectorType.Physical and\
+					c2.Owner.Id != connector.Owner.Id :
+					pipeConnector = c2 
+					break
+			
+			connector.DisconnectFrom(pipeConnector)
+			pipe = pipeConnector.Owner
+			pipeLocation = pipe.Location.Curve
+			print(connector.Id)
+			if connector.Id == 5 :
+				pipe.Location.Move(cabinetConnectors[5].CoordinateSystem.BasisX * -200 * dut)
+				pipe5 = pipe
+				connector5Pipe = pipeConnector
+			if connector.Id == 2 :
+				pipe.Location.Move(cabinetConnectors[2].CoordinateSystem.BasisX * 200 * dut)
+				pipe2 = pipe
+				connector2Pipe = pipeConnector
+				
+	
+	pipe1End0 		= cabinetConnectors[1].Origin
+	pipe1End1 		= pipe1End0 + cabinetConnectors[1].CoordinateSystem.BasisZ * 20 * dut
+	pipe1Location 	= Line.CreateBound(pipe1End0, pipe1End1)
+	pipe4End0		= cabinetConnectors[4].Origin
+	pipe4End1		= pipe4End0 + cabinetConnectors[4].CoordinateSystem.BasisZ * 20 * dut
+	pipe4Location 	= Line.CreateBound(pipe4End0, pipe4End1)
+	
+	pipe4Id 	= ElementTransformUtils.CopyElement(doc, pipe5.Id, XYZ.Zero)[0]
+	pipe4 		= doc.GetElement(pipe4Id)
+	pipe1Id 	= ElementTransformUtils.CopyElement(doc, pipe2.Id, XYZ.Zero)[0]
+	pipe1 		= doc.GetElement(pipe1Id)
+	pipe1.Location.Curve = pipe1Location
+	pipe4.Location.Curve = pipe4Location
+	
+	
+	
+	#присоединяем новую трубу к старой трубе
+	pipe1Connector = min(pipe1.ConnectorManager.Connectors, 
+		key = lambda x : connector2Pipe.Origin.DistanceTo(x.Origin))
+	pipe4Connector = min(pipe4.ConnectorManager.Connectors, 
+		key = lambda x : connector5Pipe.Origin.DistanceTo(x.Origin))
+		
+	doc.Create.NewElbowFitting(pipe1Connector, connector2Pipe)
+	doc.Create.NewElbowFitting(pipe4Connector, connector5Pipe)
+		
+	#присоединяем новую трубу к шкафу
+	pipe1Connector = min(pipe1.ConnectorManager.Connectors, 
+		key = lambda x : cabinetConnectors[1].Origin.DistanceTo(x.Origin))
+	pipe4Connector = min(pipe4.ConnectorManager.Connectors, 
+		key = lambda x : cabinetConnectors[4].Origin.DistanceTo(x.Origin))
+	pipe1Connector.ConnectTo(cabinetConnectors[1])
+	pipe4Connector.ConnectTo(cabinetConnectors[4])			
+			#newEnd1 = pipeConnector.Origin - 5 * dut * pipeConnector.CoorinateSystem.BasisZ
+						
+	tr.Commit()	
+
+for cabinetRef in uidoc.Selection.GetElementIds() :
+	cabinet = doc.GetElement(cabinetRef)
+	try :
+		reconnectCabinet(cabinet)
+	except :
+		pass

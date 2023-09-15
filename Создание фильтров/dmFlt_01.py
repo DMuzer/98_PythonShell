@@ -1,0 +1,172 @@
+#  coding: utf-8 
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.Exceptions
+import System 
+import clr
+
+import math, sys
+import clr
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+lib_path = r"D:\18_проектирование\98_PythonShell\Создание фильтров"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+print("dmFlt_01.py")
+
+fc = FilteredElementCollector(doc)
+# fc.OfCategory(bic.OST_PipingSystem)
+fc.OfClass(Plumbing.PipingSystemType)
+pss = fc.ToElements()
+
+pipe_param = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).FirstElement()
+print(80*"-")
+param_id = pipe_param.LookupParameter("ИмяСистемы").Id
+
+print(80*"*")
+
+def find_filter_by_name(name) :
+    filters = FilteredElementCollector(doc).OfClass(ParameterFilterElement).ToElements()
+
+    for filter in filters :
+        if filter.Name == name :
+            return filter
+
+def find_view_template_by_name(name) :
+    views = FilteredElementCollector(doc).OfClass(View).ToElements()
+
+    for view in views :
+        if not view.IsTemplate : continue
+        if view.Name == name : return view
+
+
+
+
+filt_categories = System.Collections.Generic.List[ElementId]([
+                        ElementId(bic.OST_PipeCurves), 
+                         ElementId(bic.OST_PipeFitting), 
+                         ElementId(bic.OST_PipeAccessory), 
+                          ElementId(bic.OST_MechanicalEquipment), 
+                          ElementId(bic.OST_Sprinklers)                    
+                        ])
+
+av = uidoc.ActiveView
+
+#av = find_view_template_by_name("В_Р_Пожаротушение")
+
+with dm.trans(doc) :
+
+    for ps in pss :
+        if not str(ps.SystemClassification).startswith("FireProtect") :
+            # print(ps)
+            # print(ps.Abbreviation)
+            # print(ps.SystemClassification)
+            continue
+
+        if ps.Abbreviation == "" : continue
+
+
+
+        print(30*"-")
+        print("{}\n{}".format(dm.en(ps), type(ps)))
+        print("{}".format(ps.Abbreviation))
+        filter_name_pos = "АПТ {}".format(ps.Abbreviation)
+        filter_name_neg = "АПТ {} НЕ".format(ps.Abbreviation)
+        print(filter_name_pos)
+        print(filter_name_neg)
+        print(ps.SystemClassification)
+        print(type(ps.SystemClassification))
+
+        filt_rule_pos = ElementParameterFilter(
+                            ParameterFilterRuleFactory.CreateContainsRule(param_id, ps.Abbreviation, True))
+        filt_rule_neg = ElementParameterFilter(
+                            ParameterFilterRuleFactory.CreateNotContainsRule(param_id, ps.Abbreviation, True))
+
+        try :
+            param_filter_pos = ParameterFilterElement.Create(doc, 
+                    filter_name_pos, 
+                    filt_categories, 
+                    filt_rule_pos
+                     )
+        except Autodesk.Revit.Exceptions.ArgumentException as ex: 
+            print("---- не удалось создать param_filter_pos")
+            param_filter_pos = find_filter_by_name(filter_name_pos)
+            print(ex)
+            pass
+
+        try : 
+            param_filter_neg = ParameterFilterElement.Create(doc, 
+                                    filter_name_neg, 
+                                    filt_categories,
+                                    filt_rule_neg
+                                    )
+        except Autodesk.Revit.Exceptions.ArgumentException as ex :
+            param_filter_neg = find_filter_by_name(filter_name_neg)
+            print("не удалось найти param_filter_neg")
+            print(ex)
+
+            pass
+
+        try :
+            av.AddFilter(param_filter_pos.Id)
+        except :
+            pass
+
+        try :
+            av.SetFilterVisibility(param_filter_pos.Id, True)
+            av.SetIsFilterEnabled(param_filter_pos.Id, False)
+        except Exception as ex:
+            print("2")
+            print(ex)
+
+
+        try : 
+            av.AddFilter(param_filter_neg.Id)
+        except :
+            print("Добавление фильтра ошибка")
+            pass
+        try :
+            av.SetFilterVisibility(param_filter_neg.Id, False)
+            av.SetIsFilterEnabled(param_filter_neg.Id, False)
+        except Exception as ex:
+            print(3)
+            print(ex)
+
+
+
+

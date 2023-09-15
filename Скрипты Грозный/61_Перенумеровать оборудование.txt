@@ -1,0 +1,124 @@
+#  coding: utf-8 
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import System
+import clr
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import d59_renumber_equipment as dm3
+
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+import re
+
+lines = [l for l in dm3.lines if l.Id != dm3.line.Id]
+lines_lc = [l.Location.Curve for l in lines]
+line = dm3.line.Location.Curve
+st_line = line
+p1, p2 = line.GetEndPoint(0), line.GetEndPoint(1)
+
+
+lines = sorted(lines_lc, 
+				key = lambda x : min(
+									line.Distance(x.GetEndPoint(0)), 
+									line.Distance(x.GetEndPoint(1)),
+									))
+
+line_graph = dm.dm_dict()
+to_visit = [(0,line)]
+_i_ = 0
+while len(to_visit) > 0 :
+	print(50*"-")
+	_i_ += 1
+	if _i_ > 1000 : break
+	line = to_visit.pop()
+	l1_lines, lines_lc = dm3.get_nearest_lines(line[1], lines_lc)
+	to_visit.extend(l1_lines)	
+	print(len(l1_lines))
+	
+		
+	line_graph[line[1]] = l1_lines
+	
+	
+	
+	
+to_visit = [st_line]
+lines_ordered = []
+
+num = 0
+while len(to_visit) > 0 :
+	l1 = to_visit.pop()
+	lines_ordered.append((num, l1))
+	num += 1
+	print(l1)
+	
+	l2s = line_graph[l1]
+	
+	for l2_ in l2s :
+		to_visit.append(l2_[1])
+		
+eq1 = []
+		
+for e in dm3.equipment :
+
+	nearest_line = None
+	nearest_line_num = -1
+	dist = 1e20
+	for num, test_line in lines_ordered :
+		p = e.Location.Point
+		dist1 = test_line.Distance(p)
+		if dist1 < dist :
+			nearest_line = test_line
+			nearest_line_num = num
+			
+	eq1.append((nearest_line_num, e))
+	
+eq2 = sorted(eq1, key = lambda x : x[0])
+
+eq3 = [e[1] for e in eq2]
+dm3.renumber_equipment(eq3)
+		
+	
+
+
+		
+print(lines_ordered)	
+
+
+
+
+
+
+
+
+
+

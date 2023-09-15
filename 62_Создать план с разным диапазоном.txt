@@ -1,0 +1,42 @@
+#  coding: utf-8 
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+
+import math, sys
+import clr
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm60_copy_view_plan as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+levels = [18150 * dut]
+cm = dm3.dmCommandNewPlan(levels)
+

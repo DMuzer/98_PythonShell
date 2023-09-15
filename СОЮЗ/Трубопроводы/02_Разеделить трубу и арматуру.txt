@@ -1,0 +1,126 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+
+#arm_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+
+class dmConnectorSplitter(object) :
+	def __init__(self, connector, dist = 100*dut) :
+		self.connector = connector
+		self.dist = dist
+		self.to_connect = None
+	def Split(self) :
+		print("отцепляем")
+		
+		
+		owner_id = self.connector.Owner.Id
+		pipe = None
+		
+		for c in self.connector.AllRefs :
+			if isinstance(c.Owner, Plumbing.Pipe) :
+				pipe = c.Owner
+				pipe_c = c
+					
+		if not pipe : return 
+		tr = Transaction(doc)
+		tr.Start("move pipes")
+	
+		lc = pipe.Location.Curve
+		system = pipe_c.MEPSystem
+		end_pnts = sorted([lc.GetEndPoint(i) for i in range(2)], key = lambda x : self.connector.Origin.DistanceTo(x))
+		
+		pipe_c.DisconnectFrom(self.connector)
+		self.to_connect = (self.connector, pipe_c)
+		
+		
+		p2 = self.connector.Origin + self.connector.CoordinateSystem.BasisZ * self.dist
+		
+		if (self.connector.Origin.DistanceTo(lc.GetEndPoint(0)) 
+			< self.connector.Origin.DistanceTo(lc.GetEndPoint(1))) :
+			lc2 = Line.CreateBound(p2, lc.GetEndPoint(1))
+		else :
+			lc2 = Line.CreateBound(lc.GetEndPoint(0), p2)
+	
+		pipe.Location.Curve = lc2
+		tr.Commit()
+		
+		tr.Start("divie system")
+		try :
+			system.DivideSystem(doc)
+		except :
+			pass
+		tr.Commit()
+	def ConnectAgain(self) :
+		self.to_connect[0].ConnectTo(self.to_connect[1])
+		
+		
+		
+		
+			
+		
+class dmSplitter(object) :
+	def __init__(self, e, dist = 20 * dut) :
+		self.e = e
+		self.dist = dist
+		self.find_connectors()
+		
+	def find_connectors(self) :
+		self.connectors = [dmConnectorSplitter(c, self.dist) for c in self.e.MEPModel.ConnectorManager.Connectors]
+		print(len(self.connectors))
+		
+			
+	def Split(self) :
+		for c in self.connectors :	
+			c.Split()
+			
+	def DeleteSystems(self) :		
+		for c in self.e.MEPModel.ConnectorManager.Connectors :
+			syst = c.MEPSystem
+			if syst : 
+				tr = Transaction(doc)
+				tr.Start("DeleteSystem")
+				doc.Delete(syst.Id)
+				tr.Commit()
+				
+	def ConnectAgain(self) :
+		tr = Transaction(doc)
+		tr.Start("connect again")
+		for c in self.connectors :
+			c.ConnectAgain()
+			
+		tr.Commit()
+				
+				
+		
+
+try :
+	arms_refs = uidoc.Selection.GetElementIds()
+except :
+	raise
+if len(arms_refs) == 0 :
+	try :
+		arms_refs = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+	except :
+		raise
+		
+print(len(arms_refs))
+	
+for arm_ref in arms_refs :
+	
+	arm = doc.GetElement(arm_ref)
+	if not (arm.Category.Id.IntegerValue == int(BuiltInCategory.OST_PipeAccessory) or
+				arm.Category.Id.IntegerValue == int(BuiltInCategory.OST_MechanicalEquipment)
+			) :
+		print("skip")
+		continue
+	s = dmSplitter(arm, 20 * dut)
+	s.Split()
+	s.DeleteSystems()
+	
+	
+arm_ref = []
+
+	

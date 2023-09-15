@@ -1,0 +1,110 @@
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import System
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+av = uidoc.ActiveView
+rd = av.RightDirection
+ud = av.UpDirection
+
+#sel1 = [doc.GetElement(eid) for eid in uidoc.Selection.GetElementIds()]
+#sel1 = [e for e in sel1 if e.Category.Id.IntegerValue == int(bic.OST_Sprinklers)]
+
+
+def print_list(l) :
+	print("Печатаем список\nКоличество элементов : {}\n".format(len(l)))
+	for e in l :
+		print("{} : {}".format(type(e), e))
+	
+	
+
+
+opt = Options()
+opt.ComputeReferences = True
+opt.IncludeNonVisibleObjects = True
+opt.View = uidoc.ActiveView
+
+refa = ReferenceArray()
+
+for n, g1 in enumerate(sel1, 1) :
+	print("{} : {}".format(n, dm.en(g1)))
+	g = dm.get_geometry(g1, opt = opt)
+
+	for n, g_ in enumerate(g) :
+		if type(g_) == Point and False :
+			print("Точка")
+			p1 = g_
+			refa.Append(p1.Reference)
+		else :
+			continue
+			
+		if type(g_) == Line :
+			print("Линия")
+		
+			
+	
+		
+"""
+		try :
+			if type(e)  == Arc :
+				arc = e
+		
+			
+			
+			for e in g_.Edges :
+				if type(e)  == Arc :
+					arc = e
+				print(type(e))
+				try :
+					refa.append(e.GetEndPointReference(0))
+					continue
+					print(e.GetEndPointReference(0))
+				except :
+					pass
+		except :
+			pass
+		
+	
+"""
+
+
+		
+
+pt1 = sel1[0].Location.Point - 50 * dut * ud
+pt2 = pt1 + 100 * dut * rd
+line1 = Line.CreateBound(pt1, pt2)
+
+
+with trans(doc) as tr :
+	doc.Create.NewDimension(av, line1, refa)
+
+
+
+

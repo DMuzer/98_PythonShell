@@ -1,0 +1,115 @@
+"""
+***************************************************************
+*** РАЗМЕЩЕНИЕ СПРИНКЛЕРОВ на заданной высоте от уровня
+*** 
+***************************************************************
+* 
+*
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+mapp = dm.dmApp(doc)
+view = mapp.views[view_name]
+
+from time import time as ftime
+ot = UI.Selection.ObjectType
+
+spr_z =  3500 * dut
+
+while True :
+	
+	try :
+	
+		sp_id = uidoc.Selection.PickObject(ot.Element)
+		sp_el = doc.GetElement(sp_id)
+	except :
+		break
+	
+	sp = mapp.spaces[sp_el.Number]
+	
+		
+	fr = sp.draw_space_as_region(view = uidoc.ActiveView)
+	spr_pnt = fr.CalculateSprinklerPositions(max_step = 3500*dut)
+	
+	z = uidoc.ActiveView.GenLevel.Elevation +  spr_z
+	
+	
+	spr_coords = []
+	
+	for pnt in spr_pnt :
+		p2 = XYZ(pnt.X, pnt.Y, z)
+
+		
+		spr_coords.append(p2)
+	#спринклер вверх
+	spr1_id = ElementId(6147761)
+	#спринклер вниз
+	spr1_id = ElementId(7186631)
+	spr1_id = ElementId(7180992)
+	
+	spr1 = doc.GetElement(spr1_id)
+	p0 = spr1.Location.Point
+	tr = Transaction(doc)
+	tr.Start("add sprinklers")
+	for pnt in spr_coords :
+		dp = pnt - p0
+		spr2 = ElementTransformUtils.CopyElement(doc, spr1_id, dp) 
+		
+	doc.Delete(fr.fr)
+		
+	tr.Commit()
+	
+
+
+
+
+
+
+
+
+

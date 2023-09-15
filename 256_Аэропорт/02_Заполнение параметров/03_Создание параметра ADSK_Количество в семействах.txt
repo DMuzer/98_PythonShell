@@ -1,0 +1,89 @@
+class LoadOpts(IFamilyLoadOptions) :
+	def OnFamilyFound(self, familyInUse, overwriterParamterValues) :
+		overwriterParamterValues = True
+		return True
+		
+	def OnSharedFamilyFound(self, sharedFamily, familyInUse, source, overwriteParameterValues) :
+		source = Familysource.Family
+		overwriteParameterValues = True
+		return True
+		
+def hasFamilyParameter(family, paramShared) :
+	familyDoc = doc.EditFamily(family)
+	familyManager = familyDoc.FamilyManager
+	for param in familyManager.Parameters :
+		try :
+			if param.GUID == paramShared.GUID : 
+				return True
+		except :
+			pass
+	return False
+
+def hasElementFamilyParameter(element, paramShared) :
+	family = element.Symbol.Family
+	familyDoc = doc.EditFamily(family)
+	familyManager = familyDoc.FamilyManager
+	for param in familyManager.Parameters :
+		try :
+			if param.GUID == paramShared.GUID : 
+				return True
+		except :
+			pass
+	return False
+	
+def addInstanceParameter(element, paramShared, value) :
+	addInstanceParameterToFamily(element.Symbol.Family, paramShared, value)
+	
+def addInstanceParameterToFamily(family, paramShared, value) :
+	familyDoc 		= doc.EditFamily(family)
+	familyManager 	= familyDoc.FamilyManager
+	
+	tr = Transaction(familyDoc, f"Add Parameter {paramShared.Name}")
+	tr.Start()
+	newParam = familyManager.AddParameter(paramShared,BuiltInParameterGroup.PG_GENERAL, True)
+	familyManager.Set(newParam, value)
+	tr.Commit()
+	
+	loadOpts = LoadOpts()
+	familyUpd = familyDoc.LoadFamily(doc, loadOpts)
+	
+	
+sharedParameters = {parameter.Name : parameter 
+							for g in doc.Application.OpenSharedParameterFile().Groups 
+							for parameter in g.Definitions}
+dmGroupParamDef = sharedParameters['ADSK_Количество']
+bic = BuiltInCategory
+groupParamValues = {
+	int(bic.OST_PipeAccessory) : "18_Арматура фланцевая",
+	int(bic.OST_MechanicalEquipment) : "10_Оборудование",
+	int(bic.OST_PipeFitting) : "52_Детали трубопровода",
+	int(bic.OST_Sprinklers) : "13_Спринклеры"
+	}
+	
+
+
+
+families = FilteredElementCollector(doc).OfClass(Family).ToElements()
+for family in families :
+	print(family.Name)
+	print(family.FamilyCategory.CategoryType)
+	if family.FamilyCategory.CategoryType != CategoryType.Model :
+		print("Пропускаем")
+		continue
+	if not family.IsEditable : continue
+	
+	print(f"Есть параметр Количество {hasFamilyParameter(family, dmGroupParamDef)}")
+	if not hasFamilyParameter(family, dmGroupParamDef) :
+		try :
+			addInstanceParameterToFamily(family, dmGroupParamDef, 1) 
+		except Exception as ex :
+			print(50*"-")
+			print("ошибка")
+			print(ex)
+			print(family.Name)
+	
+
+
+
+
+

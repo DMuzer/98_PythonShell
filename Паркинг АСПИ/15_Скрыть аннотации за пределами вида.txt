@@ -1,0 +1,30 @@
+"""
+Скрыть анотации за пределами обрезки вида
+"""
+import System
+
+def hideTags(view) :
+	ViewBoundingBox = view.CropBox
+	
+	TagsOnViewFC = FilteredElementCollector(doc, view.Id).OfClass(IndependentTag)\
+					.ToElements()
+	toHide = []			
+	for tag in TagsOnViewFC :
+		tagPoint = tag.TagHeadPosition
+		
+		if tagPoint.X < ViewBoundingBox.Min.X\
+			or tagPoint.X > ViewBoundingBox.Max.X\
+			or tagPoint.Y < ViewBoundingBox.Min.Y\
+			or tagPoint.Y > ViewBoundingBox.Max.Y :
+			
+			toHide.append(tag.Id)
+			print(tag.Id)
+			
+	tr = Transaction(doc, "Hide tags outside the border of the view")
+	tr.Start()
+	toHide = System.Array[ElementId](toHide)
+	view.HideElements(toHide)
+	tr.Commit()
+	
+hideTags(uidoc.ActiveView)
+		

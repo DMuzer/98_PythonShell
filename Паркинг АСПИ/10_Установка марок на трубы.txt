@@ -1,0 +1,110 @@
+#  coding: utf-8 
+
+"""
+Установка марок на трубы
+"""
+
+import System
+import math
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+from System.Collections.Generic import IList, List
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+av 		= uidoc.ActiveView
+vud 	= av.ViewDirection
+
+pipeVisibleOnView = FilteredElementCollector(doc, uidoc.ActiveView.Id)\
+						.OfClass(Plumbing.Pipe).ToElements()
+						
+#pipeSelection =uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+#pipeVisibleOnView = [doc.GetElement(eid) for eid in pipeSelection]
+
+
+		
+viewFilter = VisibleInViewFilter(doc, av.Id)
+pipeToTag 	= []
+for pipe in pipeVisibleOnView :
+	pipeLocation 	= pipe.Location.Curve
+	pipeEnd0 		= pipeLocation.GetEndPoint(0)
+	pipeEnd1		= pipeLocation.GetEndPoint(1)
+	
+	pipeVector 	= pipeEnd1 - pipeEnd0
+	pipeViewX = abs(av.RightDirection.DotProduct(pipeVector))
+	pipeViewY = abs(av.UpDirection.DotProduct(pipeVector))
+	
+	if pipeViewX + pipeViewY < 5 * dut * av.Scale :
+		
+		print("короткая")
+		continue
+
+	if  any([eid for eid in pipe.GetDependentElements(viewFilter)\
+				if type(doc.GetElement(eid)) == IndependentTag]) :
+				print("есть марка")
+				continue
+	pipeToTag.append(pipe)
+		
+def getPipeTagPlaces(pipe) :
+	pipeEndPoint = pipe.Location.Curve.GetEndPoint(0)
+	pnts = sorted([c.Origin for c in pipe.ConnectorManager.Connectors 
+					if c.ConnectorType & ConnectorType.Physical], 
+					key = lambda x : x.DistanceTo(pipeEndPoint)
+					)
+	
+	mids = [(p1 + p2) * 0.5 for p1, p2 in zip(pnts[:-1], pnts[1:]) 
+					if (p2-p1).GetLength() > 2 * dut * av.Scale]
+	return mids
+def putTagOnPipe(pipe) :
+	pipeRef = Reference(pipe)
+	for pntTag in getPipeTagPlaces(pipe) :
+		pipeTag = IndependentTag.Create(doc, av.Id, 
+						pipeRef, False, tagMode, 
+						tagOrientation, pntTag )
+			#pipeTag.ChangeTypeId(tagId)
+
+	
+tagMode 		= TagMode.TM_ADDBY_CATEGORY
+tagOrientation 	= TagOrientation.Horizontal
+
+#pipeSelection =uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+
+#pipeToTag = [doc.GetElement(eid) for eid in pipeSelection]
+
+
+tr = Transaction(doc, "add tags")
+tr.Start()
+for pipe in pipeToTag :
+	putTagOnPipe(pipe)
+		
+tr.Commit()
+		
+	
+
+
+
+
+
+
+
+
+
+
+

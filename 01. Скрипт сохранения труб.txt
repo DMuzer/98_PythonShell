@@ -1,0 +1,40 @@
+import sys
+import clr
+
+
+from Autodesk.Revit.DB import *
+
+doc = __revit__.ActiveUIDocument.Document
+
+print('1')
+
+pt_coll = FilteredElementCollector(doc).OfClass(Plumbing.PipeType)
+pt = list(pt_coll.ToElements())[1]
+print(pt)
+
+sys_t = FilteredElementCollector(doc).OfClass(Plumbing.PipingSystemType).ToElements()[0]
+sys_n = Element.Name.GetValue(sys_t)
+print(sys_n)
+
+level = FilteredElementCollector(doc).OfClass(Level).ToElements()[0]
+level_n = Element.Name.GetValue(level)
+print(level_n)
+
+p1 = XYZ(-100, 100, 100)
+p2 = XYZ(0, 100, 100)
+
+t = Transaction(doc)
+t.Start('New pipe')
+
+Plumbing.Pipe.Create(doc, sys_t.Id, pt.Id, level.Id, p1, p2)
+t.Commit()
+
+
+
+
+
+
+print('2')	
+	
+
+

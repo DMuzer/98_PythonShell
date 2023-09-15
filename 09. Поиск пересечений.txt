@@ -1,0 +1,132 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+#Находим выбираем нужное помещение в котором необходимо расставить спринклеры
+
+
+def CreateMLine(doc, l) :
+	#Создаем линию модели.
+	p1 = l.GetEndPoint(0)
+	p2 = l.GetEndPoint(1)
+	p3 = l.GetEndPoint(0) + XYZ(0.022, -0.222, 2.222)
+	pl = Plane.CreateByThreePoints(p1, p2, p3)
+	
+	
+	
+	tr = Transaction(doc)
+	tr.Start("ModelLine")
+	print(1)
+	skp = SketchPlane.Create(doc, pl)
+	print(2)
+	ml = doc.Create.NewModelCurve(l, skp)
+	tr.Commit()
+
+print('-1')
+r_coll = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces)
+spaces = {s.Number : s for s in r_coll.ToElements()}
+
+w_space = spaces['2']
+
+p0 = w_space.Location.Point
+p1 = p0 + XYZ.BasisZ * 100
+p2 = p0 - XYZ.BasisZ * 100
+l1 = Line.CreateBound(p1, p2)
+
+lnkd_docs = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
+print('-2')
+floors1 = []
+
+for link_doc in lnkd_docs :
+	floors_coll = FilteredElementCollector(link_doc.GetLinkDocument()).OfCategory(BuiltInCategory.OST_Floors)
+	floors_coll.WhereElementIsNotElementType()
+		
+	floors1 += list(floors_coll.ToElements())
+
+int_lines = []
+print('-')
+for fl1 in floors1 :
+	print(fl1.Id)
+	for  g1 in fl1.Geometry[Options()] :
+		if type(g1) == Solid :
+	
+			res = g1.IntersectWithCurve(l1, int_res)
+		
+			for seg_num in range(res.SegmentCount) :
+				int_line = res.GetCurveSegment(seg_num)
+				int_lines.append(int_line)
+			
+			
+for l in int_lines :			
+	CreateMLine(doc, l)
+
+
+
+	
+	
+
+
+
+"""
+ids = [1043791, 1043801]
+ids = [1045763]
+                                                        
+pipes = [doc.GetElement(ElementId(id)) for id in ids]
+
+def pipe_create_elbow(doc, p1, p2) :
+	cons = []
+	for p in [p1, p2] :
+		cons += list (p.ConnectorManager.Connectors)
+	
+	cons_p = []
+
+	for i1 in range(len(cons)-1) :
+		for i2 in range(i1+1, len(cons)) :
+			c1 = cons[i1]
+			c2 = cons[i2]
+			
+			if c1.Owner.Id == c2.Owner.Id : continue
+			
+			cons_p.append((c1, c2, c1.Origin.DistanceTo(c2.Origin)))
+
+		cons_p.sort(key = lambda x : x[2])
+
+
+
+
+	tr = Transaction(doc, "create pipe elbow")
+	tr.Start()	
+	doc.Create.NewElbowFitting(cons_p[0][0], cons_p[0][1])	
+	tr.Commit()
+	
+pipe = pipes[0]
+int_coll = FilteredElementCollector(doc)
+int_coll.WhereElementIsNotElementType()
+excludedElements = [pipe.Id]
+
+from  System.Collections.Generic import List
+
+
+exc_filter = ExclusionFilter(List[ElementId](excludedElements))
+int_coll.WherePasses(exc_filter)
+
+sol = list(pipe.Geometry[Options()])[0]
+int_filt = ElementIntersectsSolidFilter(sol)
+
+int_coll.WherePasses(int_filt)
+
+int_coll.ToElements()
+
+for e in int_coll.ToElements() :
+	print(e.Category.Name)
+	print( e.Id.IntegerValue)
+
+"""
+

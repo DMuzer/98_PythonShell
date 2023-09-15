@@ -1,0 +1,94 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+ids = [1043791, 1043801]
+ids = [1045763]
+                                                        
+pipes = [doc.GetElement(ElementId(id)) for id in ids]
+
+def pipe_create_elbow(doc, p1, p2) :
+	cons = []
+	for p in [p1, p2] :
+		cons += list (p.ConnectorManager.Connectors)
+	
+	cons_p = []
+
+	for i1 in range(len(cons)-1) :
+		for i2 in range(i1+1, len(cons)) :
+			c1 = cons[i1]
+			c2 = cons[i2]
+			
+			if c1.Owner.Id == c2.Owner.Id : continue
+			
+			cons_p.append((c1, c2, c1.Origin.DistanceTo(c2.Origin)))
+
+		cons_p.sort(key = lambda x : x[2])
+
+
+
+
+	tr = Transaction(doc, "create pipe elbow")
+	tr.Start()	
+	doc.Create.NewElbowFitting(cons_p[0][0], cons_p[0][1])	
+	tr.Commit()
+	
+dut = 0.0032808398950131233
+from Autodesk.Revit.UI import Selection
+el = uidoc.Selection.PickObject(Selection.ObjectType.Element);
+pipe = doc.GetElement(el.ElementId)
+
+view = doc.ActiveView
+t_mode = TagMode.TM_ADDBY_CATEGORY
+tag_orn = TagOrientation.Horizontal
+
+loc_curve = pipe.Location
+
+
+
+wstart = loc_curve.Curve.GetEndPoint(0)
+wend = loc_curve.Curve.GetEndPoint(1)
+
+
+wmid = loc_curve.Curve.Evaluate(0.9, True) 
+reference = Reference(pipe)
+
+category_id = ElementId(Bic.OST_GenericModel)
+tr = Transaction(doc)
+tr.Start('Create sprinkler zone')
+
+
+
+doc.Create.NewDetailCurve(view, Line.CreateBound(XYZ(0,0,0), XYZ(10000*dut, 10000*dut,0)))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wstart, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2 *math.pi))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wend, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wmid, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+
+
+newTag = IndependentTag.Create(doc, view.Id, reference, True, t_mode, tag_orn, wmid)
+
+newTag.LeaderEndCondition = LeaderEndCondition.Free
+elbowPnt = wmid + XYZ(800 * dut, -500*dut, 0 )
+newTag.LeaderElbow = elbowPnt
+h_pnt = elbowPnt + XYZ(1*dut, 0 * dut,0)
+newTag.TagHeadPosition = h_pnt
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(h_pnt, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+
+tr.Commit()
+
+
+
+
+
+
+
+
+
+

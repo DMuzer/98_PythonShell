@@ -1,0 +1,85 @@
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+class dmTakeOff :
+	def __init__(self, e) :
+		self.e = e
+	def __repr__(self) :
+		return "{}".format(self.e.Name)
+	def _get_connectors(self) :
+		res = self.e.MEPModel.ConnectorManager.Connectors
+		for c in res :
+			print(20*"-")
+			print(c.ConnectorType)
+			print(20*"*")
+			for c1 in c.AllRefs :
+				print(c1.ConnectorType)
+				if c1.Owner :
+					print(c1.Owner)
+				else :
+					print("-")
+		return res
+	conns = property(_get_connectors)
+	def takeoff_connector_size(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.Curve :
+					return c1.Radius * 2 / dut
+	def main_connector_size(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.End and c1.Owner.Id != self.e.Id :
+					return c1.Radius * 2 / dut
+	def takeoff_connector(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.Curve :
+					return c1
+	
+	def main_connector(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.End and c1.Owner.Id != self.e.Id :
+					return c1
+
+		
+	def main_pipe(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.End and c1.Owner.Id != self.e.Id :
+					return c1.Owner
+	def takeoff_pipe(self) :
+		for c in self.conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.Curve :
+					return c1.Owner
+					
+	def change_to_tee(self) :
+		print("Замена {}".format(self.e.Id))
+		
+		p1 = self.main_pipe()
+		p2 = self.takeoff_pipe()
+		
+		c0 = self.main_connector()
+		c1 = self.takeoff_connector()
+		
+		tr = Transaction(doc)
+		tr.Start("")
+		
+		
+		
+		tr.Commit()
+		
+		
+	
+fc = [doc.GetElement(eref) for eref in uidoc.Selection.GetElementIds()]
+if len(fc) == 0 :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_PipeFitting).WhereElementIsNotElementType().ToElements()
+
+
+takeoffs = [dmTakeOff(e) for e in fc if e.MEPModel.PartType == PartType.SpudAdjustable]
+
+for to in takeoffs[:] :
+
+	if to.main_connector_size() == 150. and to.takeoff_connector_size() == 150. :
+		to.change_to_tee()
+	
+	

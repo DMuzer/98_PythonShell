@@ -1,0 +1,39 @@
+st_cmt = """
+***************************************************************
+*** Поиск пересечений труб с прочими системами
+*** 
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+#from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import time
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+from pathlib import Path
+from imp import reload
+print(2)
+try :
+	reload(dm)
+	print("Модуль перезагружен")
+except Exception as ex:
+	print(ex)
+	print("Загружаем модуль в первый раз") 
+	import dmFindClashes as dm
+	
+cmd = dm.dmMain()
+cmd.execute()
+
+
+
+
+
+	

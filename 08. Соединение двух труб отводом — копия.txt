@@ -1,0 +1,42 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+ids = [1043791, 1043801]
+                                                        
+pipes = [doc.GetElement(ElementId(id)) for id in ids]
+
+def pipe_create_elbow(doc, p1, p2) :
+	cons = []
+	for p in [p1, p2] :
+		cons += list (p.ConnectorManager.Connectors)
+	
+	cons_p = []
+
+	for i1 in range(len(cons)-1) :
+		for i2 in range(i1+1, len(cons)) :
+			c1 = cons[i1]
+			c2 = cons[i2]
+			
+			if c1.Owner.Id == c2.Owner.Id : continue
+			
+			cons_p.append((c1, c2, c1.Origin.DistanceTo(c2.Origin)))
+
+		cons_p.sort(key = lambda x : x[2])
+
+
+
+
+	tr = Transaction(doc, "create pipe elbow")
+	tr.Start()	
+	doc.Create.NewElbowFitting(cons_p[0][0], cons_p[0][1])	
+	tr.Commit()
+	
+pipe_create_elbow(doc, pipes[0], pipes[1])

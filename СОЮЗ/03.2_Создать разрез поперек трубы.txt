@@ -1,0 +1,67 @@
+"""
+Разрез поперек трубы
+"""
+from Autodesk.Revit import *
+import math
+from System.Collections.Generic import IList, List
+dut = 0.0032808398950131233
+ot = UI.Selection.ObjectType
+pipe_id = uidoc.Selection.PickObject(ot.Element)
+pnt = uidoc.Selection.PickPoint()
+pipe = doc.GetElement(pipe_id)
+lc = pipe.Location.Curve
+p1 = lc.GetEndPoint(0)
+p2 = lc.GetEndPoint(1)
+d = lc.Direction
+d = XYZ(d.X, d.Y, 0).Normalize()
+
+
+pntLine = Line.CreateUnbound(pnt, uidoc.ActiveView.ViewDirection)
+
+t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+pntLine.ComputeClosestPoints(lc, False, False, False, t)
+
+p0 = t.Item[0].XYZPointOnSecondCurve
+
+
+
+level = pipe.ReferenceLevel
+
+elevation = level.Elevation
+
+bottom = elevation - 1000 * dut
+top = max(p1.Z, p2.Z) + 1000 * dut 
+
+w = (p2 - p1).GetLength() * 1.3 + 5000 * dut
+h = top - bottom
+
+
+rot_trans = Transform.CreateRotation(XYZ.BasisZ, -math.pi / 2)
+dn = rot_trans.OfVector(d)
+
+
+pntMin = XYZ(-w / 2, -h / 2, -1)
+pntMax = XYZ(w  / 2 ,  h / 2, 1)
+
+origin = p0
+
+viewTransform = Transform.Identity
+viewTransform.BasisZ = dn.Normalize()
+viewTransform.BasisX = d
+viewTransform.BasisY = XYZ.BasisZ
+viewTransform.Origin = origin
+
+
+bb = BoundingBoxXYZ()
+bb.Min = pntMin
+bb.Max = pntMax 
+bb.Enabled = True 
+
+bb.Transform = viewTransform
+
+vt_id = ElementId(4517251)
+tr = Transaction(doc)
+tr.Start("add new pipe section")
+new_view = ViewSection.CreateSection(doc, vt_id, bb)
+tr.Commit()
+uidoc.ActiveView = new_view

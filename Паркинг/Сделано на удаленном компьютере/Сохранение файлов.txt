@@ -1,0 +1,25 @@
+import shutil
+#from pathlib import Path
+fc = FilteredElementCollector(doc).OfClass(RevitLinkInstance).WhereElementIsNotElementType().ToElements()
+
+for li in fc :
+	print(li.Name)
+	ldoc = li.GetLinkDocument()
+	if not ldoc :
+		continue
+	print(ldoc.PathName)
+	path1 = ldoc.PathName
+	path2 = path1.split("/")[-1]
+	print(path2)
+	oopt = OpenOptions()
+	#doc2 = doc.Application.OpenDocumentFile(path1,oopt)
+	sao = SaveAsOptions()
+	#wsao = sao.GetWorksharingOptions()
+	#wsao.SaveAsCentral = True
+	#sao.SetWorkSharingOptions(wsao)
+	sao.OverwriteExistingFile = True
+	ldoc.SaveAs(path2)
+	#continue
+	#shutil.copyfile(path1, path2)
+	
+	break

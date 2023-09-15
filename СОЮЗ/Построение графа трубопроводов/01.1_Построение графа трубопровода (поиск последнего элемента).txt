@@ -1,0 +1,23 @@
+class dmElement :
+	def __init__(self, e) :
+		if isinstance(e, Element) :
+			self.element = e
+		elif isintance(e, ElementId) of isinstance(e, Reference) :
+			self.element = doc.GetElement(e)
+		elif isinstance(e, int) :
+			self.element = doc.GetElement(ElementId(e))
+	def __repr__(self) :
+		return f"Элемент {self.element.Category.Name} {self.Id}"
+	def _getId(self) :
+		return self.element.Id
+	Id = property(_getId)
+	def __hash__(self) :
+		return self.e.ElementId.IntegerValue
+	def __eq__(self, other) :
+		return self.Id == other.Id
+		
+e1 = dmElement(1)
+e2 = dmElement(1)
+e3 = dmElement(1)
+
+print(set(e1, e2, e3))

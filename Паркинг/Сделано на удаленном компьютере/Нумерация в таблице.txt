@@ -1,0 +1,34 @@
+spec = uidoc.ActiveView
+if not type(spec) == ViewSchedule :
+	raise
+	
+fc1 = set(FilteredElementCollector(doc, spec.Id).WhereElementIsNotElementType().ToElementIds())
+
+td = spec.GetTableData()
+ts = td.GetSectionData(0)
+tr = Transaction(doc)
+pos = 1
+for row_num in range(ts.NumberOfRows) :
+	print(1)
+	tr.Start('1')
+	ts.RemoveRow(row_num)
+	fc2 = set(FilteredElementCollector(doc, spec.Id).WhereElementIsNotElementType().ToElementIds())
+	
+	tr.Commit()
+	break
+	print(2)
+	fc3 = set([eid for eid in fc1 if eid not in fc2])
+	tr.Start("set num")
+	for eid in fc3 :
+		print(3)
+		e = doc.GetElement(eid) 
+		if not e : 
+			print("gecnj")
+			continue
+		e.LookupParameter("ADSK_Позиция").Set("".format(pos))
+	tr.Commit()
+	pos += 1
+	
+	if pos > 2 : break
+		
+	

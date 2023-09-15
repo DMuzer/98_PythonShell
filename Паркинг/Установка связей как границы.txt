@@ -1,0 +1,15 @@
+fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_RvtLinks).ToElements()
+tr = Transaction(doc)
+tr.Start("установка границы")
+for e in fc :
+	if not isinstance(e, RevitLinkType) :
+		continue
+	print(e)
+	name = Element.Name.GetValue(e)
+	p = e.LookupParameter("Граница помещения")
+	if p and (name.Contains("АР") or name.Contains("КЖ")):
+		print(p.AsInteger())
+		p.Set(1)
+	
+	
+tr.Commit()

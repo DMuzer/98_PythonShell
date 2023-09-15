@@ -1,0 +1,35 @@
+st_cmt = """
+***************************************************************
+*** Удаление врезок на трубе
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\03_Удаление врезок к трубе.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def deleteTakeOffs(pipe) :
+	toDelete = []
+	for c in pipe.ConnectorManager.Connectors :
+		if c.ConnectorType & ConnectorType.Curve :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical\
+					and c1.Owner.Id != c.Owner.Id :
+						if hasattr(c1.Owner, "MEPModel") :
+							if c1.Owner.MEPModel.PartType == PartType.SpudAdjustable :
+								toDelete.append(c1.Owner)
+								
+	tr = Transaction(doc, "delete takeoffs")
+	tr.Start()
+	for to in toDelete :
+		doc.Delete(to.Id)
+	tr.Commit()
+
+
+pipeRefs = uidoc.Selection.GetElementIds()
+for pipeRef in pipeRefs :
+	pipe = doc.GetElement(pipeRef)
+	deleteTakeOffs(pipe)

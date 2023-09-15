@@ -1,0 +1,56 @@
+av = uidoc.ActiveView
+
+dtypes = {Element.Name.GetValue(t): t for t in FilteredElementCollector(doc).OfClass(DimensionType).ToElements()}
+dt = dtypes["Размеры_спринклеры"]
+p1_= uidoc.Selection.PickPoint()
+p2_ =uidoc.Selection.PickPoint()
+
+p1, p2 = XYZ(p1_.X, p1_.Y,0), XYZ(p2_.X, p2_.Y, 0)
+l1 = Line.CreateBound(p1, p2)
+
+def check_pipe(l1, ep) :
+	try :
+		l2 = ep.Location.Curve
+		p0_, p1_ = l2.GetEndPoint(0), l2.GetEndPoint(1)
+		p0, p1 = XYZ(p0_.X, p0_.Y,0), XYZ(p1_.X, p1_.Y, 0)
+		l3 = Line.CreateBound(p0, p1)
+		ir = l3.Intersect(l1)
+		return ir == SetComparisonResult.Overlap
+	except :
+		return False
+		
+def check_sprinkler(l1, s) :
+	p0_ = s.Location.Point
+	p0 = XYZ(p0_.X, p0_.Y,0)
+	ir = l1.Project(p0)
+	if ir.Distance > 500 * dut : return False
+	
+		
+def get_refs(sprs) :
+	opts=Options()
+	opts.ComputeReferences = True
+	opts.IncludeNonVisibleObjects = True
+	opts.View = av
+	
+	
+	ra = ReferenceArray()
+	for s in sprs :
+		p0 = s.Location.Point
+		for ge in s.Geometry[opts] :
+			if type(ge) == Point :
+				if ge.Coord.Distance(p0) < 0.005 :
+					ra.Append(ge.Reference)
+					break
+	return ra
+
+fc = FilteredElementCollector(doc, av.Id).OfCategory(BuiltInCategory.OST_Sprinklers).ToElements()
+sprs = [ep for ep in fc if check_sprinkler(l1, ep)]
+
+refs = get_refs(sprs)
+
+tr =Transaction(doc)
+tr.Start("add dimension")
+dim = doc.Create.NewDimension(av, l1, refs, dt)
+tr.Commit()
+
+

@@ -1,0 +1,17 @@
+av = uidoc.ActiveView
+filts = FilteredElementCollector(doc).OfClass(ParameterFilterElement).ToElements()
+print(len(filts))
+
+trans = Transaction(doc)
+trans.Start("Удаление фильтров")
+
+for f in filts :
+	print(f.Name)
+	if f.Name.startswith("MACROS") :
+		n = f.Name
+		print("автомат:")
+		doc.Delete(f.Id)
+		print("Удалили {}".format(n))
+	
+			
+trans.Commit()

@@ -1,0 +1,49 @@
+import sys
+dut = 0.0032808398950131233
+
+sys.path.append(r"D:\18_проектирование\RevitCode")
+import dm_lib
+
+reload(dm_lib)
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+dut = 0.0032808398950131233
+
+
+#rooms = FilteredElementCollector(doc, uidoc.Selection.GetElementIds()).OfCategory(BuiltInCategory.OST_MEPSpaces).ToElements()
+#rooms = list(rooms)
+#def find_elevation(pnts, o_type, level, min_elev = 500 * dut, gap = -100 * dut)
+#print(rooms)
+
+
+data = dm_lib.get_sprinkler_positions(doc, rooms, elevation = 500 * dut)
+data2 = dm_lib.find_elevation(data, [Floor], doc.GetElement(rooms[0].LevelId), gap=-250 * dut )
+
+
+#def get_rooms_data(rooms, max_dist = 3000, max_radius = 2150, boundary_step = 500)
+#def create_sprinkler(data2, single = True, point = False)
+
+
+
+new_sprs = dm_lib.create_sprinkler(doc, data2, rooms[0].Level, single=False, point=True)
+'''
+tr = Transaction(doc)
+tr.Start('0')
+for s, p in zip(new_sprs, data2) :
+	if s == None : continue
+	s.Location.Point  = p
+tr.Commit()
+'''
+
+
+
+
+
+
+
+
+
+
+
+

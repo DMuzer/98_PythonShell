@@ -1,0 +1,389 @@
+
+dut = 0.0032808398950131233
+
+from Autodesk.Revit import *
+et = UI.Selection.ObjectType.Element
+bic = BuiltInCategory
+fc = {(t.FamilyName, t.Name) : t for t in FilteredElementCollector(doc).OfCategory(bic.OST_PipeFitting).WhereElementIsElementType().ToElements()}
+#tn = ('ADSK_СтальСварка_Врезка-тройник', "!Не учитывать")
+#tee_type = fc[tn]
+
+pipeDiameters = {
+	0 : 25.,
+	1 :	25.,
+	2 :	32.,
+	3 :	32.,
+	4 :	40.,
+	5 : 40.,
+	6 : 50.,
+	7 : 50.,
+	8 : 50.,
+	9 : 50.,
+	10 : 65.,
+	11 : 65.
+	
+}
+
+		
+class dmConnector :
+	def __init__(self, connector) :
+		self.c = connector
+	def set_diameter(self, d) :
+		self.connectorInfo = self.c.GetMEPConnectorInfo()
+		#print(self.c.Owner.Id)
+		diameter = True
+		ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_DIAMETER))
+		#print(ass_par_id)
+		if ass_par_id == ElementId(-1): 
+			diameter = False
+			ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_RADIUS))
+		#print(ass_par_id)
+		
+		if not ass_par_id :
+			return
+		ass_par = self.c.Owner.Document.GetElement(ass_par_id)
+		ass_par = self.c.Owner.LookupParameter(ass_par.GetDefinition().Name)
+		
+		if not ass_par : return
+		
+		if diameter :
+			ass_par.Set(d)
+		else :
+			ass_par.Set(d/2)
+	
+	def get_sprinkler_count(self) :
+		connected = set()
+		to_visit = set()
+		visited = set([self.c.Owner.Id])
+		for c1 in self.c.AllRefs :
+			if c1.ConnectorType & ConnectorType.Physical and c1.Owner != self.c.Owner :
+				to_visit.add(c1.Owner.Id)
+		i = 0
+		while to_visit :
+			i =+ 1
+			if i > 10000 : return 
+			current_id = to_visit.pop()
+			visited.add(current_id)
+			current = dmElement(doc.GetElement(current_id))		
+		return 0
+		
+
+class dmPipe:
+	def __init__(self, pipe) :
+		self.pipe = pipe
+	def get_end_fittings(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			if not c.ConnectorType == ConnectorType.End :
+				continue
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(c1.Owner)
+		return res
+	def get_outer_connectors(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(dmConnector(c1))
+		return res
+		
+	def get_inner_connectors(self) :
+		return [dmConnector(c) for c in self.pipe.ConnectorManager.Connectors]
+	def set_diameter(self, d, transaction=None) :
+		if not transaction :
+			tr = Transaction(doc, "change diam")
+			tr.Start()
+		
+		if self.pipe.Location.Curve.Length < 3.5 * self.pipe.Diameter :
+			#Надо проверить, не подключен ли к трубе спринклер.
+			#print("Надо проверить на подключение спринклера")
+			for c in self.get_outer_connectors() :
+				if c.c.Owner.Category.Id.IntegerValue == int(BuiltInCategory.OST_Sprinklers) :
+					#print("подключен спринклер, труба короткая, диаметр не меняем")
+					return
+				
+		#print(self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].AsDouble())
+		self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(d * dut)
+		for c in self.get_outer_connectors() :
+			try :
+				c.set_diameter(d * dut)
+			except :
+				pass
+		if not transaction :
+			tr.Commit()
+
+class dmElement :
+	def __init__(self, elementId, branchMaxDiameter = 80 * dut) :
+		self.element = doc.GetElement(ElementId(elementId))
+		self.branchMaxRadius = branchMaxDiameter / 2
+		self.Id = self.element.Id.IntegerValue
+	def __repr__(self) :
+		try  :
+			return f"{self.element.Category.Name} {self.element.Diameter/dut} {self.element.Id}"
+		except :
+			try :
+				return f"{self.element.Category.Name} {self.element.MEPModel.PartType} {self.element.Id}"
+			except :
+				return f"{self.element.Category.Name} {self.element.Id}"
+	def _getNeighbors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors 
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		for connector in connectors :
+			if connector.ConnectorType & ConnectorType.Physical and connector.IsConnected :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical and c2.Owner.Id != self.element.Id :
+						yield dmElement(c2.Owner.Id.IntegerValue)
+	
+	def _getBranchNeighbors(self) :
+	
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors 
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		for connector in connectors :
+			if connector.ConnectorType & ConnectorType.Physical\
+				and connector.IsConnected\
+				and connector.Radius <= self.branchMaxRadius:
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id\
+						and c2.Radius <= self.branchMaxRadius :
+						yield dmElement(c2.Owner.Id.IntegerValue)
+		
+	neighbors = property(_getNeighbors)
+	branchNeighbors = property(_getBranchNeighbors)
+	
+	def _IsTerminal(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors 
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		#if any([not c.IsConnected for c in connectors]) : return True
+		for connector in connectors :
+			if connector.ConnectorType & ConnectorType.Physical\
+				and connector.IsConnected\
+				and connector.Radius :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id\
+						and c2.Radius > self.branchMaxRadius :
+						return True
+		return False
+	IsTerminal = property(_IsTerminal)
+	
+	def changeTakeoffToTee(self, transaction = None) :
+		"""
+		Замена отвода на тройник
+		"""
+		
+		for c in self.element.MEPModel.ConnectorManager.Connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.Curve :
+					cn1 = c1
+					
+		for c in self.element.MEPModel.ConnectorManager.Connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType == ConnectorType.End :
+					cn2 = c1
+		p0_ = cn1.Origin
+		pipe1 = cn1.Owner
+		lc = pipe1.Location.Curve
+		p0 = lc.Project(cn2.Origin).XYZPoint
+		
+		if not transaction :
+			tr = Transaction(doc, "change fitting")
+			tr.Start()
+		doc.Delete(self.element.Id)
+		new_pipe_id = Plumbing.PlumbingUtils.BreakCurve(doc, pipe1.Id, p0)
+		new_pipe = doc.GetElement(new_pipe_id)
+		nc1 = sorted([cn_ for cn_ in new_pipe.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))[0]
+		nc2 = sorted([cn_ for cn_ in pipe1.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))[0]
+		
+		new_fitting = doc.Create.NewTeeFitting(nc1, nc2, cn2)
+		new_fitting.ChangeTypeId(tee_type.Id)
+		
+		if not transaction :
+			tr.Commit()
+			
+	def changePipeDiameter(self, d, tr) :
+		"""
+		изменение  диаметра трубы
+		"""
+		pass
+		pipe = dmPipe(self.element)
+		pipe.set_diameter(d, tr)
+		
+		
+		
+		
+	
+from collections import deque				
+class dmBranch :
+	def __init__(self, startElement) :
+		self.startElement = startElement 
+		self._branchElements = None
+		self._branchElementsIds = None
+		
+	def findBranchElements(self) :
+		toVisit = deque([self.startElement])
+		visited = set()
+		while toVisit :
+			current = toVisit.popleft()
+			visited.add(current.Id)
+			for neighbor in current.branchNeighbors :
+				if not neighbor.Id in visited :
+					toVisit.append(neighbor)
+			
+		self._branchElements = list([dmElement(eId) for eId in visited])
+		self._branchElementsIds = visited
+		
+	def _getBranchElements(self) :
+		if self._branchElements :
+			return self._branchElements
+		else :
+			self.findBranchElements()
+			return self._branchElements
+	branchElements = property(_getBranchElements)
+	
+	def _getSprinklers(self) :
+		pass
+		return [e for e in self.branchElements 
+					if e.element.Category.Id.IntegerValue == int(BuiltInCategory.OST_Sprinklers)]
+	branchSprinklers = property(_getSprinklers)
+
+	def _getTakeoffs(self) :
+		pass
+		return [e for e in self.branchElements 
+					if e.element.Category.Id.IntegerValue == int(BuiltInCategory.OST_PipeFitting)\
+						and e.element.MEPModel.PartType == PartType.SpudAdjustable\
+						and not e.IsTerminal]
+	branchTakeoffs = property(_getTakeoffs)
+	
+	def _getPipes(self) :
+		pass
+		return [e for e in self.branchElements 
+					if e.element.Category.Id.IntegerValue == int(BuiltInCategory.OST_PipeCurves)]
+	branchPipes = property(_getPipes)
+	
+	def _getTerminals(self) :
+		return [e for e in self.branchElements if e.IsTerminal]
+	terminals = property(_getTerminals)
+	
+	def __contains__(self, other) :
+		if not self._branchElementsIds :
+			self._findBranchElements()
+		return other.Id in self._branchElementsIds
+		
+	
+	
+	def wfs(self, start) :
+		"""
+		выполняет алгоритм поиска в ширину для ветки начиная с заданного элемента
+		"""
+		if not start in self : return 
+		toVisit = deque([start])
+		visited = []
+		res = {start.Id : None}
+		while toVisit :
+			current = toVisit.popleft()
+			visited.append(current)
+			for neighbor in current.branchNeighbors :
+				if not neighbor.Id in res :
+					res[neighbor.Id] = current
+					toVisit.append(neighbor)
+		return res, visited
+
+	def calcSprinklerNumberThruElements(self, terminal = None) :
+		"""
+			подсчитываем сколько спринклеров пропускает элемент
+		"""
+		
+		try :		
+			terminal = self.terminals[0]
+		except :
+			print("Отсутствует терминальный элемент")
+			return None
+		tree, sequence = self.wfs(terminal)
+		pipes = set([e.Id for e in self.branchPipes])
+		#print(pipes)
+		resSequence = [p for p in sequence if p.Id in pipes]
+		#print(resSequence)
+		res = {eId : 0 for eId in tree.keys()}	
+		
+		
+		for sprinkler in self.branchSprinklers :
+			current = sprinkler
+			while current :
+				res[current.Id] += 1
+				current = tree[current.Id]
+		return res, resSequence
+	def _IsConnected(self) :
+		return any([e.IsTerminal for e in self.branchElements])
+	IsConnected = property(_IsConnected)
+		
+	def changeTakeoffsToTees(self) :	
+		tr = Transaction(doc, "change takeoffs to tee")
+		tr.Start()
+		for takeoff in branch.branchTakeoffs :
+			takeoff.changeTakeoffToTee(tr)
+		tr.Commit()
+		self.findBranchElements()
+	
+	def setPipeSizes(self) :
+		pass
+		numSpr, pipes = self.calcSprinklerNumberThruElements()
+		#print(self.branchSprinklers)
+		#print(f"Количество элементов в ветке {len(branch.branchElements)}")
+		#print(numSpr)
+		tr = Transaction(doc, "change pipe diameters")
+		tr.Start()
+		for pipe in pipes[::] :
+			pipeSprinklerNum = numSpr[pipe.Id]
+			pipeDiameter = pipeDiameters[pipeSprinklerNum]
+			#print(f"{pipe}\nКоличество спринклеров = {pipeSprinklerNum}\nнужен диаметр {pipeDiameter}")
+			pipe.changePipeDiameter(pipeDiameter, tr)
+		tr.Commit()
+	def deleteTerminals(self) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "delete takeoff")
+			tr.Start()
+			for t in self.terminals :
+				doc.Delete(t.element.Id)
+			tr.Commit()
+	def deleteAllBranchElements(self) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "delete takeoff")
+			tr.Start()
+			for e in self.branchElements :
+				doc.Delete(e.element.Id)
+			tr.Commit()
+		
+		
+			
+			
+
+while True :
+	elRefs = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+	for elRef in elRefs :
+		element = dmElement(elRef.ElementId.IntegerValue)
+		branch = dmBranch(element)
+		print(f"Ветка. количество элементов : {len(branch.branchElements)}")
+		print(f"Ветка. количество спринклеров : {len(branch.branchSprinklers)}")
+		print(f"Ветка. количество присоединен : {branch.IsConnected}")
+		
+		if branch.IsConnected :
+			print("Подключено к магистрали... Обрабатываем")
+			#branch.changeTakeoffsToTees()
+			#branch.setPipeSizes()
+		else :
+			print("Ветка не подключена к магистрали")
+	
+
+
+
+

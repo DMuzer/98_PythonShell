@@ -1,0 +1,65 @@
+
+#  coding: utf-8 
+
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit import DB
+import clr
+from pathlib import Path
+import sys
+from imp import reload
+import System
+
+libfld = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libfld not in sys.path :
+	sys.path.append(libfld)
+	
+try :
+	reload(dm)
+	print("Перезагрузились dm")
+except :
+	print("проблема с dm пробуем импортировать")
+	import dmRevitClasses as dm
+	print("dmRevitClasses импортировали")
+	
+	
+
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+#pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+spec = uidoc.ActiveView
+if not type(spec) == ViewSchedule : raise
+
+viewVisible = set(dm.getActiveViewPipingElements())
+
+tableData = spec.GetTableData()
+sectionData = tableData.GetSectionData(1)
+tr = Transaction(doc, "Перенумерация в таблице")
+for rowNum in range(0, sectionData.NumberOfRows) :
+	tr.Start()
+	try :
+		sectionData.RemoveRow(rowNum)
+	except :
+		pass
+	leftInTable = set(dm.getActiveViewPipingElements())
+	tr.RollBack()
+
+	rowElements = viewVisible.difference(leftInTable)
+	print(len(rowElements))
+	tr.Start()
+	for e in rowElements :
+		e.Set("DM_Позиция_спец1", "{}".format(rowNum))
+	tr.Commit()
+	
+	#break
+	
+
+
+
+

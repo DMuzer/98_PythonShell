@@ -1,0 +1,109 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+
+
+
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sel0 = uidoc.Selection.GetElementIds()
+
+sel1=[]
+if len(sel0) > 0 :
+	sel1 = sel0
+
+sel2 =  []
+for e in sel1 :
+	e = doc.GetElement(e)
+	print(type(e))
+	if type(e) == Mechanical.Space :
+		sel2.append(e)
+	
+
+	
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+app = dm.dmApp(doc)
+
+vn = app.views['Потолки для спринклеров'] 
+ls = app.detail_linestyles['ADSK_Сплошная_Синяя_4']
+frt = app._get_filled_region_types()["DM_Зона_орошения_спринклера"]
+
+
+max_step = 3000 * dut
+prot_radius = 3000*dut * 2 ** 0.5 / 2
+
+sp = app.spaces['п.2.1.45']
+
+bc = [bic.OST_Floors, 
+						bic.OST_Ceilings, 
+						bic.OST_StructuralColumns,
+						bic.OST_DuctCurves, 
+						bic.OST_DuctFitting]
+						
+
+dist = [300, 400, 500, 600, 3000]
+height = [250, 300, 100, 50, 50]
+
+	
+sel2 = [sp.space]
+i = 0
+for e in sel2 :
+	try :
+		sp = dm.dm_Space(e, app)
+		print("---------------------------------------------------------")
+		print(i)
+		curve_loops = sp.get_free_ceiling_contour_by_intersection(barrier_categories =bc, 
+														create_shape=False,
+														dist = dist[i]*dut,
+														thickness = height[i] * dut,
+														create_filled_region = True
+														
+														)
+		print("*******************************************************")
+
+	except Exception as ex:
+		print("Ошибка")
+		print(ex)
+		print(ex.clsException)
+		pass
+
+
+
+
+
+

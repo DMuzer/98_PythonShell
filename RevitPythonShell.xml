@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitPythonShell>
+  <Commands>
+    <Command name="Присоединить спринклеры" 
+				src="D:\18_проектирование\98_PythonShell\27_Присоединить спринклеры.txt" 
+				group="Соединение"
+				largeImage="D:\18_проектирование\98_PythonShell\Присоединить_спринклеры.png"
+				smallImage="D:\18_проектирование\98_PythonShell\Присоединить_спринклеры.png"
+				/>
+    <Command name="Сделать ветку спринклеров" 
+						src="D:\18_проектирование\98_PythonShell\Скрипты Грозный\33_Создать_ветку_спринклеров.txt" 
+						group="Соединение" 
+						largeImage="D:\18_проектирование\98_PythonShell\Присоединить_спринклеры.png"
+						smallImage="D:\18_проектирование\98_PythonShell\Присоединить_спринклеры.png"
+						/>
+  </Commands>
+  <SearchPaths>
+    <SearchPath name="C:\Users\Дмитрий\AppData\Roaming\RevitPythonShell/2021" />
+  </SearchPaths>
+  <Variables />
+  <InitScript src="C:\Users\Дмитрий\AppData\Roaming\RevitPythonShell/2021\init.py" />
+  <StartupScript src="C:\Users\Дмитрий\AppData\Roaming\RevitPythonShell/2021\startup.py" />
+</RevitPythonShell>

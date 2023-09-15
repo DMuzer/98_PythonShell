@@ -1,0 +1,238 @@
+from collections import defaultdict, deque
+from itertools import combinations
+def get_connectors(e, domain=Domain.DomainCableTrayConduit) :
+	if hasattr(e, "MEPModel") :
+		conns = e.MEPModel.ConnectorManager.Connectors 
+	else :
+		conns = e.ConnectorManager.Connectors		
+	conns = [c for c in conns if c.Domain == domain]
+	
+	return conns
+def get_conn_vert(l) :
+	res = []
+	for c in l :
+		res.append((c.Owner.Id.IntegerValue, c.Id))
+	return res
+	
+def get_connected_element(c) :
+	for c1 in c.AllRefs :
+		if c1.Owner.Id != c.Owner.Id : return c1.Owner
+def get_connected_element_connector(c) :
+	for c1 in c.AllRefs :
+		if c1.Owner.Id != c.Owner.Id : return c1
+		
+def create_graph(eid) :
+				
+	e = doc.GetElement(ElementId(eid))	
+	G = defaultdict(dict)
+	V = defaultdict(dict)
+	
+	to_visit = deque([e.Id.IntegerValue])
+	visited = set()
+	_i = 0
+	
+	tr = Transaction(doc)
+	
+	while len(to_visit) > 0 :	
+		_i += 1 
+		if _i > 3000 : break
+		
+		eid = to_visit.popleft()
+		e = doc.GetElement(ElementId(eid))
+		if eid in visited : continue
+		visited.add(e.Id.IntegerValue)
+		print(10*'*' + "{}".format(eid) + 50 * "*")
+		conns = get_connectors(e)
+		
+		for c in conns :
+			v = (c.Owner.Id.IntegerValue, c.Id)
+			
+			G[v]['pos'] = c.Origin
+			G[v]['connector'] = c
+
+				
+			e2 = get_connected_element_connector(c)
+			if not e2 : continue
+			#if (not e2.Owner.Id.IntegerValue in visited) and (not e2.Owner.Id.IntegerValue in to_visit) :
+			to_visit.append(e2.Owner.Id.IntegerValue)
+				
+			
+			u = (e2.Owner.Id.IntegerValue, e2.Id)
+			G[u]['pos'] = e2.Origin
+			G[u]['connector'] = e2
+			
+			if 'next' in G[u] :
+				G[u]['next'].add(v)
+			else :
+				G[u]['next'] = set([v])
+			if 'next' in G[u] :
+				G[u]['next'].add(v)
+			else :
+				G[u]['next'] = set([v])
+			V[(v,u)]
+			V[(u,v)]
+				
+		conns_v = get_conn_vert(conns)	
+			
+		for v, u in combinations(conns_v, 2) :
+			print((v,u))
+			if 'next' in G[v] :
+				G[v]['next'].add(u)
+			else :
+				G[v]['next'] = set([u])
+			if 'next' in G[u] :
+				G[u]['next'].add(v)
+			else :
+				G[u]['next'] = set([v])
+			V[(v,u)]
+			V[(u,v)]
+	
+	return G, V
+	
+def calc_len(G, E) :
+	for e in E :
+		E[e]['length'] = G[e[0]]['pos'].DistanceTo(G[e[1]]['pos'])
+		
+def calc_categories(G) :
+	for u in G :
+		e = doc.GetElement(ElementId(u[0]))
+		G[u]['type'] = e.Category.Name
+
+	
+def init_single_source(G, s) :
+	for v in G :
+		G[v]['d'] = float.PositiveInfinity
+		G[v]['prev'] = None
+	G[s]['d'] = 0
+	
+def relax(G, u, v, w) :
+	if G[v]['d'] > G[u]['d'] + w :
+		G[v]['d'] = G[u]['d'] + w
+	
+import time
+tt1 = time.time()
+
+eid = 2257583
+G,E = create_graph(eid)
+calc_len(G, E)
+calc_categories(G)
+
+
+tt2 = time.time()
+
+print("Построение графа за {} с".format(tt2-tt1))
+
+import heapq
+
+def bellmann(G, E) :
+	init_single_source(G,s)
+	res = True
+	for i in range(1, len(G)) :
+		for e in E :
+			w = E[e]['length']
+			relax(G, e[0], e[1], w)
+	res = True		
+	for e in E :
+		if G[e[0]]['d'] > G[e[1]]['d'] + E[e]['length'] :
+			return False
+	return True
+	
+def find_id_nodes(G, id) :
+	res = []
+	for u in G :
+		if u[0] == id :
+			res.append(u)
+	return res
+			
+
+s = find_id_nodes(G, eid)[0]
+print(s)
+tt1 = time.time()
+
+init_single_source(G,s)
+Q = []
+entry_finder = {}
+REMOVED = (9999999999, 999)
+
+def add_task(task, priority=0) :
+	if task in entry_finder :
+		remove_task(task)
+		
+	entry = [priority, task]
+	entry_finder[task] = entry
+	heapq.heappush(Q, entry)
+def remove_task(task) :
+	entry = entry_finder.pop(task)
+	entry[-1] = REMOVED
+	
+def pop_task() :
+	while Q :
+		priority, task = heapq.heappop(Q)
+		if task is not REMOVED :
+			del entry_finder[task]
+			return task
+		
+	raise KeyError("pop from an empty queue")
+	
+def dijkstra(G, s) :
+	global Q
+	Q = []
+	add_task(s, 0)
+	visited = set()
+	
+	while len(Q) > 0 :
+		u = pop_task()
+		#print(u)
+		visited.add(u)
+		
+		for v in G[u]['next'] :
+			#print(v)
+			w = E[(u,v)]['length']
+			relax(G, u, v, w)
+			d = G[v]['d']
+			if not v in visited :
+				add_task(v, d)
+
+
+types = defaultdict(list)
+for u in G :
+	types[G[u]['type']].append(u)
+devices = set(types['Устройства вызова и оповещения'])
+
+
+
+
+_i = 0
+while len(devices) > 0 :
+	_i += 1
+	if i > 20 : break
+	
+	devices.discard(s)
+	dijkstra(G, s)
+	res = sorted([i for in devices], key = lambda x : G[x]['d'])
+	s = res[1]
+	print(s)
+
+	
+
+tt2 = time.time()
+
+print("Работа с графом за {} с".format(tt2-tt1))
+
+types = defaultdict(list)
+for u in G :
+	types[G[u]['type']].append(u)
+	
+res = sorted(types['Устройства вызова и оповещения'], key = lambda x : G[x]['d'])
+for i in res :
+	print("{} : {}".format(i, G[i]['d']))
+
+	
+
+		
+
+		
+	
+
+
+

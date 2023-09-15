@@ -1,0 +1,55 @@
+def get_scheme_view(name = "Чертежный вид 1") :
+	fc = FilteredElementCollector(doc).OfClass(ViewDrafting).ToElements()
+	for v in fc :
+		if v.Name == name : return v
+		
+def get_annotation_symbol(fam_name, type_name) :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericAnnotation).WhereElementIsElementType().ToElements()
+	for e in fc :		
+		if Element.Name.GetValue(e) == type_name : 
+			print(Element.Name.GetValue(e))
+			if e.FamilyName == fam_name :
+				return e
+			
+		
+	return 
+
+	
+elem_id = uidoc.Selection.GetElementIds()[0]
+elem = doc.GetElement(elem_id)
+
+par = elem.LookupParameter("DM_Семейство УГО")
+par_mark = elem.LookupParameter("Марка")
+print(par)
+print(par.AsElementId())
+
+symbol_ = doc.GetElement(par.AsElementId())
+
+symbol = get_annotation_symbol(symbol_.FamilyName, symbol_.TypeName)
+
+anc_type = get_annotation_symbol("DM_схема_БЦК_марка", "DM_схема_БЦК_марка")
+
+
+
+view = get_scheme_view()
+trans = Transaction(doc)
+trans.Start("Create scheme")
+
+try :
+	new_ugo = doc.Create.NewFamilyInstance(XYZ.Zero, symbol, view)
+	new_anc = doc.Create.NewFamilyInstance(XYZ(0,0.3,0), anc_type, view)
+	
+	lparam = new_ugo.LookupParameter("DM_Связанный_элемент")
+	lparam.Set(new_ugo.Id.IntegerValue)
+	
+	lparam2 = new_anc.LookupParameter("ADSK_Код изделия")
+	lparam2.Set(str(elem.Id.IntegerValue))
+	lparam2_mark = new_anc.LookupParameter("ADSK_Марка")
+	
+	lparam2_mark.Set(par_mark.AsString())
+	
+	
+	trans.Commit()
+except :
+	trans.RollBack()
+	raise

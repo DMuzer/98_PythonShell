@@ -1,0 +1,186 @@
+"""
+***************************************************************
+*** Вычисление мест размещения отверстий для заданий
+*** в стенах - горизонтальные отверстия
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import time
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+r_view = mapp.views["3Д для поиска пересечений"]
+cls_flt = ElementClassFilter(Wall)
+ri = ReferenceIntersector(cls_flt, FindReferenceTarget.Face, r_view)
+ri.FindReferencesInRevitLinks=True
+
+pipes = sorted([e for e in FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()], key = lambda x : x.Id.IntegerValue)[:]
+#pipes = [doc.GetElement(ElementId(8542892))]
+
+import time
+
+tt1 = time.time()
+
+
+def get_type_id(family_name, type_name) :
+	fc = FilteredElementCollector(doc).WhereElementIsElementType().ToElements()
+	for e in fc :
+		if e.FamilyName == family_name :
+			if Element.Name.GetValue(e) == type_name :
+				return e.Id
+
+class dmReference(object) :
+	def __init__(self, ref_ctx, doc) :
+		self.doc = doc
+		self.ref_ctx = ref_ctx		
+		self.ref = ref_ctx.GetReference()
+		self.link_inst = doc.GetElement(self.ref)
+		self.LinkDocument = self.link_inst.GetLinkDocument()
+		self.element = self.LinkDocument.GetElement(self.ref.LinkedElementId)	
+	def _get_level(self) :
+		l1 = self.LinkDocument.GetElement(self.element.LevelId)
+		el = l1.Elevation
+		fc = FilteredElementCollector(self.doc).OfClass(Level).ToElements()
+		return min(fc, key = lambda x : abs(x.Elevation - el))		
+	Level = property(_get_level) 
+	
+	def _get_Proximity(self) :
+		return self.ref_ctx.Proximity
+		
+	Proximity = property(_get_Proximity)
+	
+family_name = "(Отв_Задание)_Стены_Прямоугольное"
+type_name = "(Отв_Задание)_Стены_Прямоугольное"
+
+def create_hole(p, type_id, level, w, l, h, d) :
+	a = math.atan2(d.Y, d.X) + math.pi /2
+	print(a)
+	print(p)
+	axis = Line.CreateUnbound(p, XYZ.BasisZ)
+	elev = level.Elevation
+	p0 = XYZ(p.X, p.Y, p.Z - elev)
+	
+	fs = doc.GetElement(type_id)
+	tr = Transaction(doc)
+	tr.Start("new hole")
+	
+	hole = doc.Create.NewFamilyInstance(p0, fs,level, nonstr )
+	hole.Location.Rotate(axis, a)
+	
+	hole.LookupParameter("Высота").Set(h)
+	hole.LookupParameter("Ширина").Set(w)
+	hole.LookupParameter("Глубина").Set(l)
+	tr.Commit()
+	return hole
+	
+	
+
+type_id = get_type_id(family_name, type_name)
+
+ws = mapp.worksets['05_Задание на отверстия_ВК']
+
+level = mapp.levels['Этаж 01']
+w, l, h = 150 * dut, 150 * dut, 700 * dut
+#hole = create_hole(p0, type_id, level, w, l, h) 
+#dm.set_workset(hole, ws)
+
+#raise
+
+
+
+for pipe in pipes :
+	loc_c = pipe.Location.Curve
+	max_prox = loc_c.Length
+	d = loc_c.Direction
+	p0 = loc_c.GetEndPoint(0)
+	refs = sorted([i for i in ri.Find(p0, d) if i.Proximity <= max_prox], key = lambda x : x.Proximity)
+	print(len(refs))
+	
+	refs_ = []
+	i = 0
+	while i < len(refs) :
+		#print(i, refs[i].Proximity)
+		if i == len(refs) - 1 :
+			refs_.append(refs[i])
+			#print("выходим")
+			break
+		r1, r2 = refs[i], refs[i+1]
+		print(r1.Proximity, r2.Proximity)
+		
+		if r2.Proximity - r1.Proximity < 0.01 :
+			#print("совпадает")
+			i += 2
+		else :
+			#print("не совпадает")
+			refs_.append(r1)
+			#print(r1.Proximity, r2.Proximity)
+			i += 1
+		
+	
+	refs = refs_
+	
+	w = math.ceil(pipe.Diameter / 100 / dut) * 100 * dut + 50 * dut 
+	h = w
+	
+	if len(refs) >= 2 :
+		
+		for i in range(len(refs) // 2) :
+			
+			r1, r2 = refs[2*i], refs[2*i +1]
+			l = r2.Proximity - r1.Proximity + 50 * dut
+			p1 = p0 + d * (r1.Proximity + r2.Proximity) * 0.5
+
+			hole = create_hole(p1, type_id, level, w, l, h, d) 
+			dm.set_workset(hole, ws)
+			
+			
+
+tt2 = time.time()
+print("Время выполнения {}".format(tt2-tt1))
+	
+

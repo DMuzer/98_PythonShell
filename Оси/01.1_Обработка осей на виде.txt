@@ -1,0 +1,447 @@
+dut = 0.0032808398950131233
+from contextlib import contextmanager
+import System, clr
+from collections import deque
+@contextmanager
+def tr(doc = None, a="транзакция скрипта") :
+	if not doc :
+		doc = __revit__.ActiveUIDocument.Document
+	tr = None
+	if not doc.IsModifiable :
+	    tr = Transaction(doc)
+	    tr.Start(a)
+	try :
+		yield tr
+	except Exception as ex:
+		print("Ошибка транзакции\n{}".format(ex))
+	finally :
+		if tr : tr.Commit()
+class dmGrid :
+	def __init__(self, grid, view) :
+		self.grid = grid
+		self.view = view #dmView
+		self._projectedLine = None
+	def __repr__(self) :
+		return f"ось {self.grid.Name}"
+	def __lt__(self, other) :
+		return False
+	def __gt__(self, other) :
+		return False
+	def _axisLine(self) :
+		return self.grid.GetCurvesInView(DatumExtentType.ViewSpecific, self.view.view)[0]
+		return
+	axisLine = property(_axisLine)
+	def _axisLineProjectedOnViewPlane(self) :
+		#Возвращает линию оси спроецированную на плоскость вида
+		if not self._projectedLine :
+			viewLine = self.axisLine
+			endP1, endP2 = viewLine.GetEndPoint(0), viewLine.GetEndPoint(1)
+			newEndP1UV, newEndP2UV = self.view.plane.Project(endP1)[0], self.view.plane.Project(endP2)[0]
+			newEndP1 = self.view.plane.Origin\
+						+ self.view.plane.XVec * newEndP1UV.U \
+						+ self.view.plane.YVec * newEndP1UV.V
+			newEndP2 = self.view.plane.Origin \
+						+ self.view.plane.XVec * newEndP2UV.U \
+						+ self.view.plane.YVec * newEndP2UV.V
+			self._projectedLine = Line.CreateBound(newEndP1, newEndP2)
+		return self._projectedLine
+	projectedLine = property(_axisLineProjectedOnViewPlane)
+	def _checkIsEnd0InsideView(self) :
+		#Проверяет, находится ли первый конец внутри вида
+		p0 = self.projectedLine.GetEndPoint(0)
+		if self.view.face.Project(p0) :
+			return True
+		else : return False
+		
+	IsEnd0InsideView = property(_checkIsEnd0InsideView)
+	
+	def _checkIsEnd1InsideView(self) :
+		#Проверяет, находится ли первый конец внутри вида
+		p1 = self.projectedLine.GetEndPoint(1)
+		if self.view.face.Project(p1) :
+			return True
+		else : return False
+		
+	IsEnd1InsideView = property(_checkIsEnd1InsideView)
+	
+	def showOrHideBubbles(self) :
+		#скрывает обозначения оси если конец попадает внутрь вида 
+		#показывает если обозначение за пределами вида
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Показываем/скрываем обозначения осей")
+			tr.Start()
+		if self.IsEnd0InsideView :
+			#надо скрыть 0 конец
+			self.grid.HideBubbleInView(DatumEnds.End0, self.view.view)
+		else :
+			self.grid.ShowBubbleInView(DatumEnds.End0, self.view.view)
+		if self.IsEnd1InsideView :
+			#надо скрыть 1 конец
+			self.grid.HideBubbleInView(DatumEnds.End1, self.view.view)
+		else :
+			self.grid.ShowBubbleInView(DatumEnds.End1, self.view.view)
+		if tr : tr.Commit()
+		
+	def alignGridEnd(self, line, distance = 30 * dut) :
+		#print(self)
+		#print(f"расстояние = {distance / dut} мм")
+		irArray = clr.Reference[IntersectionResultArray]()		
+		ir = line.line.Intersect(self.projectedLine, irArray)
+
+		intersectionPoint = irArray.Item[0].XYZPoint
+		axisLine = self.axisLine
+		axisUnboundLine = Line.CreateUnbound(axisLine.GetEndPoint(0), axisLine.Direction)
+		
+		if intersectionPoint.DistanceTo(self.projectedLine.GetEndPoint(0)) <\
+			intersectionPoint.DistanceTo(self.projectedLine.GetEndPoint(1)) :
+			_newEndPoint = intersectionPoint - self.projectedLine.Direction * distance
+			newEndPoint = axisUnboundLine.Project(_newEndPoint).XYZPoint
+			#print(f"старая точка 0 {axisLine.GetEndPoint(0)}")
+			#print(f"новая точка 0 {newEndPoint}")
+			newLine = Line.CreateBound(newEndPoint, axisLine.GetEndPoint(1))
+			
+			leader = self.grid.GetLeader(DatumEnds.End0, self.view.view)
+			
+			with tr(a="добавляем выноску") : 
+				self.grid.SetCurveInView(DatumExtentType.ViewSpecific, self.view.view, newLine)
+				if not leader :
+					leader = self.grid.AddLeader(DatumEnds.End0, self.view.view)
+	
+				#leader.End = leader.Anchor
+				leader.Elbow = leader.Anchor
+				self.grid.SetLeader(DatumEnds.End0, self.view.view, leader)
+			
+			
+		else :
+			_newEndPoint = intersectionPoint + self.projectedLine.Direction * distance
+			newEndPoint = axisUnboundLine.Project(_newEndPoint).XYZPoint
+			newLine = Line.CreateBound(axisLine.GetEndPoint(0), newEndPoint)
+			#print(f"старая точка 0 {axisLine.GetEndPoint(0)}")
+			#print(f"новая точка 0 {newEndPoint}")
+			leader = self.grid.GetLeader(DatumEnds.End1, self.view.view)
+			#leader = self.grid.GetLeader(DatumEnds.End0, self.view.view)
+		
+			with tr(a="добавляем выноску") :
+				self.grid.SetCurveInView(DatumExtentType.ViewSpecific, self.view.view, newLine)
+				if not leader :
+					leader = self.grid.AddLeader(DatumEnds.End1, self.view.view)
+	
+				#leader.End = leader.Anchor
+				leader.Elbow = leader.Anchor
+				self.grid.SetLeader(DatumEnds.End1, self.view.view, leader)
+
+				
+class dmGridSected(dmGrid) :
+	#Класс для представления осей, которые пересекает конкретная граница обрезки
+	def __init__(self, axe, view, cropLine) :
+		if isinstance(axe, Grid) :
+			self.axe = dmGrid.__init__(axe, view)
+		elif isinstance(axe, dmGrid) :
+			self.axe = dmGrid.__init__(self, axe.grid, view)
+		self.cropLine = cropLine
+		self.bubbleSize = 10 * dut * self.view.view.Scale
+		self.bubbleSize2 = self.bubbleSize/2
+		
+	def _getPosition (self) :
+		return self.projectedLine.Distance(self.cropLine.line.GetEndPoint(0))
+	position = property(_getPosition) 
+	def __lt__(self, other) :
+		return self.position < other.position
+	def __gt__(self, other) :
+		return self.position > other.position
+	def __eq__(self, other) :
+		return self.position == other.position
+	def __hash__(self, other) :
+		return self.grid.Id.IntegerValue
+	def _getLeftRange(self) :
+		return self.position - self.bubbleSize2
+	leftRange = property(_getLeftRange)
+	
+	def getDatumEnd(self) :	
+		if self.cropLine.line.Distance(self.projectedLine.GetEndPoint(0)) <\
+			self.cropLine.line.Distance(self.projectedLine.GetEndPoint(1)) :
+			return DatumEnds.End0
+		else : return DatumEnds.End1
+	datumEnd = property(getDatumEnd)
+	
+	def setLeaderPosition(self, elbowPosition, endPosition, offset) :
+		print(f"Устанавливаем выноску:\n{self}\n{elbowPosition} {endPosition}")
+		datumEnd = self.datumEnd
+		#print(f"datumEnd = {datumEnd}")
+		leader = self.grid.GetLeader(datumEnd, self.view.view)
+		z = self.axisLine.GetEndPoint(0).Z
+		
+		elbowPosition = XYZ(elbowPosition.X, elbowPosition.Y, z)
+		endPosition = XYZ(endPosition.X, endPosition.Y, z)
+		print(f"после корректировки положений :\n{self}\n{elbowPosition} {endPosition}")
+		
+		
+		if not leader :
+			print("Выноски у оси нет, надо создать")
+			with tr(a = "добавить выноску на ось") :
+				leader = self.grid.AddLeader(datumEnd, self.view.view)
+		
+	
+		print(f"Значения leader\nanchor - {leader.Anchor}\nend-{leader.End}\nelbow{leader.Elbow}")
+		
+		with tr(a = "задаем положение выноски на оси") :
+
+			leader.End = endPosition
+			leader.Elbow = elbowPosition
+			print(f"после корректировки:\nanchor - {leader.Anchor}\nend = {leader.End}\nelbow = {leader.Elbow}")
+			
+			self.grid.SetLeader(datumEnd, self.view.view, leader)
+			
+		#print(f"Закончили устанавливать выноску {self}")
+		
+		
+		
+	
+
+class dmCropLine :
+	def __init__(self, view, line) :
+		self.view = view #dmView
+		self.line = line
+		self.cropEnd0 = line.GetEndPoint(0)
+	def __repr__(self) :
+		return f"Линия границы {self.line.GetEndPoint(0), self.line.GetEndPoint(1)}"
+	def _getSectedGrid(self) :
+		for g in self.view.Grid :
+			if self.line.Intersect(g.projectedLine) == SetComparisonResult.Overlap : yield dmGridSected(g, self.view, self)
+	sectedGrid = property(_getSectedGrid)
+	
+	def drawLine(self) :
+		with tr(a = "Рисуем линию границы") :
+			doc.Create.NewDetailCurve(self.view.view, self.line)
+	def alignGridEnds(self, distance = 30 * dut) :
+		scaledDistance = distance * self.view.view.Scale
+		with tr(a = "выравнивание осей") :
+			for grid in self.sectedGrid :
+				grid.alignGridEnd(self, scaledDistance)
+
+	def alignGridBubbles(self) :
+		#Выстраивание обозначений осей так чтобы они не перекрывались
+		startPnt = self.line.GetEndPoint(0) 
+		bubleSize = 10 * dut * self.view.view.Scale
+		grids = deque(sorted([grid for grid in self.sectedGrid]))
+		groups = []
+		
+		for grid in grids :
+			print(grid, grid.position)
+		
+		
+		i = 0
+		prevAxe = grids.popleft()
+		group = dmGridGroup()
+		group.addGrid(prevAxe)
+		
+		while grids :
+			i += 1 
+			if i > 1000 : raise
+			
+			axe = grids.popleft()
+			print(20*"-")
+			#print(prevAxe)
+			print(f"Взяли ось {axe}")
+			#print(group < axe)
+			
+			if group < axe :
+				#Ось пересекает группу, значит ось добавляем в группу
+				print("Ось пересекает, добавляем...")
+				group.addGrid(axe)
+				continue
+			else :
+				#Ось не пересекает группу, значит, надо проверить, не пересекает ли группа предыдущую группу помещаем в очередь
+				print("Ось не пересекается с активной группой")
+				if len(groups) > 0 and groups[-1] < group :
+					print("группы пересекаются, надо объединить")
+					prevGroup = groups.pop()
+					prevGroup.addGroup(group)
+					group = prevGroup
+					print(f"Проверяем пересекается ли получившаяся группа с осью {axe}")
+					if group < axe :
+						print("Ось пересекается, надо добавить ее в группу")
+						group.addGrid(axe)
+					else :
+						print("Ось не пересекается, текущую группу помещаем в очередь, создаем новую группу")
+						groups.append(group)
+						group = dmGridGroup()
+						group.addGrid(axe)
+					
+				elif len(groups) > 0:
+					print("В списке есть обработанные группы, надо проверить, не пересекает ли текущая группа последнюю из групп")
+					print("группы не пересекаются, помещаем в групу в очередь, создаем новую группу   в которую помещаем ось и двигаемся дальше")
+					groups.append(group)	
+					group= dmGridGroup()
+					group.addGrid(axe)
+					
+				else :
+					print("это первая группа, помещаем ее в очередь и создаем нову группу в которую помещаем ось")
+					groups.append(group)	
+					group= dmGridGroup()
+					group.addGrid(axe)
+				
+				
+		
+		groups.append(group)
+		print(f"Создано {len(groups)} групп")
+		#return
+		self.groups = groups
+		for num, group in enumerate(groups) :
+			print(20*"-")
+			print(f"группа {num}")
+			print(f"{group.center/dut}")
+			for axis in group.grids :
+				print(axis)
+				
+		#return
+				
+		
+		print(80 * "|")
+		print(f"Начинаем создание выносок")
+		
+		
+		
+		#Точка отсчета для выносок
+		
+		leaderOffsetDirection = -self.line.Direction.CrossProduct(self.view.view.ViewDirection).Normalize()
+		print(f"leaderOffsetDirection = {leaderOffsetDirection}")
+		leaderDirection = self.line.Direction
+		leaderElbowOffset = 10 * dut * self.view.view.Scale
+		leaderEndStartPoint = self.line.GetEndPoint(0) + leaderOffsetDirection * leaderElbowOffset
+		leaderElbowStartPoint = self.line.GetEndPoint(0) + leaderOffsetDirection * leaderElbowOffset * 2
+		
+		endOffsetVector = leaderOffsetDirection * leaderElbowOffset
+		
+		print(f"self.line.GetEndPoint(0) = {self.line.GetEndPoint(0)}")
+		print(f"leaderElbowOffset = {leaderElbowOffset}")
+		print(f"leaderElbowStartPoint = {leaderElbowStartPoint}")
+		print(f"leaderEndStartPoint = {leaderEndStartPoint}")
+		
+		
+		self.groups = groups
+		
+		
+		for num, group in enumerate(groups[1:]) :
+			
+			print(f" {num}" +  20 * "*"  )
+			for pos, grid in group.calcBubblePositions() :
+				print(grid)
+				elbowPos = leaderElbowStartPoint + leaderDirection * pos 
+				endPos = leaderEndStartPoint + leaderDirection * grid.position
+				print(f"pos = {pos}\ngrid.position = {grid.position}\nelbowPos = {elbowPos}\nendPos = {endPos}")
+				grid.setLeaderPosition(elbowPos, endPos, 0)
+				#print(pos, grid, grid.position)
+				
+			break
+				
+			
+			
+			
+			
+		
+		
+class dmGridGroup :
+	#Класс для реализации группирования осей и вычисления расположения обозначений
+	def __init__(self, bubbleSize = 8 * dut * 200) :
+		self.bubbleSize = bubbleSize	
+		self.bubbleSize2 = bubbleSize/2
+		self.grids = []
+		self.centers = []
+		self.leftRange = 0
+		self.rightRange = 0
+		self.center = 0
+	def addGrid(self, grid) :
+		self.grids.append(grid)
+		self.centers.append(grid.position)
+		self.center = sum(self.centers) / len(self.centers)
+		self.leftRange = self.center - self.bubbleSize * len(self.centers) / 2
+		self.rightRange = self.center + self.bubbleSize * len(self.centers) / 2
+		
+	def checkIfIntersect(self, other) :
+		if isinstance(other, dmGridSected) or isinstance(other, dmGridGroup) :
+			return self.rightRange >= other.leftRange
+		return False
+		
+	def __lt__(self, other) :
+		if isinstance(other, dmGridGroup) or isinstance(other, dmGridSected) :	
+			return self.rightRange > other.leftRange
+			
+	def calcBubblePositions(self) :
+		for num, grid in enumerate(self.grids) :
+			yield (self.leftRange + self.bubbleSize * num + self.bubbleSize2, grid)
+			
+	def addGroup(self, other) :
+		for grid in other.grids :
+			self.addGrid(grid)
+			
+		
+		
+			
+		
+class dmView:
+	def __init__(self, view) :
+		self.view = view
+		self._face = None
+		self._getAreaAsFace()
+		self.plane = Plane.CreateByNormalAndOrigin(self.view.ViewDirection, self._face.Origin)
+	def __repr__(self) :
+		return f"dmView {self.view.Name} - для работы с осями"
+	def _getVisibleGrid(self) :
+		fc = FilteredElementCollector(doc, self.view.Id).OfClass(Grid).ToElements()
+		#print(f"Количество видимых осей {len(fc)}")
+		return [dmGrid(grid, self) for grid in fc]
+	Grid = property(_getVisibleGrid)
+	
+	def _getAreaAsFace(self) :
+		if not self._face :
+			cropManager = self.view.GetCropRegionShapeManager()
+			cropShape = cropManager.GetCropShape()
+			solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+			solid = GeometryCreationUtilities\
+						.CreateExtrusionGeometry(cropShape, 
+													self.view.ViewDirection, 
+													1, solid_opt)									
+			for _face in solid.Faces :
+				if _face.FaceNormal.DotProduct(self.view.ViewDirection) == -1 :
+					self._face = _face
+		return self._face
+	face = property(_getAreaAsFace)
+	
+	def showHideGridBubbles(self) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Показываем/скрываем обозначения осей")
+			tr.Start()
+		for g in self.Grid :
+			g.showOrHideBubbles()
+		if tr : tr.Commit()
+		
+	def _getBorderLines(self) :
+		cropManager = self.view.GetCropRegionShapeManager()
+		cropShapes = cropManager.GetCropShape()
+		for cropShape in cropShapes :
+			for line in cropShape :
+				yield dmCropLine(self, line)
+	borderLines = property(_getBorderLines)
+	
+	def alignGridEnds(self, distance = 30 * dut) :
+		for bl in self.borderLines :
+			bl.alignGridEnds(distance)
+		
+		
+import random	
+
+av = dmView(uidoc.ActiveView)
+#print(av.Grid)
+f = av._getAreaAsFace()
+#print(av.Grid[0])
+g = av.Grid[0]
+g2 = av.Grid[1]
+
+bl = next(av.borderLines)
+bl.alignGridEnds(random.randint(20, 60)*dut)
+bl.alignGridBubbles()
+
+#av.alignGridEnds(random.randint(20, 60)*dut)

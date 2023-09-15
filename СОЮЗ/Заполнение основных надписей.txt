@@ -1,0 +1,206 @@
+"""
+***************************************************************
+*** Заполнение всех основных надписей для проекта СОЮЗ
+*** значения берутся из основной надписи с листа с названием
+*** "Образец заполнения"
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Заполнение основных надписей.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+#title_ref = uidoc.Selection.PickObject(OT.Element)
+#title = doc.GetElement(title_ref)
+
+params_names = [
+	"Лист_Разраб",
+	"Лист_Фамилия 2",
+	"Лист_Фамилия 3",
+	"Лист_Фамилия 4",
+	"Лист_Фамилия 5",
+	"Лист_Фамилия 6",
+	"Лист_Н.Контр",
+	"Эф Ди Эй"
+]
+
+
+sheet_params_names = [
+	"Лист_Дата 1",
+	"Лист_Дата 2",
+	"Лист_Дата 3",
+	"Лист_Дата 4",
+	"Лист_Дата 5",
+	"Лист_Дата 6",
+	"Лист_Должность 2",
+	"Лист_Должность 3",
+	"Лист_Должность 4",
+	"Лист_Должность 6",
+	"Лист_Раздел_Часть_Наименование"
+
+]
+
+
+titles_els = FilteredElementCollector(doc).OfCategory(bic.OST_TitleBlocks).WhereElementIsNotElementType().ToElements()
+title = {}
+print("Количество листов {} ".format(len(titles_els)))
+
+for  t in titles_els :
+	sh0 = doc.GetElement(t.OwnerViewId)
+	
+	name = t.LookupParameter("Имя листа").AsString()
+	name = sh0.Name
+	print(name)
+	print(t.Id)
+	if name == "Образец заполнения ПТ17" :
+		ex_title = t
+		ex_sheet = doc.GetElement(t.OwnerViewId)
+
+titles_els.Remove(ex_title)
+
+
+params_values = {}
+	
+for pn in params_names :
+	p = ex_title.LookupParameter(pn)
+	if p :
+		print(p.Definition.ParameterType)
+		v = p.AsElementId()
+		vn = doc.GetElement(v)
+		#print(vn.Name)
+		#print(p.AsElementId())
+	if p.StorageType == StorageType.String :
+		params_values[pn] = p.AsString()
+	
+	elif p.StorageType == StorageType.ElementId :
+		params_values[pn] = p.AsElementId()
+		
+	elif p.StorageType == StorageType.Integer :
+		params_values[pn] = p.AsInteger()
+	elif p.StorageType == StorageType.Double :
+		params_values[pn] = p.AsDouble()
+		
+#Берем образцы для заполнения параметров листа	
+print(20 * "x")
+sheet_params_values = {}
+for pn in sheet_params_names :
+	print(10* " ", 10 *"-")
+	p = ex_sheet.LookupParameter(pn)
+	
+
+	if p.StorageType == StorageType.String :
+		sheet_params_values[pn] = p.AsString()
+	
+	elif p.StorageType == StorageType.ElementId :
+		sheet_params_values[pn] = p.AsElementId()
+		
+	elif p.StorageType == StorageType.Integer :
+		sheet_params_values[pn] = p.AsInteger()
+	elif p.StorageType == StorageType.Double :
+		sheet_params_values[pn] = p.AsDouble()
+		
+
+print("Устанавливаем")	
+tr = Transaction(doc)
+tr.Start("Установка значений листов")
+
+#Устанавливаем значения для надписей
+for t1 in titles_els :
+	
+	print(20*"-")
+	sh1 = doc.GetElement(t1.OwnerViewId)
+	print(sh1.Name)
+	print(sh1.SheetNumber)
+	print(t1.Name)
+	
+	if sh1.LookupParameter('Лист_Раздел_Часть').AsString() != "ПТ17.СО" :
+		print("не ПТ17")
+		continue
+	
+	if sh1.SheetNumber.StartsWith('o') :
+		print("пропускаем о")
+		continue
+		
+	if not t1.Name.Contains("Ф3") :
+		print("Пропускаем не Ф3")
+		continue
+	
+	pnum = sh1.SheetNumber.Split(".")[-1]
+	pnum_t = sh1.LookupParameter("Лист_Номер_В разделе")
+	
+	if pnum_t :
+		pnum_t.Set(pnum)
+	
+	
+	
+	
+	
+	for pname in params_values :
+		print(pname)
+		p1 = t1.LookupParameter(pname)
+		if p1  :
+			p1.Set(params_values[pname])
+			
+	#print(5*" " + 10 * "*")
+	#print("устанавливаем параметры листа")
+	
+			
+	#Устанавливаем значения для листа
+	for pname in sheet_params_values :
+		
+		p1 = sh1.LookupParameter(pname)
+		if p1 and sheet_params_values[pname]:
+			p1.Set(sheet_params_values[pname])
+		else :
+			print("Не поставлено")
+			
+		
+		#print(pname)
+	
+			
+tr.Commit()
+	

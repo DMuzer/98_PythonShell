@@ -1,0 +1,22 @@
+v1 = uidoc.ActiveView
+
+dep_views = [doc.GetElement(vid) for vid in v1.GetDependentViewIds()]
+
+tr = Transaction(doc)
+tr.Start("new views")
+
+v2 = doc.GetElement(v1.Duplicate(ViewDuplicateOption.Duplicate))
+new_name = v1.Name.Replace("ВПВ", "ПТ")
+v2.Name = new_name
+
+for v3 in dep_views :
+	v4 = doc.GetElement(v2.Duplicate(ViewDuplicateOption.AsDependent))
+	new_name = v3.Name.Replace("ВПВ", "ПТ")
+	v4.Name = new_name
+	cp = v3.CropBox
+	v4.CropBox = cp
+	v4.CropBoxActive = True
+	v4.CropBoxVisible = True
+	
+
+tr.Commit()

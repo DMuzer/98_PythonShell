@@ -1,0 +1,34 @@
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.UI as UI
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+id = 1056885
+pipe = doc.GetElement(ElementId(id))
+
+conn = [c_ for c_ in pipe.ConnectorManager.Connectors if c_.ConnectorType == ConnectorType.End]
+
+p_ends = [pipe.Location.Curve.GetEndPoint(0), pipe.Location.Curve.GetEndPoint(1)]
+
+conn_ = sorted(conn, key = lambda x : p_ends[0].DistanceTo(x.Origin))
+
+connected_to = []
+
+print(conn_[0].Owner.Id)
+for c_ in conn_[0].AllRefs :
+	connected.append([c_ for c_ in conn_[0].AllRefs if c_.Owner.Id != conn_[0].Owner.Id][0])
+
+connected =  [c_.IsConnected for c_ in conn_]
+print(connected)
+
+for c,c_, p_ in zip(conn_, connected, p_ends) :
+	if c_ :
+		
+		
+
+	
+
+
+
+

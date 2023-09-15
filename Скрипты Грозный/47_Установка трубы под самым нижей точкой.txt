@@ -1,0 +1,132 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+mapp = dm.dmApp(doc)
+view = mapp.views['DM_ОТМЕТКИ']
+
+from time import time as ftime
+
+m_pipe = doc.GetElement(ElementId(2503528))
+m_pipe_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+m_pipe = doc.GetElement(m_pipe_id)
+
+
+
+
+t1 = ftime()
+lc = m_pipe.Location.Curve
+p1 = lc.GetEndPoint(0)
+d = lc.Direction
+l = lc.Length
+psize = m_pipe.Diameter
+
+step = psize * 3
+num_steps = int(math.ceil(l /step))
+step = l / num_steps
+print("Количество точек {}".format(num_steps+1))
+z = []
+
+lines = []
+
+for i in range(num_steps+1) :
+	vp = p1 + (i * step * d)
+	mcf = ElementMulticategoryFilter(System.Array[BuiltInCategory]([bic.OST_PipeCurves, bic.OST_PipeFitting																	]), True)
+	flt = FilteredElementCollector(doc).WherePasses(mcf)
+	objs = flt.WhereElementIsNotElementType().ToElements()
+	fref_targ = FindReferenceTarget.Element
+	ref_int = ReferenceIntersector(mcf, fref_targ, view)
+	ref_int.FindReferencesInRevitLinks = True
+	
+	p2 = ref_int.FindNearest(vp, XYZ.BasisZ)
+	if p2 :
+		z.append(p2)
+		try :
+			lines.append(Line.CreateBound(vp, p2.GetReference().GlobalPoint))
+		except :
+			pass
+		
+t2 = ftime()
+
+tt = t2-t1
+print("Время для {}".format(tt))
+
+z1 = z
+
+z = [p.GetReference().GlobalPoint.Z for p in z1]
+pp = [p.GetReference().GlobalPoint for p in z1]
+
+p_prev = pp[0]
+s_start = pp[0]
+segments = []
+
+for num, p_ in enumerate(pp[1:]) :
+	print(50*"*")
+	print("Обрабатыванием точку {} высота {} высота предыдущей точки {}".format(num+2, p_.Z/dut, p_prev.Z/dut))
+	if abs(p_.Z - p_prev.Z) > 5 * psize :
+		changed = True
+		print("Переход")
+		if p_.Z > p_prev.Z :
+			print("Сверху вниз")
+			s_end = XYZ(p_.X, p_.Y, p_prev.Z)
+			segments.append((s_start, s_end))
+			s_start = p_
+		else :
+			print("Снизу вверх")
+			s_end = p_prev
+			segments.append((s_start, s_end))
+			s_start = XYZ(p_prev.X, p_prev.Y, p_.Z)
+	else :
+		changed = False
+		print("Высота не изменилась, двигаемся дальше")		
+	p_prev = p_
+	
+if not changed :
+	segments.append((s_start, p_))
+	
+lines = [Line.CreateBound(p[0], p[1]) for p in segments]
+lines_a = System.Array[GeometryObject](lines)
+
+with dm.trans(doc) :
+	ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+	ds.SetShape(lines_a)
+
+
+		
+
+
+

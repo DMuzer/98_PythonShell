@@ -1,0 +1,18 @@
+"""
+Скрыть элемент на прочих видах
+"D:\18_проектирование\98_PythonShell\Паркинг АСПИ\14_Скрыть элементы на других зависимых.txt"
+
+"""
+elementsToHideId = uidoc.Selection.GetElementIds()
+primaryViewId = uidoc.ActiveView.Id
+
+
+otherViewIds = FilteredElementCollector(doc).OfClass(ViewPlan).ToElementIds()
+tr = Transaction(doc, "Hide element on all other plans")
+tr.Start()
+
+for viewId in otherViewIds :
+	if viewId == uidoc.ActiveView.Id : continue
+	view = doc.GetElement(viewId)
+	view.HideElements(elementsToHideId)
+tr.Commit()

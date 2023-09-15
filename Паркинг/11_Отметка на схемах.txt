@@ -1,0 +1,66 @@
+import Autodesk.Revit.UI as UI
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+sdt = {Element.Name.GetValue(e) : e for e in FilteredElementCollector(doc).OfClass(SpotDimensionType).ToElements()}
+#dt = sdt['ADSK_Схема_Проектная_Отметка снизу_Вниз']
+#dt = sdt['ADSK_Схема_Проектная_Отметка сверху_Вверх']
+
+
+def new_elevation(pipe, p0) :
+
+	av = uidoc.ActiveView
+	
+	lc = pipe.Location.Curve
+	d = lc.Direction
+	
+	if lc.GetEndPoint(0).DistanceTo(p0) < lc.GetEndPoint(1).DistanceTo(p0) :
+		p1 = lc.GetEndPoint(0)
+		d = -lc.Direction
+	else :
+		p1 = lc.GetEndPoint(1)
+		d = lc.Direction
+		
+		
+	dx = d.DotProduct(av.RightDirection)
+	dy = d.DotProduct(av.UpDirection)
+	b = 1
+	if dx > 0 and dy < 0 :
+		dt = sdt['Фасад (вправо-низ (с округлением 5мм)) относительный']
+		b = -1
+		
+	elif dx > 0 and dy > 0 :
+		dt = sdt['Фасад (вверх (с округлением 5мм)) относительный']
+		b = -1
+	elif dx < 0 and dy < 0 :
+		dt = sdt['Фасад (влево-низ (с округлением 5мм)) относительный']
+		b = 1
+	elif dx < 0 and dy > 0 :
+		dt = sdt['Фасад (вверх (с округлением 5мм)) относительный']
+		b = 1
+		
+	
+	p2 = p1 + 2 * dut * d * av.Scale
+	
+	av = uidoc.ActiveView
+	opt = Options()
+	opt.ComputeReferences = True
+	opt.View = av
+	for g in pipe.Geometry[opt] :
+		if type(g) == Line :
+			l = g
+			break
+	
+	
+		
+	tr = Transaction(doc)
+	tr.Start('add level')
+	
+	new_dim = doc.Create.NewSpotElevation(av, l.Reference, p1, p2, p2 + 0.5 * av.RightDirection * b, p0, True)
+	new_dim.ChangeTypeId(dt.Id)
+	
+	tr.Commit()
+	
+while True :
+	e_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+	p0 = e_ref.GlobalPoint
+	pipe = doc.GetElement(e_ref)
+	new_elevation(pipe, p0)

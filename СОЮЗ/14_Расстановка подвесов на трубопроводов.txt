@@ -1,0 +1,130 @@
+"""
+***************************************************************
+*** Установка грушевидных подвесов на трубопроводы
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\14_Расстановка подвесов на трубопроводов.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import System
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+OT = UI.Selection.ObjectType
+
+fc = FilteredElementCollector(doc).OfCategory(bic.OST_PipeFitting).WhereElementIsElementType().ToElements()
+
+for et in fc :
+	if Element.Name.GetValue(et) == "DM_Комплект крепления грушевидный R20" :
+		print("Нашел")
+		h_type = et
+		break
+		
+def set_hangers(pipe) :
+
+	if type(pipe) != Plumbing.Pipe :
+		return
+		
+	if abs(pipe.Location.Curve.Direction.Z) > 0.9 : return
+		
+	max_one = 800 * dut
+	
+	plen = pipe.Location.Curve.Length 
+	if plen < max_one :
+		num_supports = 1
+	else :
+		num_supports = int(math.ceil(plen / step) + 1)
+		
+	
+	
+	fstep = plen / num_supports
+	
+	p0 = pipe.Location.Curve.GetEndPoint(0)
+	d0 = pipe.Location.Curve.Direction
+	level = doc.GetElement(pipe.LevelId)
+	
+	
+	
+	msyst = pipe.MEPSystem
+	
+	angl = math.atan2(d0.Y, d0.X) #+ math.pi / 2
+	
+	
+	for i in range(num_supports) :
+		pos =  p0 + (0.5 + i) * fstep * d0
+		
+		pos = pos - XYZ.BasisZ * pipe.ReferenceLevel.Elevation
+		
+		print(pos)
+		
+		tr.Start("Adding supports")
+		
+		support = doc.Create.NewFamilyInstance(pos, h_type, pipe.ReferenceLevel, nonstr)
+		
+		o_sect_name = pipe.LookupParameter("О_Здание_Секция").AsString()
+		support.LookupParameter("О_Здание_Секция").Set(o_sect_name)
+		support.LookupParameter("DN").Set(pipe.Diameter)
+		
+		support.LookupParameter("Расстояние_до_перекрытия").Set(1000*dut)
+		tr.Commit()
+		
+		rline = Line.CreateBound(pos, pos + XYZ.BasisZ)
+		
+		tr.Start("Adding supports to system")
+		support.Location.Rotate(rline, angl)
+		msyst.Add(support.MEPModel.ConnectorManager.Connectors)
+		tr.Commit()
+		
+
+		
+		
+step = 2000 * dut
+#min_len = 300 * dut
+max_one = 800 * dut
+tr = Transaction(doc)
+
+
+while True :
+	try :
+		pipe_ids = uidoc.Selection.PickObjects(OT.Element)
+	except :
+		break
+		
+	for pipe_id in pipe_ids :
+		pipe = doc.GetElement(pipe_id)
+		set_hangers(pipe)
+	
+
+		
+		
+		

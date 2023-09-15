@@ -1,0 +1,121 @@
+"""
+***************************************************************
+*** РАЗМЕЩЕНИЕ СПРИНКЛЕРОВ
+*** 
+***************************************************************
+* 
+*
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+mapp = dm.dmApp(doc)
+view = mapp.views[view_name]
+
+from time import time as ftime
+ot = UI.Selection.ObjectType
+
+fc = FilteredElementCollector(doc).OfCategory(bic.OST_Sprinklers).WhereElementIsNotElementType().ToElements()
+
+#fc_id = uidoc.Selection.PickObjects(ot.Element)
+#fc = [doc.GetElement(e_id) for e_id in fc_id]
+
+
+def get_con(spr) :
+	conns = list(spr.MEPModel.ConnectorManager.Connectors)
+	for c in conns :
+		#print(c.CoordinateSystem.BasisZ)
+		if c.CoordinateSystem.BasisZ.Z == - 1 :
+			return c
+			
+print(len(fc))
+
+sprs = []
+for spr in fc :
+	con = get_con(spr)
+	
+	if not con.IsConnected :
+		sprs.append(spr)
+	
+print(len(sprs))
+if True :
+
+	v3d = mapp.views['DM_ОТМЕТКИ']
+	cl_flt = ElementClassFilter(Floor)
+	rt = FindReferenceTarget
+	ri = ReferenceIntersector(cl_flt, rt.All, v3d)
+	ri.FindReferencesInRevitLinks = True
+
+	tr = Transaction(doc)
+	tr.Start("add sprinklers")
+	
+	for spr in sprs :
+	
+		p0 = spr.Location.Point
+		
+		p0_ = spr.Location.Point - 1500 * dut * XYZ.BasisZ
+		
+		p2_ref = ri.FindNearest(p0_, XYZ.BasisZ)
+		if not p2_ref : continue
+		
+		p2 = p2_ref.GetReference().GlobalPoint - 200 * dut * XYZ.BasisZ
+		
+		dp =  p2-p0
+		spr.Location.Move(dp)
+		#spr2 = ElementTransformUtils.CopyElement(doc, spr1_id, dp) 
+		
+	tr.Commit()
+
+
+
+
+
+
+
+
+
+

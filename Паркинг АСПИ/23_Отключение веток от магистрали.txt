@@ -1,0 +1,45 @@
+import System
+def getNext(element, visited) :
+	if hasattr(element, "MEPModel") :
+		connectors = element.MEPModel.ConnectorManager.Connectors 
+	else :
+		connectors = element.ConnectorManager.Connectors
+	for connector in connectors :
+		if connector.ConnectorType & ConnectorType.Physical :
+			for connector2 in connector.AllRefs :
+				if connector2.ConnectorType & ConnectorType.Physical :
+					if not connector2.Owner.Id in visited :
+						return connector2.Owner
+def getFitting(connector) :
+	pipe = connector.Owner
+	for c2 in connector.AllRefs :
+		if c2.ConnectorType & ConnectorType.Physical :
+			if c2.Owner.Id != pipe.Id :
+				return c2.Owner
+			
+pipeRefs = uidoc.Selection.GetElementIds()
+for pipeRef in pipeRefs :
+	pipe = doc.GetElement(pipeRef)
+	
+	tr = Transaction(doc)
+	tr.Start("delete stands")
+	
+	for connector in pipe.ConnectorManager.Connectors :
+		if connector.ConnectorType != ConnectorType.Curve : continue
+		takeOff = getFitting(connector)
+		visited = set([pipe.Id, takeOff.Id])
+		toDelete = [takeOff.Id]
+		e1 = getNext(takeOff, visited)
+		e2, e3 = None, None 
+		if e1 : 
+			toDelete.append(e1.Id)
+			visited.add(e1.Id)
+			e2 = getNext(e1, visited)
+		if e2 :
+			toDelete.append(e2.Id)
+			visited.add(e2.Id)
+		doc.Delete(System.Array[ElementId](toDelete))
+		
+	tr.Commit()
+	
+		

@@ -1,0 +1,126 @@
+"""
+Разрез поперек трубы
+"""
+print("Разрез поперек трубы")
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+def get_sect_type() :
+	def test(vt) :
+		if not re.match(".*разрез.*", Element.Name.GetValue(vt), re.I) : return False
+		if not re.match(".*рабочий.*", Element.Name.GetValue(vt), re.I) : return False
+		if not re.match(".*вдоль.*", Element.Name.GetValue(vt), re.I) : return False
+		return True
+	fc = FilteredElementCollector(doc).OfClass(ViewFamilyType).ToElements()
+	res = [vt for vt in fc if test(vt)]
+	if len(res) > 0 :
+		return res[0]
+	
+	else :
+		res = [vt for vt in fc]
+		return res[-1]
+def en(e) :
+	return Element.Name.GetValue(e)
+	
+def get_level(p) :
+	fc = FilteredElementCollector(doc).OfClass(Level).ToElements()
+	res = max([l for l in fc if p.Z >= l.Elevation], key = lambda x : x.Elevation)
+	return res
+def get_level_above(p) :
+	fc = FilteredElementCollector(doc).OfClass(Level).ToElements()
+	res = min([l for l in fc if p.Z < l.Elevation], key = lambda x : x.Elevation)
+	return res
+
+uidoc = uidoc.Application.ActiveUIDocument
+doc =  uidoc.Document
+pipeid = uidoc.Selection.GetElementIds()[0]
+pipe = doc.GetElement(pipeid)
+
+ppnt = uidoc.Selection.PickPoint()
+
+vt = get_sect_type()
+
+print(en(vt))
+
+
+
+
+
+lc = pipe.Location.Curve
+p1 = lc.GetEndPoint(0)
+p2 = lc.GetEndPoint(1)
+_dv = lc.Direction
+dv = XYZ(_dv.X, _dv.Y, 0).Normalize()
+
+rdirection = 0
+rtr = Transform.CreateRotation(XYZ.BasisZ, -math.pi/2)
+
+if not rdirection :
+	dv = -dv
+		
+dvn = rtr.OfVector(dv)
+w =  5000 * dut
+
+
+p = (p1 + p2) * 0.5
+
+l = get_level(p)
+la = get_level_above(p)
+
+bottom = l.Elevation - 1000 * dut
+top = la.Elevation + 1000 * dut
+h = top - bottom
+
+pntMin = XYZ(-w/2, -h/2, -1)
+pntMax = XYZ(w/2, h/2, 1)
+
+origin = XYZ(p.X, p.Y, (top + bottom)/2)
+
+view_transform = Transform.Identity
+view_transform.BasisZ = dv.Normalize()
+view_transform.BasisX = -dvn.Normalize()
+view_transform.BasisY = XYZ.BasisZ
+view_transform.Origin = ppnt
+
+bb = BoundingBoxXYZ()
+bb.Min = pntMin
+bb.Max = pntMax
+bb.Enabled = True
+print(1)
+bb.Transform = view_transform
+print(2)
+
+tr = Transaction(doc)
+tr.Start("create view")
+
+new_view = ViewSection.CreateSection(doc, vt.Id, bb)
+name = "Разрез по трубе id{}".format(pipe.Id)
+name1 = name 
+nn = 0 
+while True :
+	try :
+		new_view.Name = name1
+		break
+	except :
+		nn += 1
+		name1 = "{} {}".format(name, nn)
+		if nn > 500 : break
+
+tr.Commit()
+
+uidoc.ActiveView = new_view
+
+for uiv in uidoc.GetOpenUIViews() :
+	if uiv.ViewId == new_view.Id :
+		uiv1 = uiv
+		print("Центрируем")
+		print(uiv.ViewId)
+		uiv.ZoomToFit()
+
+
+print("завершено  Разрез поперек трубы")
+
+	

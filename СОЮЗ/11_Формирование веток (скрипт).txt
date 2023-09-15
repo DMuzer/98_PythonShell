@@ -1,0 +1,326 @@
+dut = 0.0032808398950131233
+
+margin_rel = False
+margin = 200 * dut
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+OT = UI.Selection.ObjectType
+
+
+mapp = dm.dmApp(doc)
+
+
+import time
+def get_sprinklers() :
+	#fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Sprinklers)
+	#fc = fc.WhereElementIsNotElementType().ToElements()
+	
+	fc_ids = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+	fc = [doc.GetElement(eid) for eid in fc_ids]
+	#fc = []
+	
+	
+	resid = []
+	for e in fc :
+		if e.Category.Name != "Спринклеры" :
+			continue
+		found = False
+		for c in e.MEPModel.ConnectorManager.Connectors :
+			if c.IsConnected :
+				found = True
+			
+		
+		if found : continue
+		resid.append(e)
+		
+		"""
+	resid = [7182757,
+	7182758,
+	7182759,
+	7182767,
+	
+	
+	7182768,
+	7182769,
+	7182780,
+
+	7182781,
+	7182782,
+	7182790,
+	7182791,
+	7182792,
+	7182800,
+	7182801,
+	7182802,
+	7182810,
+	7182811,
+	7182812,
+	7182820,
+	7182821,
+	7182822]
+	"""
+	#res = [doc.GetElement(eid) for eid in resid]
+	
+			
+	return resid
+	
+	
+def get_pipes() :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_PipeCurves).WhereElementIsNotElementType().ToElements()
+	res = []
+	for p in fc :
+		if p.Diameter < 0.48 :
+			continue
+		res.append(p)
+		
+	pipe = [uidoc.Selection.PickObject(OT.Element)]
+	res = [doc.GetElement(ref) for ref in pipe]
+	#res = [doc.GetElement(ElementId(7182846))]
+	return res
+	
+dut = 0.0032808398950131233	
+
+
+t1 = time.time()
+
+def split_sprinklers(sprs, pipes) :
+
+	# Создаем массив с линиями труб
+	
+	pipe_lines = [(p.Location.Curve, p) for p in pipes]
+	
+	# Для каждого спринклера вычисляем ближайшую трубу и строим проекцию на эту трубу
+	
+	nearest = {}
+	
+	for s in sprs :
+		#Создаем массив для проекций и расстояий до труб
+		pipe_proj = []
+		p1 = s.Location.Point
+		for l, pipe in pipe_lines :
+			pr = l.Project(p1)
+			l1 = Line.CreateBound(p1, pr.XYZPoint)
+			pipe_proj.append((pr.Distance, pr.XYZPoint, l, s, l1, pipe))
+			"""
+			0 - расстояние до трубы
+			1 - ближайшая точка на трубе
+			2 - линия трубы
+			3 - спринклер
+			4 - линия от спринклера до трубы
+			5 - труба
+			"""
+			
+		nearest[s] = min(pipe_proj, key = lambda x : x[0])
+		
+	
+	
+	
+	#найдены ближайшие трубы для всех спринклеров
+	
+	#Теперь группируем спринклеры.
+	"""
+		Условие группировки:
+		1. Если до линии-кандидата расстояние ближе чем до трубы
+		2. Если расстояние до линии кандидата менее 1000 мм
+		3. Линия кандидат должна быть длиннее чем расстояние от рассматриваемого спринклера до трубы
+	
+	"""
+	nearest_s_line = {}
+	groups = {}
+	for  d, p0, pipe_l, s, n_line, pipe in nearest.values() :
+	
+		found = False
+		res = None
+		 
+		for d1, p1, pipe_l_1, s1, n_line1, pipe1 in nearest.values() :
+			if s is s1 :
+				print("себя пропускаем")
+				
+			# проверяем чтобы труба была одна и та же
+			if not pipe is pipe1 :
+				print("труба не та, пропускаем")
+				continue
+				
+			else :
+				print("труба одна и таже идем дальше")
+				
+			# проверяем чтобы длина линии сравниваемого спринклера была больше чем у текущего, иначе нет смысла
+			
+			if d1 < d :
+				print("Этот спринклер не подходит, т.к. он ближе чем тот который рассматриваем")
+				continue
+			print("Идем дальше")
+			
+			# проверяем, чтобы между линиями расстояние было не больше 1500 мм
+			
+			#n_line.ComputeClosestPoints(n_line1, True, True)
+			
+			pr = n_line1.Project(p0)	
+			d2 = pr.Distance
+			
+			
+			if d2 >= d or d2 > 1500 * dut :
+				print("До линии дальше чем до трубы, поэтому не подходит")
+				continue
+				
+			print("Есть кандидат на линию, необходимо сравнить с существующим кандидатом, если он есть")
+			
+			if not found :
+				# если еще кандидата нет, то создаем его
+				found = True
+				res = (d1, p1, pipe_l_1, s1, n_line1, pipe1, d2)
+				
+			else :
+				# если кандидат есть, то нужно проверить, какой из них лучше.
+				
+				# первый критерий линия должна быть либо длинне либо до нее должно быть ближе
+				
+				if (d1 > res[0]) :
+					res = (d1, p1, pipe_l_1, s1, n_line1, pipe1, d2)
+					
+		if res :
+			groups[s] = res[3].Id
+		else :
+			groups[s] = s.Id
+			
+	print(groups)
+	
+	groups_ = set(groups.values())
+	print(groups_)
+	print(len(groups_))
+
+	res = {}
+	
+	for s1, s2 in zip(groups.keys(), groups.values()) : 
+		if s2 in res.keys() :
+			res[s2].append(s1.Id.IntegerValue)
+		else :
+			res[s2] = [s1.Id.IntegerValue]
+			
+			
+	print(res)
+	
+	res2 = []
+	
+	for s1 in res.values() :
+		res2.append((s1, pipes[0].Id.IntegerValue))
+
+			
+	print(res2)
+	print(res2[0])
+			
+			
+	
+					
+	#res2 = []
+	return res2
+				
+				
+					
+			
+		
+				
+
+		
+def split_sprinklers1(a, b) :
+		
+	
+	res = [(
+				[
+		7182810,
+		7182811,
+		7182812], 7182846
+		
+	), (
+				[
+		7182800,
+		7182801,
+		7182802,
+		],7182846
+	), (
+		[7182780,
+		7182781,
+		7182782
+	], 7182846)]
+	return res
+	
+while True :
+	try :
+		sprs = get_sprinklers()
+		pipes = get_pipes()
+	except :
+		break
+	
+	
+	split_spr = split_sprinklers(sprs, pipes)
+	
+	
+	
+	for sprinklers, pipe in split_spr :
+	
+		calc = dm3.dmConnectUtils(
+				pipe_id = pipe,
+				sprs_ids = sprinklers,
+				end_cap=True,
+				spr_pipe_d = 20*dut,
+				spr_gap = 5
+				
+		)
+		
+		calc.Calculate()
+		calc.CreatePipesFromRoute()
+		calc.ConnectSprinklers()
+		
+		
+			
+	t2 = time.time()
+	print(t2-t1)
+	
+__window__.Close()
+		
+			
+	
+		
+		
+	
+	
+
+

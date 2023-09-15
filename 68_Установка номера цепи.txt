@@ -1,0 +1,38 @@
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sensor_id = uidoc.Selection.GetElementIds()[0]
+sensor = doc.GetElement(sensor_id)
+
+
+trans = Transaction(doc)
+circ_name = sensor.LookupParameter("RBZ_Наименование линии").AsString()
+renumber = False				
+
+systems = sensor.MEPModel.ElectricalSystems
+if systems.Size == 1 :
+	system = list(systems)[0]
+	
+	trans.Start("Переименование цепи")
+	system.LookupParameter("RBZ_Наименование линии").Set(circ_name)
+	
+	panel_name = sensor.LookupParameter("ITV_LCS_Номер панели").AsString()
+	line_name = sensor.LookupParameter("ITV_LCS_Номер шлейфа").AsString()
+	ps_name = sensor.LookupParameter("RBZ_Марка источника питания").AsString()
+	
+	for num, e in enumerate(system.Elements, 1) :
+		e.LookupParameter("RBZ_Наименование линии").Set(circ_name)
+		
+		e.LookupParameter("ITV_LCS_Номер панели").Set(panel_name)
+		e.LookupParameter("ITV_LCS_Номер шлейфа").Set(line_name)
+		e.LookupParameter("RBZ_Марка источника питания").Set(ps_name)
+		
+		if renumber :
+			e.LookupParameter("ITV_LCS_Номер в шлейфе").Set(num)
+	
+	
+	trans.Commit()
+	
+
+print(circ_name)

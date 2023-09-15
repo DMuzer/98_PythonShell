@@ -1,0 +1,119 @@
+#  coding: utf-8 
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.Exceptions
+import System 
+import clr
+
+import math, sys
+import clr
+
+import re
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+lib_path = r"D:\18_проектирование\98_PythonShell\Создание фильтров"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+import d72_hyraulic_calc as dm3
+
+reload(dm3)
+
+
+#start = doc.GetElement(ElementId(1045576))
+start = doc.GetElement(ElementId(1171300))
+start = doc.GetElement(ElementId(1125168))
+
+g = dm3.create_graph_2(start)
+#g.AddElement(g.sprinkler_critical)
+
+for s in g.system.PipingNetwork :
+	g.AddElement(s)
+	
+g.wfs(g.main_gate_leaf)
+
+#print(g.sprinkler_vertexes)
+
+mg = g.main_gate_leaf
+cs = g.sprinkler_vertexes[0]
+
+print('set_precalc_data')
+g.prepare_calc(mg)
+g.set_precalc_data()
+
+print('prepare_calc')
+
+print('calc_sequence')
+print('диктующий спринклер {}'.format(cs))
+g.calc_sequence(mg, cs, 0.3)
+
+g.wfs(mg)
+
+bs = g.V[mg]
+print("p = {}, q = {}".format(bs['p'], bs['q']))
+
+for s in g.sprinkler_vertexes :
+	print(100 * "-")
+	ds = g.V[s]
+	print("{} : p = {}, q = {}, k = {}".format(s, ds['p'], ds['q'], ds['k']))
+
+v = g.V[g.sprinkler_vertexes[0]]
+while not v is None :
+	print("{} : q = {}, p = {}".format(v['v'], v['q'], v['p']))
+	print(80*"-")
+	if not v['prev'] is None :
+		v = g.V[v['prev']]
+	else :
+		v = None
+		break
+	
+	
+
+		
+	
+
+
+
+
+
+
+
+
+
+
+

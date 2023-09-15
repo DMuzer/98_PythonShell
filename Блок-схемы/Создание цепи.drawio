@@ -1,0 +1,37 @@
+<mxfile host="65bd71144e">
+    <diagram id="WhEB6UX3OpOHkQ4m4yjR" name="Page-1">
+        <mxGraphModel dx="1436" dy="992" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <UserObject label="Перечисление&amp;nbsp;&lt;br&gt;BuiltInCategory" link="https://www.revitapidocs.com/2021.1/ba1c5b30-242f-5fdc-8ea9-ec3b61e6e722.htm" id="2">
+                    <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                        <mxGeometry x="100" y="70" width="120" height="50" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <UserObject label="Электрическая&amp;nbsp;&lt;br&gt;система&lt;br&gt;" link="https://www.revitapidocs.com/2021.1/158b4be3-bbe5-11eb-cccc-788edd3a7590.htm" id="3">
+                    <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                        <mxGeometry x="270" y="80" width="90" height="30" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="8" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="4" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="ElectricalSystem.Create(Connectro, ElectricalSystemType)" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="120" y="200" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="Создать систему, передать коннектор и передать тип системы" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="360" y="200" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <UserObject label="Типы электрических систем&lt;br&gt;ElectricalSystemType" link="https://www.revitapidocs.com/2021.1/90f62108-9cd1-a66a-a123-8372307f4e7f.htm" id="6">
+                    <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                        <mxGeometry x="410" y="80" width="130" height="30" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="7" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="150" y="325" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

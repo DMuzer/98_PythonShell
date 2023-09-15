@@ -1,0 +1,90 @@
+#  coding: utf-8 
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import System
+import clr
+
+
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+import dm_connect_2 as dm
+
+import dm_nearest_geometry as dm1
+
+
+
+fc = FilteredElementCollector(doc).OfCategory(bic.OST_ElectricalCircuit).WhereElementIsNotElementType().ToElements()
+
+def get_circuits(e) :
+	conns = e.MEPModel.ConnectorManager.Connectors
+	for c in conns :
+		print(c.Domain)
+		print(c.Description)
+		print(c.IsConnected)
+		print(c.MEPSystem)
+		
+		if not c.IsConnected :
+			continue
+			
+def get_circuit_name(c) :
+	print(c)
+	tr = Transaction(doc)
+	
+	for e in c.ConnectorManager.Connectors :
+		for e1 in e.AllRefs :
+			if len(e1.Description) == 0 : continue
+			print(e1.Description)
+			print(len(e1.Description))
+			print()
+			d1 = e1.Description
+			m1 = e1.Owner.LookupParameter("Марка").AsString()
+			
+			tr.Start("Set name")
+			
+			circ_name = "{} {}".format(m1, d1)
+			print(circ_name)
+			
+			c.LookupParameter("Имя нагрузки").Set(circ_name)
+			c.LookupParameter("ADSK_Имя панели").Set(m1)
+			c.LookupParameter("ADSK_Номер линии").Set(int(c.CircuitNumber))
+			
+			tr.Commit()
+			
+			return
+			
+		
+		
+	
+			
+		
+	
+
+for e in fc :
+	print(e)
+	get_circuit_name(e)
+	
+	

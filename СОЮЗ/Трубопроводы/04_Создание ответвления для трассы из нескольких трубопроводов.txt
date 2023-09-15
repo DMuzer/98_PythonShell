@@ -1,0 +1,185 @@
+st_str = """
+***************************************************************
+*** Создание ответвления для трассы из нескольих трубопроводов
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\04_Создание ответвления для трассы из нескольких трубопроводов.txt"
+***************************************************************
+
+***************************************************************
+"""
+print(st_str)
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+from System.Collections.Generic import IList, List
+ot = UI.Selection.ObjectType.Element
+
+class dmPipePair :
+	def __init__(self, pipe1, pipe2) :
+		self.pipe1 = pipe1
+		self.pipe2 = pipe2
+		
+	def connect(self, bypassDirection = -XYZ.BasisZ) :
+		print("Соединяем трубы {self.pipe1.Id} и {self.pipe2.Id}")
+		finishPoint = min((self.pipe2.Location.Curve.GetEndPoint(0), 
+								self.pipe2.Location.Curve.GetEndPoint(1)), key =\
+								lambda x : self.pipe1.Location.Curve.Distance(x))
+		startPoint = self.pipe1.Location.Curve.Project(finishPoint).XYZPoint
+		print(f"start point = {startPoint}\nfinish Point = {finishPoint}")
+		pipeDirection = (finishPoint - startPoint).Normalize()
+		
+		pnt3 = finishPoint - self.pipe2.Diameter * 2.5 * pipeDirection\
+				+ bypassDirection * self.pipe2.Diameter * 2.5
+		
+		pnt2 = XYZ(startPoint.X, startPoint.Y, pnt3.Z)
+		if abs(pnt3.Z - pnt2.Z) < 4 * self.pipe2.Diameter :
+			pnt2 = pnt2 + pipeDirection * self.pipe2.Diameter * 2.5
+			
+		lc1 = Line.CreateBound(startPoint, pnt2)
+		lc2 = Line.CreateBound(pnt2, pnt3)
+		lc3 = Line.CreateBound(pnt3, finishPoint)
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "do bypass")
+			tr.Start()
+		
+		newPipe1 = doc.GetElement(ElementTransformUtils.CopyElement(doc,self.pipe2.Id, XYZ.Zero)[0])
+		newPipe1.Location.Curve = lc1
+		newPipe2 = doc.GetElement(ElementTransformUtils.CopyElement(doc,self.pipe2.Id, XYZ.Zero)[0])
+		newPipe2.Location.Curve = lc2
+		newPipe3 = doc.GetElement(ElementTransformUtils.CopyElement(doc,self.pipe2.Id, XYZ.Zero)[0])
+		newPipe3.Location.Curve = lc3
+		
+		def nearestConnector(pipe, pnt) :
+			return min(pipe.ConnectorManager.Connectors, key = lambda x : pnt.DistanceTo(x.Origin))
+		
+		c1 = nearestConnector(newPipe1, startPoint)
+		doc.Create.NewTakeoffFitting(c1, self.pipe1)
+		c21, c22 = nearestConnector(newPipe1, pnt2), nearestConnector(newPipe2, pnt2)
+		doc.Create.NewElbowFitting(c21, c22)
+		c31, c32 = nearestConnector(newPipe2, pnt3), nearestConnector(newPipe3, pnt3)
+		doc.Create.NewElbowFitting(c31, c32)
+		c41, c42 = nearestConnector(newPipe3, finishPoint), nearestConnector(self.pipe2, finishPoint)
+		doc.Create.NewElbowFitting(c41, c42)
+		
+		if tr : tr.Commit()
+		
+		
+
+class dmCreateTakeoffPipeLines :
+	def __init_(self) :
+		pass
+	def makePrompt(self) :
+		#Выбираем трубопроводы
+		promptPipes = [doc.GetElement(ref) for ref in uidoc.Selection.PickObjects(ot)
+						if type(doc.GetElement(ref)) == Plumbing.Pipe]
+		self.pipes = promptPipes
+		self.promptPoint = uidoc.Selection.PickPoint()
+		self.directionPoint = uidoc.Selection.PickPoint()
+		
+		lc1 = self.pipes[0].Location.Curve
+		
+		lc2 = Line.CreateUnbound(self.promptPoint, uidoc.ActiveView.ViewDirection)
+		lc3 = Line.CreateUnbound(self.directionPoint, uidoc.ActiveView.ViewDirection)
+		
+		t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+		lc1.ComputeClosestPoints(lc2, True, False, False, t)
+		
+		self.pt1 = t.Item[0].XYZPointOnSecondCurve # точка откуда начинаются трубы
+		self.pt2 = t.Item[0].XYZPointOnFirstCurve  # точка выбора спроецированная на  какую-то из труб
+		
+		t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+		lc1.ComputeClosestPoints(lc3, True, False, False, t)
+		self.pt3 = t.Item[0].XYZPointOnSecondCurve # точка спроецированная для задания сдвига
+		
+		self.offsetDirection = (lc1.Direction.DotProduct(self.pt3 - self.pt1) * lc1.Direction).Normalize() 
+		self.pipeDirection = (self.pt1 - self.pt2).Normalize()
+			
+		print(self.pt1)
+		print(self.pt2)
+		print(self.pt3)
+		print(self.offsetDirection)
+		
+	def sortPipes(self) :
+		self.pipes = sorted(self.pipes, key = lambda x : x.Location.Curve.Distance(self.pt1))
+		
+	def createTakeoffsPipes(self) :
+		currentPnt 		= self.pt2 + self.pipeDirection * 2000 * dut
+		tr 				= None
+		self.pipePairs 	= []
+		if not doc.IsModifiable :
+			print(f"открываем транзакцию createTakeoffsPipes doc.IsModifiable {doc.IsModifiable}")
+			tr = Transaction(doc, "create Pipes")
+			tr.Start()
+			
+		for num, pipe in enumerate(self.pipes) :
+			endPnt 			= currentPnt + 1000 * dut * self.pipeDirection
+			pipeLocation 	= Line.CreateBound(currentPnt, endPnt)
+			
+			newPipe = doc.GetElement(
+							ElementTransformUtils\
+							.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+			
+			newPipe.Location.Curve 	= pipeLocation
+			self.pipePairs.append(dmPipePair(pipe, newPipe))
+			currentPnt 				= currentPnt + self.offsetDirection * 2 * pipe.Diameter
+		if tr is not None:
+			print(f"Закрываем транзакцию createTakeoffsPipes {tr}")
+			tr.Commit()
+			
+	def connectPipes(self, bypassDirection = -1) :
+		print("Соединяем созданные трубы")
+		tr = None
+		if not doc.IsModifiable :
+			print("создаем транзакцию connectPipes")
+			tr = Transaction(doc, "делаем обходы для труб")
+			tr.Start()
+		print(tr)
+		for pair in self.pipePairs :
+			if bypassDirection == -1 :
+				pair.connect()
+			else :
+				pair.connect(bypassDirection = XYZ.BasisZ)
+				
+		print(tr)
+		if tr is not None : 
+			print(f"Закрываем транзакцию")
+			tr.Commit()
+			
+
+upSide = False
+
+
+command = dmCreateTakeoffPipeLines()
+#Выбрать трубопроводы
+#Взять точку и построить точку напротив трубопроводов
+command.makePrompt()
+command.sortPipes()
+command.createTakeoffsPipes()
+#Вычислить точки начала ответвлений
+#Создать трубы
+#Присоединить трубы к своим базовым при помощи обхода.
+if upSide :
+	command.connectPipes(1)
+else :
+	command.connectPipes(-1)
+	
+
+st_str = """
+***************************************************************
+*** Создание ответвления для трассы из нескольих трубопроводов
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\04_Создание ответвления для трассы из нескольких трубопроводов.txt"
+***************************************************************
+
+***************************************************************
+Работа окончена...
+"""
+print(st_str)

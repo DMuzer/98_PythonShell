@@ -1,0 +1,13 @@
+import sys
+import clr
+import math
+
+
+from Autodesk.Revit.DB import *
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+id1 = 1045901
+id2 = [1045961, 1045872]
+my = doc.GetElement(ElementId(id1))
+other = [doc.GetElement(ElementId(id)) for  id in id2]

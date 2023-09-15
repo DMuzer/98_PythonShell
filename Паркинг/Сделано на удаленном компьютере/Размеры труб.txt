@@ -1,0 +1,44 @@
+av = uidoc.ActiveView
+
+dtypes = {Element.Name.GetValue(t): t for t in FilteredElementCollector(doc).OfClass(DimensionType).ToElements()}
+dt = dtypes["Размеры_спринклеры"]
+p1_= uidoc.Selection.PickPoint()
+p2_ =uidoc.Selection.PickPoint()
+
+p1, p2 = XYZ(p1_.X, p1_.Y,0), XYZ(p2_.X, p2_.Y, 0)
+l1 = Line.CreateBound(p1, p2)
+
+def check_pipe(l1, ep) :
+	try :
+		l2 = ep.Location.Curve
+		p0_, p1_ = l2.GetEndPoint(0), l2.GetEndPoint(1)
+		p0, p1 = XYZ(p0_.X, p0_.Y,0), XYZ(p1_.X, p1_.Y, 0)
+		l3 = Line.CreateBound(p0, p1)
+		ir = l3.Intersect(l1)
+		return ir == SetComparisonResult.Overlap
+	except :
+		return False
+		
+def get_refs(pipes) :
+	opts=Options()
+	opts.ComputeReferences = True
+	opts.View = av
+	
+	ra = ReferenceArray()
+	for pipe in pipes :
+		for ge in pipe.Geometry[opts] :
+			if type(ge) == Line :
+				ra.Append(ge.Reference)
+	return ra
+
+fc = FilteredElementCollector(doc, av.Id).OfClass(Plumbing.Pipe).ToElements()
+pipes = [ep for ep in fc if check_pipe(l1, ep)]
+
+refs = get_refs(pipes)
+
+tr =Transaction(doc)
+tr.Start("add dimension")
+dim = doc.Create.NewDimension(av, l1, refs, dt)
+tr.Commit()
+
+

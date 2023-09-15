@@ -1,0 +1,137 @@
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+				
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+def create_line() :
+	import System
+	sprs = uidoc.Selection.GetElementIds()
+	
+	print("Количество элементов в списке {}".format(len(sprs)))
+	
+	if len(sprs) == 0 :
+		sprs = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+		sprs = [e.ElementId for e in sprs]
+		
+	sprs = System.Array[ElementId](sprs)
+	print("Количество элементов в списке {}".format(len(sprs)))
+		
+	sprs = FilteredElementCollector(doc, sprs).OfCategory(bic.OST_Sprinklers).ToElements()
+		
+	print("Количество элементов в списке {}".format(len(sprs)))
+	
+	pipe_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element).ElementId
+	pipe = doc.GetElement(pipe_id)
+	
+	if type(pipe) != Plumbing.Pipe :
+		print("Выбрана не труба", pipe)
+		return
+	else :
+		print("О! Труба!")
+		
+	sprs_sorted = sorted(sprs, key = lambda x : pipe.Location.Curve.Distance(x.Location.Point))
+	
+	s0 = sprs_sorted[-1]
+	
+	global p2c
+	
+	p2c = dm1.dm_pipe_2_connect(pipe)
+	
+	p2c.connect_equipment(s0, next_size = 1, try_to_center = False)
+	
+	for s in sprs_sorted[:-1] :
+		p2c.connect_equipment(s, next_size = 1, try_to_center = False)
+		#nearest_p = p2c.nearest_new_pipe(s)	
+		#nearest_p.connect_equipment(s, next_size=1, second_size = 0, cap=False)
+			
+p2c = None	
+create_line()
+
+"""
+
+
+pipe = doc.GetElement(ElementId(1051164))
+
+spr_id = [1059440, 1059441, 1059442]
+
+sprinklers = [doc.GetElement(ElementId(eid)) for eid in spr_id]
+
+sprinklers = [doc.GetElement(eid) for eid in uidoc.Selection.GetElementIds()]
+
+pipe = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+
+
+sprinklers = sorted(sprinklers, key = lambda x : pipe.Location.Curve.Distance(x.Location.Point))
+
+p2c = dm1.dm_pipe_2_connect(pipe)
+
+#for spr1 in uidoc.Selection.GetElementIds() :
+
+#spr1 = doc.GetElement(spr1)
+p2c.connect_equipment(sprinklers[-1], next_size = 0)
+
+print("Первый готов")
+
+for s in sprinklers[:-1] :
+	
+	nearest_p = p2c.nearest_new_pipe(s)	
+	nearest_p.connect_equipment(s, next_size=0, cap=False)
+	
+	
+"""
+	
+	
+
+
+
+
+
+
+	
+
+

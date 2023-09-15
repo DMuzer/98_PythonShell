@@ -1,0 +1,30 @@
+import Autodesk.Revit.UI as UI
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+
+#lt = None
+#get_type_id()
+def get_type_id() :
+	global lt
+	lt = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)).GetTypeId()
+	
+def add_tag(pipe) :
+	av = uidoc.ActiveView
+	
+	lc = pipe.Location.Curve
+	p0 = lc.GetEndPoint(0)
+	p1 = lc.GetEndPoint(1)
+	p2 = (p0 + p1) * 0.5
+	p_ref = Reference(pipe)
+	t_or = TagOrientation.Horizontal
+	tr = Transaction(doc)
+	tr.Start("new tag")
+	
+	new_tag = IndependentTag.Create(doc, lt, av.Id, p_ref, True,  t_or, p2)
+	new_tag.TagHeadPosition = p2 + 1 * dut * av.RightDirection * av.Scale
+	
+	
+	tr.Commit()
+	
+while True :
+	pipe = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+	add_tag(pipe)

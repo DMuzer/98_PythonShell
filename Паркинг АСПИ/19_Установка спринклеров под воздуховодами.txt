@@ -1,0 +1,62 @@
+"""
+Расстановка спринклеров под воздуховодами
+"""
+from Autodesk.Revit import *
+from collections import deque
+ot = UI.Selection.ObjectType.Element
+
+def neighbors(elementId) :
+	element = doc.GetElement(elementId)
+	if hasattr(element, "MEPModel") :
+		connectors = [c for c in element.MEPModel.ConnectorManager.Connectors
+			if c.ConnectorType & ConnectorType.Physical]
+	else :
+		connectors = [c for c in element.ConnectorManager.Connectors
+			if c.ConnectorType & ConnectorType.Physical]
+	res = []
+	for connector in connectors :
+		for c2 in connector.AllRefs :
+			if c2.ConnectorType & ConnectorType.Physical and \
+				c2.Owner.Id != element.Id :
+					res.append(c2.Owner.Id)
+	return res
+				
+def wfs(start, end) :
+	tree = {start.Id : None}
+	toVisit = deque([start.Id])
+	endId = end.Id
+	i = 0
+	while toVisit :
+		i += 1 
+		if i > 10000 : raise
+		currentId = toVisit.popleft()
+		for neighbor in neighbors(currentId) :
+			if not neighbor in tree :
+				tree[neighbor] = currentId
+				toVisit.append(neighbor)
+				if neighbor == endId : return tree
+				
+def findPath(start, end) :
+	tree = wfs(start, end)
+	if not end.Id in tree : return False
+	i = 0
+	res = []
+	current = end.Id
+	while current :
+		i += 1
+		if i > 10000 : raise
+		res.append(doc.GetElement(current))
+		current = tree[current]
+	return res
+		
+		
+
+
+
+ductStartRef 	= uidoc.Selection.PickObject(ot)
+ductEndRef		= uidoc.Selection.PickObject(ot)
+
+ductStart 	= doc.GetElement(ductStartRef)
+ductEnd		= doc.GetElement(ductEndRef)
+ductPath 	= findPath(ductStart, ductEnd)
+

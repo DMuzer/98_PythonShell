@@ -1,0 +1,105 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+	
+
+#a= show_var_(dm.int_res)
+
+#dm.create_point(dm.int_res.XYZPoint)
+
+import dm_connect_2 as dm
+reload(dm)
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+def get_solid_from_element(el) :
+	if type(el) == Reference :
+		lnk_el_id = element.LinkedElementId
+		lnk_doc_ins = doc.GetElement(element.ElementId)
+		el_trans = lnk_doc_ins.GetTotalTransform()
+		lnk_doc = lnk_doc_ins.GetLinkDocument()
+	
+		lnk_el = lnk_doc.GetElement(lnk_el_id)
+	
+		geom = lnk_el.Geometry[Options()].GetTransformed(el_trans)
+	
+		solids = []
+		for s in geom :
+			print(type(s))
+			if type(s) == Solid :
+				solids.append(s)
+				
+	geom_un = solids[0]
+	if len(solids) > 1 :
+		for s in solids[1:] :
+			try :
+				geom_un = BooleanOperationsUtils.ExecuteBooleanOperation(geom_un, s, DB.BooleanOperationsType.Union)
+			except :
+				pass
+			
+	return geom_un
+	
+
+	
+
+
+#element = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+
+#s1 = get_solid_from_element(element)
+#print(s1)
+
+#el_ids =  uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+els = [doc.GetElement(e_.ElementId) for e_ in el_ids]
+
+for e in els :
+	if e.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
+		print("Спринклер {}".format(e.Location.Point))
+	else :
+		print("не спринклер")
+
+
+
+
+
+
+	

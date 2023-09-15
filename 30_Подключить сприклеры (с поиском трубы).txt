@@ -1,0 +1,136 @@
+#Подключение спринклеров с поиском трубы
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = BuiltInParameter
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+	
+
+def get_all_sprinklers() :
+	res = None
+	fc = FilteredElementCollector(doc).OfCategory(bic.OST_Sprinklers).WhereElementIsNotElementType().ToElements()
+	return fc
+	
+def get_unconnected_sprinklers() :
+	sprs = get_all_sprinklers()
+	sprs = filter(lambda x : len(list(x.MEPModel.ConnectorManager.UnusedConnectors))>0, sprs)
+	return sprs
+cyl = None
+ds = None
+def find_nearest_pipe(s, max_dist = 500 * dut) :
+	from System.Collections.Generic import List
+	if s.Category.Id.IntegerValue != int(bic.OST_Sprinklers) :
+		return
+
+	conn = list(s.MEPModel.ConnectorManager.UnusedConnectors)
+	if len(conn) > 0 :
+		conn = conn[0]
+	else :
+		return
+	dir = conn.CoordinateSystem.BasisZ
+	pl = Plane.CreateByNormalAndOrigin(dir, conn.Origin)
+	
+	cl = [CurveLoop.Create([Arc.Create(pl, conn.Radius*2, 0, math.pi), Arc.Create(pl, conn.Radius*2, math.pi, pi2)])]
+								
+	
+	print(conn.Radius / dut)						
+								
+	solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+	global cyl, ds
+	cyl = GeometryCreationUtilities.CreateExtrusionGeometry(List[CurveLoop](cl), dir, max_dist, solid_opt)
+	
+	#ds = dm.create_direct_shape(cyl)
+	
+	p_col = FilteredElementCollector(doc).OfCategory(bic.OST_PipeCurves).WhereElementIsNotElementType()
+	
+	int_f = ElementIntersectsSolidFilter(cyl)
+	p_col.WherePasses(int_f)
+	
+	
+	print("{}".format(conn.Origin))
+	try :
+		pipe = p_col.ToElements()[0]
+	except :
+		return False
+	
+	lcp = pipe.Location.Curve
+	
+	pnt = lcp.Project(conn.Origin).XYZPoint
+	new_loc = Line.CreateBound(conn.Origin, pnt)
+	
+	with trans(doc) :
+		new_pipe = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+		new_pipe.Location.Curve=new_loc
+		new_pipe.Parameter[bip.RBS_PIPE_DIAMETER_PARAM].Set(conn.Radius * 2)
+		n_conns = dm.get_ordered_end_connectors(new_pipe)
+		n_conns[0].ConnectTo(conn)
+		doc.Create.NewTakeoffFitting(n_conns[1], pipe)
+	
+	return True
+	
+
+
+import dm_connect_2 as dm
+reload(dm)
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+
+
+#__window__.Close()
+
+id = bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+unconn = [doc.GetElement(e) for e in uidoc.Selection.GetElementIds()]
+
+
+
+
+#unconn = get_unconnected_sprinklers()
+for sp in unconn[:] :
+	p1 = find_nearest_pipe(sp)
+	if p1 > 0 :
+		print(p1)

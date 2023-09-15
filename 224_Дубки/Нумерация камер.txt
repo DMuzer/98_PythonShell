@@ -1,0 +1,31 @@
+import Autodesk.Revit.UI as UI
+uidoc = uidoc.Application.ActiveUIDocument
+doc = uidoc.Document
+code = "ТК."
+num = 239
+
+tr = Transaction(doc)
+while True :
+	try :
+		el_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+		el = doc.GetElement(el_id)
+		
+		el_code = "{}{}".format(code, num)
+		
+		tr.Start(el_code)
+		el.LookupParameter("Марка").Set(el_code)
+		
+		param1 = el.GetParameters("Имя панели")
+		
+		if len(param1) > 0 :
+			param1[0].Set(el_code)
+		
+		
+		tr.Commit()
+		
+		num += 1
+	
+	
+	except Exception as ex:
+		print(ex)
+		break

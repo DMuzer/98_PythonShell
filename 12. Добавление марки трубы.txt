@@ -1,0 +1,135 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+tag_id = 645729
+tag_id = 1500237
+
+ids = [1043791, 1043801]
+ids = [1045763]
+                                                        
+
+
+def pipe_create_elbow(doc, p1, p2) :
+	cons = []
+	for p in [p1, p2] :
+		cons += list (p.ConnectorManager.Connectors)
+	
+	cons_p = []
+
+	for i1 in range(len(cons)-1) :
+		for i2 in range(i1+1, len(cons)) :
+			c1 = cons[i1]
+			c2 = cons[i2]
+			
+			if c1.Owner.Id == c2.Owner.Id : continue
+			
+			cons_p.append((c1, c2, c1.Origin.DistanceTo(c2.Origin)))
+
+		cons_p.sort(key = lambda x : x[2])
+
+
+
+
+	tr = Transaction(doc, "create pipe elbow")
+	tr.Start()	
+	doc.Create.NewElbowFitting(cons_p[0][0], cons_p[0][1])	
+	tr.Commit()
+	
+dut = 0.0032808398950131233
+from Autodesk.Revit.UI import Selection
+
+view = doc.ActiveView
+v_scale = view.Scale
+
+els = uidoc.Selection.PickObjects(Selection.ObjectType.Element);
+pipes = [doc.GetElement(el) for el in els]
+
+	
+pipes = [p for p in pipes if p.Category.Name == "Трубы"]
+pipes_ = []
+
+for p in pipes :
+	lc = p.Location.Curve
+	if lc.Length < 10 * v_scale * dut :
+		continue
+	if abs(lc.Direction.Z) > 0.1 :
+		continue
+	pipes_.append(p)
+	
+pipes = pipes_
+for p in pipes :
+	print(p.Category.Name)
+print(pipes)
+
+
+
+t_mode = TagMode.TM_ADDBY_CATEGORY
+tag_orn = TagOrientation.Horizontal
+
+
+
+
+
+pnts = []
+
+for pipe_ in pipes :
+	loc_curve = pipe_.Location.Curve
+	print(loc_curve.Direction.X)
+	print(loc_curve.Direction.Y)
+	if loc_curve.Direction.X < -0.1 : loc_curve = loc_curve.CreateReversed()
+	pnt_tag = loc_curve.Evaluate(0.2, True)
+	
+	if abs(loc_curve.Direction.Y) < 0.5 :
+		pnt_elbow = pnt_tag + XYZ( 12 * v_scale * dut, - 7 * v_scale * dut, 0)
+	else :
+		print("y", loc_curve.Direction.Y)
+		if loc_curve.Direction.Y < 0 : 
+			loc_curve = loc_curve.CreateReversed()
+				
+		pnt_tag = loc_curve.Evaluate(0.7, True)
+			
+		pnt_elbow = pnt_tag + XYZ( 3 * v_scale * dut, - 3 * v_scale * dut, 0)
+		
+	pnt_head = pnt_elbow + XYZ(1 * v_scale * dut, 0, 0)
+	pnts.append((pnt_tag, pnt_elbow, pnt_head, Reference(pipe_)))
+
+
+
+tr = Transaction(doc)
+tr.Start('Create Tag')
+
+
+"""
+doc.Create.NewDetailCurve(view, Line.CreateBound(XYZ(0,0,0), XYZ(10000*dut, 10000*dut,0)))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wstart, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2 *math.pi))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wend, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(wmid, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+"""
+
+for p_ in pnts:
+	#print(p_)
+	newTag = IndependentTag.Create(doc, view.Id, p_[3], True, t_mode, tag_orn, p_[0])
+	newTag.ChangeTypeId(ElementId(tag_id))
+	newTag.LeaderEndCondition = LeaderEndCondition.Free
+	newTag.LeaderElbow = p_[1]
+	newTag.TagHeadPosition = p_[2]
+
+#doc.Create.NewDetailCurve(view, Ellipse.CreateCurve(h_pnt, 100*dut, 100*dut, XYZ(1,0,0), XYZ(0,1,0), 0, 2* math.pi))
+
+tr.Commit()
+
+
+
+
+
+
+
+

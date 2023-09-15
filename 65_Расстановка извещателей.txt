@@ -1,0 +1,68 @@
+from Autodesk.Revit import UI as UI
+import math
+dut = 0.0032808398950131233
+max_dist = 8000 * dut
+i_count = 0 
+sensor_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+sensor = doc.GetElement(sensor_id)
+sensor_loc = sensor.Location.Point
+
+while True :
+	i_count += 1
+	if i_count > 100 : break
+	try :
+		p1 = uidoc.Selection.PickPoint()
+		p2 = uidoc.Selection.PickPoint()
+		p3 = uidoc.Selection.PickPoint()
+		
+		p1 = XYZ(p1.X, p1.Y, sensor_loc.Z)
+		p2 = XYZ(p2.X, p2.Y, sensor_loc.Z)
+		p3 = XYZ(p3.X, p3.Y, sensor_loc.Z)
+	except :
+		break
+	
+	d = p2 - p1
+	dn = d.Normalize()
+	diag = p3 - p1
+	
+	ax1 = dn * (diag.DotProduct(dn))
+	ax2 = diag - ax1
+	
+	ax1n = ax1.Normalize()
+	ax2n = ax2.Normalize()
+	
+	lax1 = ax1.GetLength()
+	lax2 = ax2.GetLength()
+	
+	ax1_num = int(math.ceil(lax1 / max_dist))
+	ax2_num = int(math.ceil(lax2 / max_dist))
+	
+	ax1_step = lax1 / ax1_num
+	ax1_step_v = ax1n * ax1_step
+	
+	ax2_step = lax2 / ax2_num
+	ax2_step_v = ax2n * ax2_step
+	
+	p000 = p1 +(ax1_step_v / 2)+ (ax2_step_v / 2)
+	
+	p00 = p000
+	
+	trans = Transaction(doc)
+	trans.Start("Расстановка датчиков")
+	#переносим датчик
+	
+	
+	new_sensor_id = sensor.Id
+	for ii in range(ax2_num) :
+		for i in range(ax1_num) :	
+			new_sensor_id = ElementTransformUtils.CopyElement(doc, new_sensor_id, XYZ.Zero)[0]
+			
+			new_sensor = doc.GetElement(new_sensor_id)
+			new_sensor.Location.Point = p00
+			p00 = p00 + ax1_step_v
+			
+		p000 = p000 + ax2_step_v
+		p00 = p000
+	
+	trans.Commit()
+	

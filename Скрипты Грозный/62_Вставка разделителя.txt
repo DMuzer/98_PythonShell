@@ -1,0 +1,87 @@
+import Autodesk.Revit.UI as UI
+import math
+t_id = 1073467
+t_id = ElementId(t_id)
+symb = doc.GetElement(t_id)
+
+pipe_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe = doc.GetElement(pipe_ref)
+
+lc = pipe.Location.Curve
+d1 = lc.Direction
+
+try :
+	ang_hor = math.atan(d1.Y / d1.X) if d1.X > 0 else math.atan(d1.Y / d1.X) + math.pi
+except ZeroDevisionError :
+	ang_hor = math.pi / 2 if d1.Y > 0 else 3 * math.pi / 2 
+hor_d = XYZ(d1.X, d1.Y, 0)
+hor_l = hor_d.GetLength()
+try :
+	ang_ver = math.atan(d1.Z / hor_l) if d1.Z > 0 else math.atan(d1.Z / hor_l) + math.pi
+except ZeroDevisionError :
+	ang_ver = math.pi / 2 if d1.Z > 0 else 3 * math.pi / 2 
+	
+	
+	
+#ang_ver = math.atan(d1.Y / d1.X) if d1.X > 0 else math.atan(d1.Y / d1.X) + math.pi
+
+p0 = lc.Evaluate(0.5, True)
+
+level = pipe.ReferenceLevel
+
+p1 = XYZ(p0.X, p0.Y, p0.Z-level.Elevation)
+
+
+
+
+
+tr1 = Transaction(doc)
+tr1.Start("new")
+#new_ = doc.Create.NewFamilyInstance(lc, symb, level, Structure.StructuralType.NonStructural)
+new_ = doc.Create.NewFamilyInstance(p0, symb, Structure.StructuralType.NonStructural)
+#new_.Location.Point = p0
+#new_ = doc.Create.NewFamilyInstance(p0, symb, pipe, Structure.StructuralType.NonStructural)
+#new_ = doc.Create.NewFamilyInstance(p0, symb, pipe, Structure.StructuralType.NonStructural)
+#new_ = doc.Create.NewFamilyInstance(p0, symb, pipe, Structure.StructuralType.NonStructural)
+tr1.Commit()
+
+tr1 = Transaction(doc)
+tr1.Start("Create splitter")
+
+new_.Location.Point = p0
+v_axis = Line.CreateBound(p0, p0 - XYZ.BasisY)
+new_.Location.Rotate(v_axis, ang_ver)
+r_axis = Line.CreateBound(p0, p0 + XYZ.BasisZ)
+new_.Location.Rotate(r_axis, ang_hor)
+
+tr1.Commit()
+
+# Split pipe
+
+def get_nearest_connector(p, pnt) :
+	for c in p.ConnectorManager.Connectors :
+		if c.Origin.IsAlmostEqualTo(pnt) :
+			return c
+def get_connectors(e) :
+	try :
+		return e.ConnectorManager.Connectors
+	except :
+		return e.MEPModel.ConnectorManager.Connectors
+
+tr1.Start("Split the pipe")
+pipe2_id = Plumbing.PlumbingUtils.BreakCurve(doc, pipe.Id, p0)
+pipe2 = doc.GetElement(pipe2_id)
+c1 = get_nearest_connector(pipe, p0)
+c2 = get_nearest_connector(pipe2, p0)
+
+ec1, ec2 = list(get_connectors(new_))
+
+if ec1.CoordinateSystem.BasisZ.DotProduct(c1.CoordinateSystem.BasisZ) < 0 :
+	ec1.ConnectTo(c1)
+	ec2.ConnectTo(c2)
+else :
+	ec1.ConnectTo(c2)
+	ec2.ConnectTo(c1)
+	
+
+tr1.Commit()

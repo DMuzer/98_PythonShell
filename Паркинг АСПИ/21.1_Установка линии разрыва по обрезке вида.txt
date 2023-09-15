@@ -1,0 +1,50 @@
+"""
+Устанавливаем линию разрыва  по обрезке вида
+"""
+import System
+dut = 0.0032808398950131233
+#breakSignRef	= uidoc.Selection.GetElementIds()[0]
+#breakSign 		= doc.GetElement(breakSignRef)
+
+
+breakLineTypeId = ElementId(9781508)
+breakLineSymbol = doc.GetElement(breakLineTypeId)
+print(2)
+
+def createNewBreakLine(view) :
+	viewCrop = view.CropBox
+	width 	= viewCrop.Max.X - viewCrop.Min.X - 6 * dut * view.Scale
+	height	= viewCrop.Max.Y - viewCrop.Min.Y - 6 * dut * view.Scale
+	print(1)
+	viewPlans = FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()
+	z = view.Origin.Z
+	newLocation = XYZ(viewCrop.Min.X + 3 * dut * uidoc.ActiveView.Scale, 
+							viewCrop.Max.Y - 3 * dut* uidoc.ActiveView.Scale, z)
+	
+	
+	
+	print(4)
+	
+	tr = Transaction(doc, "set break sign")
+	tr.Start()
+	
+	breakSign = doc.Create.NewFamilyInstance(newLocation, 
+							breakLineSymbol, 
+							view)
+	
+	breakSign.LookupParameter("Длина").Set(width)
+	breakSign.LookupParameter("Ширина").Set(height)
+	#breakSign.Location.Point = newLocation
+	elementsToHide = System.Array[ElementId]([breakSign.Id])
+	view.CropBoxVisible = False
+	for view_ in viewPlans :
+		if view_.Id != view.Id :
+			view_.HideElements(elementsToHide)
+			
+	
+	tr.Commit()
+	
+viewsFC = FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()
+views = [view for view in viewsFC if view.Name.StartsWith("О_ВПВ_Этаж -01_")]
+for view in views :
+	createNewBreakLine(view)

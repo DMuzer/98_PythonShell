@@ -1,0 +1,794 @@
+"""
+Создание расчетного графа для трубопровода и 
+гидравлический расчет
+D:\18_проектирование\98_PythonShell\Графы трубопроводов\04.Граф для гидравлического расчета.txt
+"""
+import System
+import math
+bic = BuiltInCategory
+import itertools
+import heapq
+from collections import deque
+dut = 0.0032808398950131233
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+CreatedElements = {}
+
+maxDisbalance 		= 0.0005
+writeImmediately	= True
+
+
+pipeK = {
+	15 * dut : 0.18, 
+	20 * dut : 0.926,
+	25 * dut : 3.65,
+	32 * dut : 16.5,
+	40 * dut : 34.5,
+	50 * dut : 135,
+	65 * dut : 572,
+	80 * dut : 1429,
+	100 * dut : 4231,
+	125 * dut : 13530,
+	150 * dut : 36920,
+	200 * dut : 209900,
+	}
+	
+elbowLengths = {
+	15 * dut 	: 0.47 		* 1000 * dut, 
+	20 * dut 	: 0.67		* 1000 * dut,
+	25 * dut 	: 0.85		* 1000 * dut,
+	32 * dut 	: 1.13		* 1000 * dut,
+	40 * dut 	: 1.34		* 1000 * dut,
+	50 * dut 	: 1.61		* 1000 * dut,
+	65 * dut 	: 1.95		* 1000 * dut,
+	80 * dut 	: 2.50		* 1000 * dut,
+	100 * dut 	: 3.36		* 1000 * dut,
+	125 * dut 	: 4.27		* 1000 * dut,
+	150 * dut 	: 5.18		* 1000 * dut,
+	200 * dut 	: 6.41		* 1000 * dut,
+	}
+teeLengths = {
+	15 * dut 	: 0.24 		* 1000 * dut, 
+	20 * dut 	: 0.30		* 1000 * dut,
+	25 * dut 	: 0.40		* 1000 * dut,
+	32 * dut 	: 0.52		* 1000 * dut,
+	40 * dut 	: 0.61		* 1000 * dut,
+	50 * dut 	: 0.76		* 1000 * dut,
+	65 * dut 	: 0.91		* 1000 * dut,
+	80 * dut 	: 1.16		* 1000 * dut,
+	100 * dut 	: 1.52		* 1000 * dut,
+	125 * dut 	: 1.89		* 1000 * dut,
+	150 * dut 	: 2.29		* 1000 * dut,
+	200 * dut 	: 3.05		* 1000 * dut,
+	}
+valveLengths =  {
+	15 * dut 	: 0.11 		* 1000 * dut, 
+	20 * dut 	: 0.14		* 1000 * dut,
+	25 * dut 	: 0.18		* 1000 * dut,
+	32 * dut 	: 0.24		* 1000 * dut,
+	40 * dut 	: 0.28		* 1000 * dut,
+	50 * dut 	: 0.37		* 1000 * dut,
+	65 * dut 	: 0.43		* 1000 * dut,
+	80 * dut 	: 0.52		* 1000 * dut,
+	100 * dut 	: 0.70		* 1000 * dut,
+	125 * dut 	: 0.85		* 1000 * dut,
+	150 * dut 	: 1.07		* 1000 * dut,
+	200 * dut 	: 1.40		* 1000 * dut,
+	}
+checkValveLengths =  {
+	15 * dut 	: 5.18 		* 1000 * dut, 
+	20 * dut 	: 6.71		* 1000 * dut,
+	25 * dut 	: 8.23		* 1000 * dut,
+	32 * dut 	: 11.28		* 1000 * dut,
+	40 * dut 	: 13.10		* 1000 * dut,
+	50 * dut 	: 17.37		* 1000 * dut,
+	65 * dut 	: 19.81		* 1000 * dut,
+	80 * dut 	: 25.30		* 1000 * dut,
+	100 * dut 	: 34.20		* 1000 * dut,
+	125 * dut 	: 42.67		* 1000 * dut,
+	150 * dut 	: 50.30		* 1000 * dut,
+	200 * dut 	: 68.50		* 1000 * dut,
+	}
+transitionLengths =  {
+	15 * dut 	: 0.18 		* 1000 * dut, 
+	20 * dut 	: 0.24		* 1000 * dut,
+	25 * dut 	: 0.30		* 1000 * dut,
+	32 * dut 	: 0.40		* 1000 * dut,
+	40 * dut 	: 0.46		* 1000 * dut,
+	50 * dut 	: 0.55		* 1000 * dut,
+	65 * dut 	: 0.70		* 1000 * dut,
+	80 * dut 	: 0.88		* 1000 * dut,
+	100 * dut 	: 1.16		* 1000 * dut,
+	125 * dut 	: 1.46		* 1000 * dut,
+	150 * dut 	: 1.71		* 1000 * dut,
+	200 * dut 	: 2.29		* 1000 * dut,
+	}
+
+eqLengths = {
+	PartType.Tee 	: teeLengths,
+	PartType.Elbow 	: elbowLengths,
+	"Задвижка"	: valveLengths,
+	"Клапан" 	: checkValveLengths,
+	PartType.Transition	: transitionLengths
+	
+}
+
+def GetElement(Id) :
+	if isinstance(Id, int) :
+		Id = ElementId(Id)
+	elif isinstance(Id, Element) :
+		Id = Id.Id
+	if Id.IntegerValue in CreatedElements :
+		return CreatedElements[Id.IntegerValue]
+	else :
+		e = dmElement(Id)
+		CreatedElements[Id.IntegerValue] = e
+		return e
+
+class dmElement :
+	def __init__(self, element) :
+		self.prev = None
+		self.prevConnector 	= None
+		self.pressureIn 	= 0 	#Давление на входе в элемент
+		self.pressureOut 	= 0 	#Давление на основном выходе из элемента
+		self.pressureOut1 	= 0 	#Давление на выходе из ответвления из элемента
+		self.flowIn 		= 0			#Расход на входе в элемент
+		self.flowOut 		= 0		#Расход на выходе из элемента или по главному направлению если это тройниик
+		self.flowOut1 		= 0		#Расход на выходе из элемента по второстенному выходу если это тройник, обычно 0
+		self.sprinklersPath 	= set() #множество спринклеров, которые считаются через этот элемент
+		self.next 				= None			#cледующий элемент по основному пути в дереве
+		self.nextConnector 		= None	#коннектор с которым соединен следующий элемент по основному пути
+		self.next1 				= None			#следующий элемент в ответвлении или None если элемент не подразумевает ответвления
+		self.next1Connector 	= None	# если ответвление, то коннектор к которому подключен ответвление
+		self.sprinklerToBalance	= None	#спринклер с которого начинается балансировка ветки, которая подключается к данному узлу
+		self.disbalance			= float.PositiveInfinity
+		self.passNum			= 0
+		self.elementPos			= 0
+		
+		if isinstance(element, Element) :
+			self.element = element
+		elif isinstance(element, ElementId) :
+			self.element = doc.GetElement(element)
+		elif isinstance(element, Reference) :
+			self.element = doc.GetElement(element)	
+		elif isinstance(element, int) :
+			self.element = doc.GetElement(ElementId(element))
+	def __repr__(self) :
+		if hasattr(self.element, "MEPModel") : 
+			if hasattr(self.element.MEPModel, "PartType") :
+				return f"Элемент id {self.element.Id} {self.element.Category.Name} {self.element.MEPModel.PartType}"
+			else :
+				return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+				
+			
+			
+		return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+	def __hash__(self) :
+		return self.element.Id.IntegerValue
+	def __eq__(self, other) :
+		if isinstance(other, dmElement) :
+			return other.element.Id == self.element.Id
+		elif isinstance(other, Element) :
+			return other.Id == self.element.Id
+	def _getNeighbors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		neighbors = []
+		for connector in connectors :
+			if connector.ConnectorType == ConnectorType.End :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id :
+							neighbors.append(GetElement(c2.Owner))
+		return neighbors
+	neighbors = property(_getNeighbors)
+	
+	def _getLocation(self) :
+		return self.element.Location
+	Location = property(_getLocation)
+	
+	def _getId(self) :
+		return self.element.Id
+	Id = property(_getId)
+	
+	def _getNotConnectedConnector(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return [c for c in connectors if c.ConnectorType == ConnectorType.End and not c.IsConnected][0]
+	notConnectedConnector = property(_getNotConnectedConnector)
+	
+	def getLocationStartedAt(self, connector) :
+		location = self.Location.Curve
+		if location.GetEndPoint(0).DistanceTo(connector.Origin)\
+			< location.GetEndPoint(1).DistanceTo(connector.Origin) :
+			return location
+		else :
+			return location.CreateReversed() 
+	
+	def getAnotherConnector(self, connector) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		for connector2 in connectors :
+			if connector2.ConnectorType == ConnectorType.End and connector2.Id != connector.Id :
+				return connector2
+				
+	def _getConnectors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return connectors
+	Connectors = property(_getConnectors)
+	
+	def getConnectorConnectedTo(self, other) :
+		#Возвращает коннектор к которому подключен элемент other
+		for connector in self.Connectors :
+			for connector2 in connector.AllRefs :
+				if connector2.Owner.Id == other.Id :
+					return connector, connector2
+	
+	def _getEndConnectors(self) :
+		return [connector for connector in self.Connectors if connector.ConnectorType == ConnectorType.End]
+	EndConnectors = property(_getEndConnectors)
+		
+	def nearestConnector(self, connector1) :
+		return min(self.EndConnectors, key = lambda x : x.Origin.DistanceTo(connector1.Origin))
+		
+	def connectToPipe(self, pipe2) :
+		ec10, ec11 = self.EndConnectors
+		ec20, ec21 = pipe2.EndConnectors
+		
+		c1, c2 = min(itertools.product(self.EndConnectors, pipe2.EndConnectors), 
+						key = lambda x : x[0].Origin.DistanceTo(x[1].Origin))
+		doc.Create.NewElbowFitting(c1, c2)
+	def _checkIfControlValve(self) :
+		return self.element.LookupParameter("ADSK_Группирование").AsString() == "11_Узлы управления"
+	IsControlValve = property(_checkIfControlValve)
+	def _checkIfSprinkler(self) :
+		return self.element.Category.Id.IntegerValue == int(bic.OST_Sprinklers)
+	IsSprinkler = property(_checkIfSprinkler)
+	
+	def _checkIfPipe(self) :
+		return self.element.Category.Id.IntegerValue == int(bic.OST_PipeCurves)
+	IsPipe = property(_checkIfPipe)
+	
+	def _checkIfTee(self) :
+		return self.element.Category.Id.IntegerValue == int(bic.OST_PipeFitting)\
+				and self.element.MEPModel.PartType == PartType.Tee
+	IsTee = property(_checkIfTee)
+	
+	def _checkIfElbow(self) :
+		return self.element.Category.Id.IntegerValue == int(bic.OST_PipeFitting)\
+				and self.element.MEPModel.PartType == PartType.Elbow
+	IsElbow = property(_checkIfElbow)
+	
+	def _checkInCalc(self) :
+		param = self.element.LookupParameter("DM_Спринклер_учитывать")
+		if param :
+			return bool(param.AsInteger())
+		else :
+			return False
+	InCalc = property(_checkInCalc)
+	
+	def _checkIfTarget(self) :
+		param = self.element.LookupParameter("DM_Спринклер_диктующий")
+		if param :
+			return bool(param.AsInteger())
+		else :
+			return False
+	IsTarget = property(_checkIfTarget)
+	
+	
+	def _getDiameter(self) :
+		if self.IsPipe :
+			return self.element.Diameter
+		else : return self.EndConnectors[0].Radius * 2
+	Diameter = property(_getDiameter)
+	
+	def _getLength(self) :
+		if self.IsPipe :
+			return self.element.Location.Curve.Length
+		elif self.element.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+			return eqLengths[self.element.MEPModel.PartType][self.Diameter]
+		elif self.IsControlValve :
+			return eqLengths["Клапан"][self.Diameter]
+	Length = property(_getLength)
+	
+	def _getK(self) :
+		if not self.IsSprinkler : return
+		return self.element.LookupParameter("DM_Коэффициент расхода").AsDouble()
+	K = property(_getK)
+	
+	def calcFlow(self) :
+		if self.IsSprinkler :
+			self.flowIn = 10 * self.K * (self.pressureIn) ** 0.5
+			doc = self.element.Document
+			tr = None
+			if not doc.IsModifiable :
+				tr = Transaction(doc, "Расчет расхода спринклер")
+				tr.Start()
+			param = self.element.LookupParameter("DM_Расход_спринклера")
+			if param : param.Set(self.flowIn)
+			param = self.element.LookupParameter("DM_Давление_на_входе")
+			if param : param.Set(self.pressureIn)
+			if tr : tr.Commit()
+		elif self.IsPipe or self.IsElbow :
+			self.flowOut = self.next.flowIn
+			self.flowIn = self.flowOut
+			self.pressureOut = self.next.pressureIn
+		elif self.IsTee and self.sprinklerToBalance :
+			self.flowOut = self.next.flowIn
+			self.flowOut1 = self.next1.flowIn
+			self.flowIn = self.flowOut + self.flowOut1
+		elif self.IsTee and not self.sprinklerToBalance :
+			self.flowOut = self.next.flowIn
+			self.flowIn = self.flowOut
+		else :
+			print(f"расчет потока для  {self}")
+			self.flowOut = self.next.flowIn
+			self.flowIn = self.flowOut
+			
+
+		
+		doc = self.element.Document
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Расчет расхода трубы")
+			tr.Start()
+		param = self.element.LookupParameter("DM_Эквивалентная_длина")
+		if param : param.Set(self.Length)
+		param = self.element.LookupParameter("DM_Давление_на_входе")
+		if param : param.Set(self.pressureIn)
+
+		param = self.element.LookupParameter("DM_Расход_на_входе")
+		if param : param.Set(self.flowIn)
+		param = self.element.LookupParameter("DM_К_трубы")
+		if param : param.Set(pipeK[self.Diameter])
+		param = self.element.LookupParameter("DM_Номер_элемента")
+		if param : param.Set(self.elementPos)
+		if tr : tr.Commit()
+			
+		return self.flowIn
+		
+	def calcDisbalance(self) :
+		if self.IsTee and self.sprinklerToBalance :
+			pressureDrop = self.flowOut ** 2 * eq_len / 100 / pipeK[self.nextConnector.Radius * 2]
+			staticHeight = (self.nextConnector.Origin.Z - self.prevConnector.Origin.Z) / dut / 1000 / 100
+			
+			pressureDrop1 = self.flowOut1 ** 2 * eq_len / 100 / pipeK[self.next1Connector.Radius * 2]
+			staticHeight1 = (self.next1Connector.Origin.Z - self.prevConnector.Origin.Z) / dut / 1000 / 100
+			
+			self.pressureIn = self.pressureOut - pressureDrop + staticHeight
+			self.pressureOut1 = self.next1.pressureIn 
+			pressureIn1 = self.pressureOut1 - pressureDrop1 + staticHeight1
+			
+			self.disbalance = self.pressureIn - pressureIn1
+		
+			return self.disbalance
+		
+
+	
+	def calcPressureDrop(self) :
+		pressureDrop = 0
+		
+		if self.IsSprinkler : return 0
+		
+		eq_len = self.Length /dut/1000
+
+		if self.IsTee and self.sprinklerToBalance :
+			print("тройник который надо отбалансировать")
+			self.pressureDrop = self.flowOut ** 2 * eq_len / 100 / pipeK[self.nextConnector.Radius * 2]
+			staticHeight = (self.nextConnector.Origin.Z - self.prevConnector.Origin.Z) / dut / 1000 / 100
+			self.pressureOut = self.next.pressureIn
+			self.pressureDrop1 = self.flowOut1 ** 2 * eq_len / 100 / pipeK[self.next1Connector.Radius * 2]
+			staticHeight1 = (self.next1Connector.Origin.Z - self.prevConnector.Origin.Z) / dut / 1000 / 100
+			
+			self.pressureIn = self.pressureOut + self.pressureDrop + staticHeight
+			self.pressureOut1 = self.next1.pressureIn
+			self.pressureIn1 = self.pressureOut1 + self.pressureDrop1 + staticHeight1
+			self.disbalance = self.pressureIn - self.pressureIn1	
+			
+		elif self.IsControlValve :
+			print("Расчет узла управления")
+			try :
+				self.pressureDrop = self.flowIn ** 2 * eq_len / 100 /pipeK[self.Diameter]
+				staticHeight = 0
+				
+				self.pressureOut = self.next.pressureIn
+				self.pressureIn = self.next.pressureIn + self.pressureDrop + staticHeight
+			except :
+				print("ошибка при расчете узла управления")
+			
+		else :
+			self.pressureDrop = self.flowIn ** 2 * eq_len / 100 /pipeK[self.nextConnector.Radius * 2]
+			staticHeight = (self.nextConnector.Origin.Z - self.prevConnector.Origin.Z) / dut / 1000 / 100
+			
+			self.pressureOut = self.next.pressureIn
+			self.pressureIn = self.next.pressureIn + self.pressureDrop + staticHeight
+			
+		
+		doc = self.element.Document
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Расчет расхода трубы")
+			tr.Start()
+		param = self.element.LookupParameter("DM_Эквивалентная_длина")
+		if param : param.Set(eq_len)
+		param = self.element.LookupParameter("DM_Давление_на_входе")
+		if param : param.Set(self.pressureIn)
+		param = self.element.LookupParameter("DM_Потеря_по_длине")
+		if param : param.Set(self.pressureDrop)
+		param = self.element.LookupParameter("DM_Потеря_по_высоте")
+		if param : param.Set(staticHeight)
+		param = self.element.LookupParameter("DM_Расход_на_входе")
+		if param : param.Set(self.flowIn)
+		param = self.element.LookupParameter("DM_К_трубы")
+		if param : param.Set(pipeK[self.Diameter])
+		param = self.element.LookupParameter("DM_Номер_элемента")
+		if param : param.Set(self.elementPos)
+		if tr : tr.Commit()
+			
+		return pressureDrop
+		
+	def doPrecalcPressureDrop(self) :
+		pressureDrop = 0
+		
+		if self.IsSprinkler : 
+			pressureDrop = 0
+	
+		
+		eq_len = self.Length/dut/1000
+
+		if self.IsPipe :
+			pressureDrop = self.flowIn ** 2 * eq_len / 100 /pipeK[self.Diameter]
+			self.pressureIn = self.pressureOut + pressureDrop
+			
+
+		doc = self.element.Document
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Расчет расхода трубы")
+			tr.Start()
+		param = self.element.LookupParameter("DM_Эквивалентная_длина")
+		if param : param.Set(eq_len)
+		param = self.element.LookupParameter("DM_Давление_на_входе")
+		if param : param.Set(self.pressureIn)
+		param = self.element.LookupParameter("DM_Потеря_по_длине")
+		if param : param.Set(pressureDrop)
+
+		param = self.element.LookupParameter("DM_Расход_на_входе")
+		if param : param.Set(self.flowIn)
+		param = self.element.LookupParameter("DM_К_трубы")
+		if param : param.Set(pipeK[self.Diameter])
+		param = self.element.LookupParameter("DM_Номер_элемента")
+		if param : param.Set(self.elementPos)
+		if tr : tr.Commit()
+			
+		return pressureDrop
+		
+			
+			
+	def sprinklerPrecalc(self, minPressure) :
+		current = self
+		i = 0
+		dp = 0
+		self.pressureIn = minPressure
+		Q = self.calcFlow()
+		
+		while current :
+			i += 1
+			print(f"Труба = {current.IsPipe}, {current}")
+			if current.IsPipe :
+				print(f"Труба")
+				print(f"d = {current.Diameter/dut/1000}")
+				print(f"l = {current.Length/dut/1000:.3f}")
+				current.flowIn = Q
+				pressureDrop = current.doPrecalcPressureDrop()
+				print(f"pressure drop = {pressureDrop}")
+				dp += pressureDrop
+	
+			if i >10000 : raise
+			if current.IsControlValve :
+				dh = (self.Location.Point.Z - current.Location.Point.Z) / dut / 1000 / 100
+				print("Дошел до узла управления")
+				print(f"Потеря по длине {dp} МПа")
+				print(f"Гидростатическая высота спринклера {dh}м, пьезометрическое давление {dh/ 100}")
+				self.precalcPressureDrop = dp + dh
+				
+				doc = self.element.Document
+				tr = None
+				if not doc.IsModifiable :
+					tr = Transaction(doc, "Расчет расхода трубы")
+					tr.Start()
+				param = self.element.LookupParameter("DM_Предварительный_расчет_потери")
+				if param : param.Set(self.precalcPressureDrop)
+
+				if tr : tr.Commit()
+				return pressureDrop
+				
+				return
+			prev = current.prev
+			current = prev
+			
+			
+			
+			
+			
+	
+class dmHydraulicNet :
+	def __init__(self, controlValve, minPressure) :
+		self.controlValve = controlValve
+		self.minPressure = minPressure
+		
+	def _getSprinklers(self) :
+		toVisit = deque([self.controlValve])
+		visited = set()
+		i = 0 
+		sprinklers = []
+		while toVisit :
+			i += 1
+			if i > 10000 : print("Зацикливание"); raise
+			
+			current = toVisit.popleft()
+			visited.add(current)
+			#print(current)
+			#print(f"количество ")
+			if current.IsSprinkler and current.InCalc:
+				sprinklers.append(current)
+			for next in current.neighbors :
+				#print(next)
+				#print(f"{28*'*'}\n{next}\nprev = {next.prev}\n{28*'*'}")
+				if not next in visited :
+					next.prev = current
+					toVisit.append(next)
+		return sprinklers
+	def _getPipeworkElements(self) :
+		self._pipeworkElements = []
+		toVisit = deque([self.controlValve])
+		visited = set()
+		while toVisit :
+			current = toVisit.popleft()
+			visited.add(current)
+			for next in current.neighbors :
+				if not next in visited :
+					self._pipeworkElements.append(next)
+					toVisit.append(next)
+		return self._pipeworkElements
+					
+	pipeworkElements = property(_getPipeworkElements)
+
+	Sprinklers = property(_getSprinklers)
+	
+	def prepareElements(self) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "подготовка элементов для гидравлического расчета")
+			tr.Start()
+			
+		for element in self.pipeworkElements :
+			print(element)
+			param = element.element.LookupParameter("DM_Номер_элемента")
+			if param : param.Set(-1)
+		if tr :
+			tr.Commit()
+	
+	def doPrecalc(self) :
+		self.prepareElements()
+		for sprinkler in self.Sprinklers :
+			sprinkler.sprinklerPrecalc(self.minPressure)
+			
+	def _getFartherstSprinkler(self) :
+		self.doPrecalc()
+		return max(self.Sprinklers, key = lambda x : x.precalcPressureDrop)
+	fartherstSprinkler = property(_getFartherstSprinkler)
+	
+	def _getTargetSprinkler(self) :
+		for sprinkler in self.pipeworkElements :
+			if sprinkler.IsTarget : return sprinkler
+			
+	targetSprinkler = property(_getTargetSprinkler)
+	
+	def prepareCalcTree(self) :
+		#сбрасываем 
+		for element in self.pipeworkElements :
+			element.sprinklersPath = set()
+		for sprinkler in self.Sprinklers :
+			current = sprinkler
+			i = 0
+			while current :
+				i += 1
+				if i > 10000 : raise
+				current.sprinklersPath.add(sprinkler)
+				current = current.prev
+				if current.IsControlValve : break
+				
+		#startSprinkler = max(self.Sprinklers, key = lambda x : x.precalcPressureDrop)
+		startSprinkler = self.targetSprinkler
+		takenSprinklers = set([startSprinkler])
+		current = startSprinkler.prev
+		next = startSprinkler
+		branchStart = None
+		branchStack = []
+		i = 0
+		print(20*"-")
+		print("Строим обход")
+		print(startSprinkler)
+		sprinklerToBalance = startSprinkler
+		next.elementPos = 1	
+		i = 1
+		pos = 1
+		while current :
+			i += 1
+			if i > 10000 : print("зацикливание при построении дерева обхода");raise
+			
+			if current.sprinklerToBalance == sprinklerToBalance :
+				print(f"найдено ответвление и надо его пройти {current}")
+				print(f"next = {next}")
+				# если пройдена ветка и вернулись на узел ответвления.
+				current.next1 = next
+				next.prev = current
+				current.next1Connector, next.prevConnector = current.getConnectorConnectedTo(next)
+				sprinklerToBalance = branchStack.pop()
+				next = current
+				current = current.prev
+				#raise
+				continue
+			else :
+				print(f"обычный узел {current}")
+				# Это вариант если это обычный проходной узел либо проходим на ответвление первый раз
+				pos += 1
+				current.elementPos = pos
+				
+				current.next = next
+				next.prev = current
+				current.nextConnector, next.prevConnector = current.getConnectorConnectedTo(next)
+				
+				
+			# Проверка, нет ли ответвления в этом узле, то есть будет понятно, что в этом узле добавлились спринклеры
+			
+			additionalSprinklers = current.sprinklersPath.difference(takenSprinklers)	
+			if additionalSprinklers :
+				#Это значит что в этом элементе присоединяется ветка
+				print("Найдено ответвление")
+				print(f"Новые спринклеры \n{additionalSprinklers}\n{20*'*'}")
+				current.next = next
+				current.nextConnector, next.prevConnector = current.getConnectorConnectedTo(next)
+				branchStack.append(sprinklerToBalance)
+				print(f"branchStack = {branchStack}")
+				print(f"sprinklerToBalance = {sprinklerToBalance}")
+				sprinklerToBalance = max(additionalSprinklers, key =lambda x : x.precalcPressureDrop)
+				print(f"sprinklerToBalance = {sprinklerToBalance}")
+				takenSprinklers.add(sprinklerToBalance)
+				print(f"takenSprinklers = {takenSprinklers}")
+				current.sprinklerToBalance = sprinklerToBalance
+				
+				current = sprinklerToBalance.prev
+				next = sprinklerToBalance
+				pos += 1
+				next.elementPos = pos
+				
+				continue
+			else :
+				next = current
+				current = current.prev
+				#if current is None : continue
+				
+				#Переходим 
+				
+	def doCalc(self) :
+		#Выполнение расчета по графу
+		self.current = max(self.Sprinklers, key = lambda x : x.precalcPressureDrop)
+		self.current = self.targetSprinkler
+		i = 0
+		print(20*"*")
+		print("выполняем расчет")
+		
+		while self.current :
+			i += 1
+			
+			if i > 50000 : print("зацикливание при расчете"); raise
+			
+			
+			
+			print(f"{self.current}")
+			
+			print(1)
+			self.current.calcFlow()
+			print(2)
+			self.current.calcPressureDrop()
+			print(3)
+			if self.current.Id.IntegerValue == -1045717 :
+				print("Запрошенный элемент")
+				raise
+				
+			if self.current.sprinklerToBalance  :
+				print(f"Узел {self.current}\nдисбаланс {self.current.disbalance}")
+				if self.current.passNum == 0 :
+					print(f"расчет на ответвление {self.current} первый раз")
+					print(f"расчет на ответвление {self.current.sprinklerToBalance} первый раз")
+					self.current.sprinklerToBalance.pressureIn = self.minPressure	
+					self.current.passNum += 1
+					#self.current.sprinklerToBalance.elementPos = self.current.elementPos + 1
+					self.current = self.current.sprinklerToBalance
+					continue	
+				else :
+					if abs(self.current.disbalance) > maxDisbalance :
+						print("корректируем давление")
+						print(f"Давление на спринклере {self.current.sprinklerToBalance.pressureIn}")
+						correction_abs = min(abs(self.current.disbalance * 0.7), 0.01)
+						correction = math.copysign(correction_abs, self.current.disbalance)
+						self.current.sprinklerToBalance.pressureIn = self.current.sprinklerToBalance.pressureIn + correction
+							
+						if self.current.sprinklerToBalance.pressureIn > 20  or self.current.sprinklerToBalance.pressureIn < 0.05:
+							print("На спринклере некорректное давление")
+							print(f"давление на спринклере {self.current.sprinklerToBalance.pressureIn}, проход {self.current.passNum+1}")
+							raise
+						print(f"новое давление на спринклере {self.current.sprinklerToBalance.pressureIn}, проход {self.current.passNum+1}")
+						self.current.passNum += 1
+						self.current = self.current.sprinklerToBalance
+						continue
+					else :
+						print(f"Уравновесили {self.current}, количество проходов {self.current.passNum}")
+						
+						self.current.passNum = 0
+						
+					
+			
+			
+			print("переходим дальше")
+			#if self.current.prev and self.current.prev.elementPos < 1 :
+			#	self.current.prev.elementPos = self.current.elementPos + 1
+			self.current = self.current.prev
+		print(f"Выполнено за {i} итераций")
+				
+				
+		
+		
+class dmDocument :
+	def __init__(self, doc) :
+		self.doc = doc
+	def _getSprinklers(self) :
+		fc = FilteredElementCollector(self.doc)\
+			.OfCategory(bic.OST_Sprinklers).WhereElementIsNotElementType().ToElements()
+		return fc
+	Sprinklers = property(_getSprinklers)
+	def _getControlValves(self) :
+		flt = ElementMulticategoryFilter(System.Array[bic]([
+			bic.OST_PipeAccessory, bic.OST_MechanicalEquipment]))
+		elements = [GetElement(e) for e in FilteredElementCollector(self.doc)\
+			.WherePasses(flt).WhereElementIsNotElementType().ToElements()]
+		controls = filter(lambda x : x.IsControlValve, elements)
+		return list(controls)
+	ControlValves = property(_getControlValves)
+		
+		
+dmDoc = dmDocument(doc) 
+sprinklers = dmDoc.Sprinklers
+
+sprinklerK 	= 0.72
+minIntensy	= 0.18 #Минимальная интенсивность орошения
+minArea 	= 12
+minSprinklerFlow 	= 1.3 * minIntensy * minArea
+minPressure 		= (minSprinklerFlow / 10 / sprinklerK) ** 2
+calc = dmHydraulicNet(dmDoc.ControlValves[0], minPressure = minPressure)
+print(f"Расход диктующего оросителя = {minSprinklerFlow}")
+print(f"Давление диктующего оросителя = {minPressure}")
+
+tr = Transaction(doc, "Гидравлический расчет")
+tr.Start()
+
+dictSprinkler = calc.fartherstSprinkler
+calc.prepareCalcTree()
+calc.doCalc()
+tr.Commit()
+
+

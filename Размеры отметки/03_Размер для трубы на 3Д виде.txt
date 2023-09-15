@@ -1,0 +1,64 @@
+"""
+Создание размера для трубы на 3Д виде
+"""
+from Autodesk.Revit import *
+dut = UnitUtils.ConvertToInternalUnits(1,UnitTypeId.Millimeters) 
+
+class dmPipeDim :
+	def __init__(self, e) :
+		self.e = e
+	def create_dim(self) :
+		av = uidoc.ActiveView
+		lc = self.e.Location.Curve
+		c = list(self.e.ConnectorManager.Connectors)[0]
+		
+		lc2 = lc.CreateOffset(10 * dut * av.Scale, c.CoordinateSystem.BasisY)
+		
+		plane = Plane.CreateByOriginAndBasis(c.Origin, c.CoordinateSystem.BasisZ, c.CoordinateSystem.BasisX)
+		opt = Options()
+		opt.ComputeReferences = True
+		opt.View = uidoc.ActiveView
+		opt.IncludeNonVisibleObjects = True
+		
+		g = self.e.Geometry[opt]
+		
+		self.lines = []
+		
+		for ge in g :
+			print(ge)
+			if type(ge) == Line :
+				self.lines.append(ge)
+				print(ge.Length)
+
+				
+		tr = Transaction(doc, "ad sketch plane")
+		tr.Start()
+		sk_plane = SketchPlane.Create(doc, plane)
+		uidoc.ActiveView.SketchPlane = sk_plane
+		
+		for self.ge in self.lines :
+
+
+			self.r1 = self.ge.GetEndPointReference(0)
+			self.r2 = self.ge.GetEndPointReference(1)
+			
+			
+			self.ar = ReferenceArray()
+			self.ar.Append(self.r1)
+			self.ar.Append(self.r2)
+				
+			try :
+				doc.Create.NewDimension(av, lc2, self.ar)
+				print("+")
+				break
+			except :
+				print("-")
+			
+		tr.Commit()
+
+
+
+pipe_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe = dmPipeDim(doc.GetElement(pipe_ref))
+pipe.create_dim()
+

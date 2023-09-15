@@ -1,0 +1,27 @@
+room = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element).ElementId)
+g1= room.Geometry[Options()]
+print(room.Id)
+s1 = list(g1)[0]
+f2 = [f for f in s1.Faces if f.FaceNormal.Z < -.9][0]
+loo = f2.GetEdgesAsCurveLoops()
+
+pgs1  = []
+for l in list(loo)[:] :
+	crd1 = []
+	print(len(list(l)))
+	
+	for cl in l :
+		p = cl.GetEndPoint(0)
+		crd1.append((p.X, p.Y))
+		
+	pgs1.append(crd1)
+	
+print(pgs1)
+import json
+
+with open(r"d:\2.json", 'w') as f :
+	json.dump(pgs1, f)
+	
+		
+	
+	

@@ -1,0 +1,48 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+import clr
+import System
+import sys
+from System.Collections.Generic import IList, List
+from imp import reload
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+    sys.path.append(lib_path)
+
+dut = 0.0032808398950131233
+#dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+
+try :
+	reload(dm)
+	print("перезагрузили")
+except Exception as ex:
+	print("ошибка при загрузке")
+	print(ex)
+	import dmSetGrid as dm
+
+
+import random	
+
+av = dm.dmView(uidoc.ActiveView)
+
+bl = av[2]
+
+av.resetGridBubbles()
+av.showHideGridBubbles()
+av.alignGridEnds(30*dut)
+av.alignGridBubbles()
+av.createDimensions()
+
+if False :
+	app = dm.dmApp4Views()
+	
+	for v in app.getViewsStartsWith("О_ПТ_Этаж -01_-3.490 -") :
+		print(v.view.Name)
+		v.showHideGridBubbles()		
+		v.alignGridEnds(30*dut)
+		v.resetGridBubbles()
+		v.alignGridBubbles()
+	
+

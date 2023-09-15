@@ -1,0 +1,135 @@
+import System
+class dmViewCropLine :
+	def __init__(self, dmview, l) :
+		self.dmview = dmview
+		self.l = l
+	def sect_axes(self) :
+		_p0 = self.l.GetEndPoint(0)
+		_p1 = self.l.GetEndPoint(1)
+		p0, p1 = XYZ(_p0.X, _p0.Y, 0),  XYZ(_p1.X, _p1.Y, 0)
+		l10 = Line.CreateBound(p0, p1)
+		
+		for a in self.dmview.get_visible_axes() :
+			l1 = a.visible_line
+			_p20, _p21 = l1.GetEndPoint(0), l1.GetEndPoint(1)
+			p20, p21 = XYZ(_p20.X, _p20.Y, 0), XYZ(_p21.X, _p21.Y,0)
+			l20 = Line.CreateBound(p20, p21)
+			ir = l10.Intersect(l20)
+			if ir == SetComparisonResult.Overlap :
+				yield a
+				
+	def _get_dim_style(self) :
+		fc = {Element.Name.GetValue(e) : e for e in FilteredElementCollector(doc).OfClass(DimensionType).ToElements()}
+		return fc["Осевые"]
+		
+				
+	def make_dimension(self) :
+		dt = self._get_dim_style()
+		self.opt = Options()
+		self.opt.ComputeReferences = True
+		self.opt.View = self.dmview.view
+		self.refs = ReferenceArray()
+		for self.a in self.sect_axes() :
+			self.refs.Append(self.a.reference)
+		sp = self.l.GetEndPoint(0)
+		
+		if self.refs.Size < 2 : return
+		
+		
+			
+		start = min(self.sect_axes(), key = lambda x :x.distance(sp))
+		end = max(self.sect_axes(), key = lambda x : x.distance(sp))
+		
+		
+			
+		_ov = self.l.Direction
+		ov = XYZ(_ov.Y, -_ov.X,0)
+		ov = -XYZ.BasisZ
+		l2 = self.l.CreateOffset(5 * dut * self.dmview.view.Scale, ov)
+		l3 = self.l.CreateOffset(10 * dut * self.dmview.view.Scale, ov)
+		
+		self.refs2 = ReferenceArray()
+		self.refs2.Append(start.reference)
+		self.refs2.Append(end.reference)
+		
+		print(self.l.GetEndPoint(0))
+		print(l2.GetEndPoint(0))
+		tr = Transaction(doc)
+		tr.Start("add dimension")
+		doc.Create.NewDimension(self.dmview.view, l2, self.refs, dt)
+		doc.Create.NewDimension(self.dmview.view, l3, self.refs2, dt)
+		
+		tr.Commit()
+					
+			
+
+			
+class dmView :
+	def __init__(self, view) :
+		self.view = view
+	def _get_crop_lines(self) :
+		cm = self.view.GetCropRegionShapeManager()
+		for cl in cm.GetCropShape() :	
+			for l in cl :
+				yield dmViewCropLine(self, l)
+	def get_crop_lines(self) :
+		return list(self._get_crop_lines())
+		
+	def draw_crop_lines(self) :
+		tr = Transaction(doc)
+		tr.Start("draw crop lines")
+		for cl in self.get_crop_lines() :
+			for l in cl :
+				doc.Create.NewDetailCurve(self.view, l)
+				print(l.GetEndPoint(0)/dut, l.GetEndPoint(1)/dut)
+		tr.Commit()
+				
+		
+	def get_visible_axes(self) :
+		fc = FilteredElementCollector(self.view.Document, self.view.Id).OfClass(Grid).ToElements()
+		return [dmAxis(e, self) for e in fc]
+		
+class dmAxis :
+	def __init__(self, axis,view = None) :
+		self.axis = axis
+		self.view = view
+	def __repr__(self) :
+		return "Ось {}".format(self.axis.Name)
+		
+	def get_bubble_size(self) :
+		at = doc.GetElement(self.axis.GetTypeId())
+		bt = doc.GetElement(at.LookupParameter("Обозначение").AsElementId())
+		bb = bt.get_BoundingBox(None)
+		w = abs(bb.Max.X - bb.Min.X)
+		return w
+	def _get_visible_line(self) :
+		return self.axis.GetCurvesInView(DatumExtentType.ViewSpecific, self.view.view)[0]
+	visible_line = property(_get_visible_line)
+	def distance(self, p) :
+		return self.visible_line.Distance(p)
+	def _get_reference(self) :
+		opt = Options()
+		opt.View = self.view.view
+		opt.ComputeReferences= True
+		for l in self.axis.Geometry[opt] :
+			if type(l) == Line :
+				return l.Reference
+	reference = property(_get_reference)
+	def draw_line(self) :
+		l = self.axis.GetCurvesInView(DatumExtentType.ViewSpecific, self.view.view)[0]
+		print(l.GetEndPoint(0)/ dut, l.GetEndPoint(1) / dut)
+		tr = Transaction(doc)
+		tr.Start("Draw axes")
+		doc.Create.NewDetailCurve(self.view.view, l)
+		tr.Commit()
+import Autodesk.Revit.DB as DB		
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+v = dmView(uidoc.ActiveView)
+
+
+for cl in v.get_crop_lines() :
+	cl.make_dimension()
+
+
+
+

@@ -1,0 +1,73 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+from Autodesk.Revit.DB import *
+import re
+import math
+
+#import pyrevit
+import sys
+#from pyrevit import forms
+import time 
+
+libfld = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+
+if not libfld in sys.path :
+	sys.path.append(libfld)
+	
+from imp import reload
+
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+#from dmRevitClasses import *
+
+__doc__ = """
+Разделить трубопроводную систему по арматруе. 
+Арматура или оборудование отсоединяется от присоединенных трубопроводов и трубопроводная система
+разделяется. Аборудование исключается из всех систем. 
+"""
+def uv2xyz(uv, plane) :
+	return plane.Origin \
+					+ plane.XVec * uv.U \
+					+ plane.YVec * uv.V
+					
+import System
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+dut = 0.0032808398950131233
+
+pipe = dm.pickElement()
+hole = dm.pickElement()
+lc1 = pipe.e.Location.Curve
+holeLocationPoint = hole.e.Location.Point
+
+plane = Plane.CreateByNormalAndOrigin(uidoc.ActiveView.ViewDirection, hole.e.Location.Point)
+p0UV, p1UV = plane.Project(lc1.GetEndPoint(0))[0], plane.Project(lc1.GetEndPoint(1))[0]
+p0, p1 = uv2xyz(p0UV, plane), uv2xyz(p1UV, plane)
+lc2 = Line.CreateBound(p0, p1)
+lc2Angle = math.atan2(lc2.Direction.Y, lc2.Direction.X)
+holeLevel = doc.GetElement(hole.e.LevelId)
+holeLevelElevation = holeLevel.Elevation
+
+holeNearestPoint = lc2.Project(holeLocationPoint).XYZPoint
+holeNearestPointPipe = lc1.Project(holeLocationPoint).XYZPoint
+
+print(holeNearestPoint)
+print(holeLocationPoint)
+print(holeNearestPoint-holeLocationPoint)
+dVec = holeNearestPoint-holeLocationPoint
+holeWidth = math.ceil((pipe.e.Diameter / dut + 400) / 100) * dut * 100
+holeHeight = math.ceil((pipe.e.Diameter / dut + 400) / 100) * dut * 100
+holeElevation = holeNearestPointPipe.Z - holeLevelElevation - holeHeight / 2
+dAngle = lc2Angle-hole.e.Location.Rotation + math.pi / 2
+rAxis = Line.CreateUnbound(hole.e.Location.Point, XYZ.BasisZ)
+
+with dm.trans() :
+	hole.e.Location.Rotate(rAxis, dAngle)
+	hole.e.Location.Move(dVec)
+	hole.Set("О_Отверстие (Ширина)", holeWidth)
+	hole.Set("О_Отверстие (Высота)", holeHeight)
+	hole.Set("АРн_Отверстие_Отметка от этажа", holeElevation)
+	
+	

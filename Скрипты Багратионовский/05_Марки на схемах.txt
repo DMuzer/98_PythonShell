@@ -1,0 +1,137 @@
+import Autodesk.Revit.UI as UI
+
+uidoc = uidoc.Application.ActiveUIDocument
+doc = uidoc.Document
+power_coef = 10.7639104167
+
+def get_ugo_types() :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericAnnotation).WhereElementIsElementType().ToElements()
+	res = {}
+	for e in fc :
+		#print(Element.Name.GetValue(e))
+		name = Element.Name.GetValue(e)
+		if name.StartsWith("Схема") :
+			res[name] = e
+			
+	return res
+			
+
+
+def get_power_table() :
+	types = get_ugo_types()
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_NurseCallDevices).WhereElementIsNotElementType().ToElements()
+	res = {}
+	for e in fc :
+		mark = e.LookupParameter("Марка").AsString()
+		if not mark.Contains("BIAD") : continue
+		
+		power = e.LookupParameter("ADSK_Полная мощность").AsDouble() / power_coef
+		
+		el_type = doc.GetElement(e.GetTypeId())
+		el_type_name = Element.Name.GetValue(el_type)
+		#print(Element.Name.GetValue(el_type))
+		
+		res[mark] = {"power" : power,
+						"type" : e.GetTypeId()
+		}
+		
+		if el_type_name == "Речевой оповещатель PC-648R" :
+			res[mark]['type'] = types["Схема_потолочный"]
+		elif el_type_name == "BS-633-A" :
+			res[mark]['type'] = types["Схема_настенный"]
+		
+			
+		
+		
+		if mark == "BIAD.8.19" :
+			print("{} : {}".format(mark, power))
+			print(power)
+			print(e.Id)
+			print(e.GetTypeId())		
+	return res
+	
+	
+		
+		
+		
+		
+import re
+tr = Transaction(doc)
+
+power_table = get_power_table()
+#types = get_ugo_types()
+
+code = "BIAD.7."
+box_code = "XD.7."
+s_num = 1
+while True :
+	try :
+		e_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+		e = doc.GetElement(e_ref)
+		print(e.Category.Name)
+		
+		
+		if e.Category.Name == "Типовые аннотации" : 
+			tr.Start("change")
+			
+			ugo_code = "{}{}".format(code, s_num)
+			ugo_code_box = "{}{}".format(box_code, s_num)
+			
+			try :
+			
+				elem = power_table[ugo_code]
+			except :
+				continue
+			
+			e.ChangeTypeId(elem['type'].Id)
+			
+			e.LookupParameter("Марка_оповещателя").Set(ugo_code)
+			e.LookupParameter("Марка_коробки").Set(ugo_code_box)
+			e.LookupParameter("Мощность_оповещателя").Set(elem['power'])
+			
+			
+			tr.Commit()
+			
+			
+			
+		
+		elif e.Category.Name == "Текстовые примечания" :
+			tr.Start('renumber')
+			
+			prev = e.Text.split('.')
+			if len(prev) > 2 :
+				prev[-2] = "3"
+				pass
+			
+			prev[-1] = "{}".format(s_num)
+			
+			if e.Text.TrimEnd().EndsWith("*") :
+				prev[-1] += "*"
+			
+			text1 = ".".join(prev)
+			mark = "{}{}".format(code, s_num)
+			
+			if mark.Contains("BIAD") :
+				try :
+					power = power_table[mark]['power'] 
+				except :
+					power = 1
+				text1 = "{}{}\n{} Вт".format(code, s_num, power)
+			else :
+				text1 = "{}{}".format(code, s_num)
+				
+				
+			e.Text = text1
+			
+			if e.Width < 0.05 :
+				e.Width = 0.05
+			tr.Commit()
+			
+			
+		s_num += 1
+		
+
+	
+	except Exception as ex:
+		print(ex)
+		break

@@ -1,0 +1,116 @@
+"""
+***************************************************************
+*** Копирование и создание разделителей помещений
+*** 
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+lines = []
+levels = set()
+l_lines = []
+
+for lf in mapp.linked_files :
+	print(lf)
+	print(lf.Name)
+	if lf.Name == "СОЮЗ_Базовый_АК_R20_Стилобат.rvt : 133 : позиция <Не общедоступное>" :
+		print("пропускаем")
+		continue
+		
+	
+	ttrans = lf.GetTotalTransform()
+	ldoc = lf.GetLinkDocument()
+	if not ldoc :
+		continue
+	print(ldoc)
+
+	fc = FilteredElementCollector(ldoc).OfCategory(bic.OST_RoomSeparationLines).ToElements()
+
+	if len(fc) == 0 : continue
+	
+	for ln in fc :
+		try :
+			lev = ldoc.GetElement(ln.LevelId)
+			levname = lev.Name
+			
+			if not levname =="Этаж -1" : continue
+			print(lev.Name)
+			
+			lines.append((levname, ln))
+			
+			lc = ln.Location.Curve.CreateTransformed(ttrans)
+			l_lines.append(lc)
+
+		except Exception as ex:
+			
+			pass
+print(20*"-")
+
+ca = CurveArray()
+sk_plane = uidoc.ActiveView.SketchPlane
+
+tr = Transaction(doc)
+tr.Start("Add Space separators")
+for lc in l_lines :	
+	ca.Append(lc)
+	
+res = doc.Create.NewSpaceBoundaryLines(sk_plane, ca, uidoc.ActiveView)
+
+tr.Commit()
+
+res_id = [e.Id for e in res]
+	
+
+
+
+	
+
+	
+	

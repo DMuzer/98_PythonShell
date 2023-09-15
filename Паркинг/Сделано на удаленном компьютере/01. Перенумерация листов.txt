@@ -1,0 +1,102 @@
+class dmSheet :
+	def __init__(self, sheet) :
+		self.sheet = sheet
+	def __repr__(self) :
+		return "{} : {}".format(self.sheet.SheetNumber, self.sheet.Name)
+	def set_number(self) :
+		try :
+			num = int(self.sheet.SheetNumber.split("-")[-1])
+			#self.sheet.LookupParameter("Номер листа N2").Set(int(num))
+			self.sheet.LookupParameter("Сквозной номер листа").Set(int(num))
+		except :
+			pass
+	def set_title_num(self) :
+		try :
+			num = int(self.sheet.SheetNumber.split("-")[-1])
+		except :
+			num = 1
+		flt = ElementCategoryFilter(BuiltInCategory.OST_TitleBlocks)
+		blocks = sorted(self.sheet.GetDependentElements(flt), key = lambda x : doc.GetElement(x).Location.Point.X)
+	
+		for eid in blocks[:1] :
+			self.e= doc.GetElement(eid)
+			self.e.LookupParameter("Номер листа N2").Set(str(num))
+			
+	def change_type(self) :
+		types_fc =  FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)
+		types_fc.WhereElementIsElementType().ToElements()
+		self.types = {Element.Name.GetValue(t) : t for t in types_fc}
+		self.target_type = self.types["Форма 3 произвольный номер"]
+		flt = ElementCategoryFilter(BuiltInCategory.OST_TitleBlocks)
+		tr = Transaction(doc)
+		blocks = sorted(self.sheet.GetDependentElements(flt), key = lambda x : doc.GetElement(x).Location.Point)
+		for eid in  blocks[:1]:
+			e = doc.GetElement(eid)
+			if e.GetTypeId() != self.target_type.Id :
+				try :
+					e.ChangeTypeId(self.target_type.Id)
+				except :
+					tr.Start("change sheet type")
+					e.ChangeTypeId(self.target_type.Id)
+					tr.Commit()
+			e.LookupParameter("Строка1_Дата").Set(1)
+			e.LookupParameter("Строка2_Дата").Set(1)
+			e.LookupParameter("Строка3_Дата").Set(0)
+			e.LookupParameter("Строка4_Дата").Set(0)
+			e.LookupParameter("Строка5_Дата").Set(1)
+			e.LookupParameter("Строка5_Дата").Set(1)
+			e.LookupParameter("Дата утверждения листа").Set("07.23")
+					
+		
+			
+		try :
+			self.sheet.LookupParameter("ADSK_Штамп Строка 1 фамилия").Set("Васильев")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 2 фамилия").Set("Нечаев")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 3 фамилия").Set("")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 4 фамилия").Set("")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 5 фамилия").Set("Бровкин")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 6 фамилия").Set("Астахов")
+		
+			
+			self.sheet.LookupParameter("ADSK_Штамп Строка 2 должность").Set("Проверил")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 3 должность").Set("")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 4 должность").Set("")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 5 должность").Set("Н.контр.")
+			self.sheet.LookupParameter("ADSK_Штамп Строка 6 должность").Set("ГИП")
+			
+		except Exception as  ex:
+			print("Ошибка установки параметров")
+			print(ex)
+
+		
+		
+"""
+dm_sheet = dmSheet(sheet)
+dm_sheet.change_type()
+
+raise
+			
+"""	
+		
+	
+
+fc = FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()
+
+
+
+#1-ПТ
+sheets_dict = {s.Name : s for s in fc if s.LookupParameter("Раздел проекта").AsString() == "АПТ.1"}
+sheets = sorted(sheets_dict.values(), key = lambda x : x.SheetNumber)
+
+tr  = Transaction(doc)
+tr.Start("перенумерация листов")
+sheet_num = 1
+for sheet in sheets :
+	dm_sheet = dmSheet(sheet)
+	dm_sheet.set_number()
+	dm_sheet.change_type()
+	dm_sheet.set_title_num()
+	
+	
+tr.Commit()
+

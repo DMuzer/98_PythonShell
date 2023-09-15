@@ -1,0 +1,261 @@
+"""
+**************************************************
+* Установка дренажных кранов на трубы
+****************************************************
+
+Установить название типоразмера для дренажного крана. 
+Семейство должно быть типа "Соединительные детали трубопроводов" тип  - Соединение
+"""
+
+DrainValveTypeName = "DM_Кран дренажный"
+
+
+
+import Autodesk.Revit.DB as DB
+import Autodesk.Revit.UI as UI
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+sel_els = UI.Selection.ObjectType.Element
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+app = dm.dmApp(doc)
+
+
+"""
+*********************************************************************
+* Выбор труб в проекте
+*********************************************************************
+"""
+
+def get_pipes() :
+	fc = FilteredElementCollector(doc).OfCategory(bic.OST_PipeCurves).ToElements()
+	return fc
+	
+def get_connected_parts(p) :
+	"""
+	Вычисляем и возвращает все подключенные к трубе элементы
+	
+	"""
+	conns = p.ConnectorManager.Connectors
+	
+	connected = []
+	
+	for c in conns :
+		for c1 in c.AllRefs :
+			if c1.Owner.Id != p.Id :
+				connected.append(c1.Owner)			
+	return connected
+	
+def get_connected_pipes(part, pipe_id) :
+	try :
+		try :
+			conns = part.ConnectorManager.Connectors
+		except :
+			conns = part.MEPModel.ConnectorManager.Connectors
+	except Exception as ex:
+		print(ex)
+	#print(conns)
+	try :
+		pipes = []	
+		for c1 in conns :
+			for c2 in c1.AllRefs :
+				if ((c2.Owner.Id != part.Id) 
+					and (c2.Owner.Id != pipe_id)
+					and (type(c2.Owner) == Plumbing.Pipe)) :
+						pipes.append(c2.Owner)
+	except Exception as ex :
+		print(ex)
+	return pipes
+		
+		
+def get_nearest_pipes(pipe) :
+	pipes = []
+	parts = get_connected_parts(pipe)
+	#print(parts)
+	for p in parts :
+		ps = get_connected_pipes(p, pipe.Id)
+		pipes.extend(ps)	
+	return pipes
+	
+	
+def pipe_is_nearest(pipe) :
+	low_point = pipe.LookupParameter("Нижняя отметка").AsDouble()
+	
+	pipes = get_nearest_pipes(pipe)
+	elevations = []
+	for p in pipes :
+		try :
+			elevations.append(p.LookupParameter("Нижняя отметка").AsDouble() )
+		except :
+			pass
+			
+	try :
+			
+		min_e = min(elevations)
+		
+		if min_e >  low_point :
+			return True
+		else :
+			return False
+	except Exception as ex:
+		print("Ошибка при поиске соседей, пустая последовательность...")
+		return True
+		
+		
+def add_drain_valve(pipe) :
+	lc = pipe.Location.Curve
+	p1 = lc.GetEndPoint(0)
+	p2 = lc.GetEndPoint(1)
+	
+	if p1.Z > p2.Z :
+		p0 = p2
+		d0 = p1 -p2
+	else :
+		p0 = p1
+		d0 = p2-p1
+	if lc.Lenght < 10 * pipe.Diameter :
+		p3 = p1 + (lc.Length * 0.5 * d0)
+	else :
+		p3 = p1 + (5 * pipe.Diameter * d0)
+		
+	pipe2_id = Plumbing.PlumbingUtils.BreakCurve(pipe.Document, pipe.Id, p3)
+	pipe2 = doc.GetElement(pipe2_id)
+	c1 = dm.get_nearest_end_connector(pipe, p3)
+	c2 = dm.get_nearest_end_connector(pipe2, p3)
+	
+
+"""
+*******************************************************
+* Находим нужное семейство для промывочного крана
+*******************************************************
+"""
+
+def get_drain_valve_type() :
+	fc = FilteredElementCollector(doc).OfCategory(bic.OST_PipeFitting).WhereElementIsElementType().ToElements()
+	d = {dm.en(e) : e for e in fc}
+	return d[DrainValveTypeName]
+	
+		
+	
+def get_nearest_connector(el, p) :
+	try :
+		conns = list(el.MEPModel.ConnectorManager.Connectors)
+		conns = sorted(conns, key = lambda x : x.Origin.DistanceTo(p))
+		return conns[0]
+	except :
+		return 
+	
+	
+	
+	
+	
+#pipes = get_pipes()
+#pipe_ref = uidoc.Selection.PickObject(sel_els)
+#pipe = doc.GetElement(pipe_ref.ElementId)
+#print(pipe_is_nearest(pipe))
+
+dr_type = get_drain_valve_type()
+def put_drain_valve(pipe, dr_type) :
+	"""
+		Устанавливает дренажный кран на трубу на нижнюю точку трубы
+	"""
+
+	lc = pipe.Location.Curve
+	p1 = lc.GetEndPoint(0)
+	p2 = lc.GetEndPoint(1)
+	if p1.Z <= p2.Z :
+		p0 = p1
+		d0 = lc.Direction
+	else :
+		p0 = p2
+		d0 = - lc.Direction
+	
+	if lc.Length > 5 * pipe.Diameter :
+		p3 = p0 + d0 * 5 * pipe.Diameter
+	else :
+		p3 = p0 + d0 * 0.5 * lc.Length
+	
+	with dm.trans(doc) :	
+		pipe2_id = Plumbing.PlumbingUtils.BreakCurve(doc, pipe.Id, p3)
+		pipe2 = doc.GetElement(pipe2_id)
+		c1 = dm.get_nearest_end_connector(pipe2, p3)
+		c2 = dm.get_nearest_end_connector(pipe, p3)
+		
+		conn1 = doc.Create.NewUnionFitting(c1, c2)
+		conn1.ChangeTypeId(dr_type.Id)
+		
+
+pipes1 = uidoc.Selection.GetElementIds()
+
+if pipes1.Count == 0 :
+	pipes1 = uidoc.Selection.PickObjects(sel_els)
+	
+pipes = []
+for p_ref in pipes1 :
+	el = doc.GetElement(p_ref)
+	if type(el) == Plumbing.Pipe :
+		pipes.append(el)
+		
+		
+def check_has_drain(pipe, dr_type) :
+	parts = get_connected_parts(pipe)
+	for p in parts :
+		if p.GetTypeId() == dr_type.Id :
+			return True
+	return False
+	
+		
+		
+for pipe in pipes :
+	if pipe_is_nearest(pipe) :
+		print("Да")
+		if check_has_drain(pipe, dr_type) :
+			print("Есть дренаж")
+		else :
+			print("Нет дренажа")
+			put_drain_valve(pipe, dr_type)
+	else :
+		pass
+		#print("Нет")
+print(len(pipes))
+
+#put_drain_valve(pipe, dr_type)
+	
+
+	
+	
+	
+
+

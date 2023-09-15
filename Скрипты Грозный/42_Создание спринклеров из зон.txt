@@ -1,0 +1,89 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sel0 = uidoc.Selection.GetElementIds()
+
+sel1=[]
+if len(sel0) > 0 :
+	sel1 = sel0
+	sel2 = []
+
+
+
+for e in sel1 :
+	e = doc.GetElement(e)
+	print(type(e))
+	if type(e) == FilledRegion :
+		sel2.append(e)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+app = dm.dmApp(doc)
+
+vn = app.views['Потолки для спринклеров'] 
+ls = app.detail_linestyles['ADSK_Сплошная_Синяя_4']
+frt = app._get_filled_region_types()["DM_Зона_орошения_спринклера"]
+
+
+max_step = 3000 * dut
+prot_radius = 3000*dut * 2 ** 0.5 / 2
+
+spr_types_col = FilteredElementCollector(doc).OfCategory(bic.OST_Sprinklers).WhereElementIsElementType().ToElements()
+
+sprinkler_types = dm.dm_dict({dm.en(e) : e for e in spr_types_col })
+#print(sprinkler_types)
+
+spr_type = sprinkler_types ["Вверх свободный в/н"]
+print(len(sel2))
+
+with dm.trans(doc) :
+	for fr in sel2 :
+		sp = dm.dm_FilledRegion(fr)
+		
+		spr = sp.create_sprinkler(trans=False)
+		
+		
+		"""
+		sp_params = sp.sprinkler_params
+		level = sp_params['level']
+		pnt = sp_params['XYZ']
+		
+		try :
+			spr = doc.Create.NewFamilyInstance(pnt, spr_type, level, nonstr)
+		except :
+			pass
+"""
+
+

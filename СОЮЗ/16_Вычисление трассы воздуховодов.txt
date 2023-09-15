@@ -1,0 +1,107 @@
+dut = 0.0032808398950131233
+
+margin_rel = False
+margin = 200 * dut
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+import dmRouting_01 as dm_rt
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+reload(dm_rt)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+OT = UI.Selection.ObjectType
+mapp = dm.dmApp(doc)
+
+class dmElement(object) :
+	def __init__(self, e) :
+		self.e = e
+		
+	def __repr__(self) :
+		return "{} : {}".format(self.e.Id, self.category_name)
+		
+	def _get_location(self) :
+		try :
+			return self.e.Location.Curve
+		except :
+			return self.e.Location.Point
+	location = property(_get_location)
+	
+	def _get_category(self) :
+	
+		try :
+			return self.e.Category.Name + " " + str(self.e.MEPModel.PartType)
+		except :
+			return self.e.Category.Name
+	category_name = property(_get_category)
+	
+	def _get_connected_elements(self) :
+		try :
+			conns = self.e.MEPModel.ConnectorManager.Connectors
+		except :
+			conns = self.e.ConnectorManager.Connectors
+			
+		res = []
+			
+		for c in conns :
+			#print(c.Domain)
+			#print(c.ConnectorType)
+			if c.ConnectorType != ConnectorType.End : continue
+			
+			for c1 in c.AllRefs :
+				if not c1.Domain in [Domain.DomainHvac,  Domain.DomainPiping] :
+					continue
+				if c1.Owner.Id != self.e.Id :
+					res.append(dmElement(c1.Owner))
+		return res
+					
+	connected_els = property(_get_connected_elements)
+					
+
+#duct_1 = uidoc.Selection.PickObject(OT.LinkedElement)
+lnk = doc.GetElement(duct_1)
+l_doc = lnk.GetLinkDocument()
+l_el = l_doc.GetElement(duct_1.LinkedElementId)
+
+d_el = dmElement(l_el)
+print(d_el)
+print(len(d_el.connected_els))
+print(d_el.connected_els)
+ce = d_el.connected_els
+
+
+

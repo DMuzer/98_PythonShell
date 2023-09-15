@@ -1,0 +1,1 @@
+pipe_ref = uidoc.Selection.PickObject()

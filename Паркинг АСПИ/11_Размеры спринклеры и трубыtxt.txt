@@ -1,0 +1,153 @@
+"""
+Создание размеров между трубами и спринклерами
+"D:\18_проектирование\98_PythonShell\Паркинг АСПИ\11_Размеры спринклеры и трубыtxt.txt"
+
+"""
+def getReferenceForSprinkler(sprinkler) :
+	for c1 in sprinkler.MEPModel.ConnectorManager.Connectors :
+		for c2 in c1.AllRefs :
+			if c2.ConnectorType & ConnectorType.Physical \
+				and type(c2.Owner) == Plumbing.Pipe :
+					return Reference(c2.Owner)
+					
+	opt = Options()
+	opt.ComputeReferences = True
+	opt.IncludeNonVisibleObjects = True
+	opt.View = uidoc.ActiveView
+	
+	for g in sprinkler.Geometry[opt] :
+		if type(g) == Point and hasattr(g, "Reference") :
+			return g.Reference
+		
+	
+	
+					
+bic = BuiltInCategory
+av = uidoc.ActiveView
+p1 = uidoc.Selection.PickPoint()
+p2 = uidoc.Selection.PickPoint()
+
+section_line = Line.CreateBound(p1, p2)
+
+pm = (p2 + p1) * 0.5
+
+v = p2 - p1
+
+vx = av.RightDirection.DotProduct(v)
+vy = av.UpDirection.DotProduct(v)
+
+workingPlane = av.SketchPlane.GetPlane()
+
+if abs(vx) > abs(vy) :
+	hor = True
+else :
+	hor = False
+
+if hor :
+	start_p = pm  - 0.5 * abs(vx) * av.RightDirection
+	pntStartProjectionUV = workingPlane.Project(start_p)[0]
+	pntStartProjection = workingPlane.Origin\
+							+ pntStartProjectionUV.U * workingPlane.XVec \
+							+ pntStartProjectionUV.V * workingPlane.YVec
+							
+	pntEndPojection = workingPlane.Project(start_p)[0]
+	end_p = pm + 0.5 * abs(vx) * av.RightDirection
+	pntEndProjectionUV = workingPlane.Project(end_p)[0]
+	pntEndProjection = workingPlane.Origin \
+							+ pntEndProjectionUV.U * workingPlane.XVec \
+							+ pntEndProjectionUV.V * workingPlane.YVec
+else :					
+	dimensionLine = Line.CreateBound(start_p, end_p)
+	start_p = pm + 0.5 * abs(vy) * av.UpDirection
+	pntStartProjectionUV = workingPlane.Project(start_p)[0]
+	pntStartProjection = workingPlane.Origin\
+							+ pntStartProjectionUV.U * workingPlane.XVec \
+							+ pntStartProjectionUV.V * workingPlane.YVec
+							
+	pntEndPojection = workingPlane.Project(start_p)[0]
+	end_p = pm - 0.5 * abs(vy) * av.UpDirection
+	pntEndProjectionUV = workingPlane.Project(end_p)[0]
+	pntEndProjection = workingPlane.Origin \
+							+ pntEndProjectionUV.U * workingPlane.XVec \
+							+ pntEndProjectionUV.V * workingPlane.YVec
+							
+dimensionLine = Line.CreateBound(pntStartProjection, pntEndProjection)
+	
+	
+	
+pipesVisibleOnViewFC = FilteredElementCollector(doc, av.Id)\
+						.OfClass(Plumbing.Pipe)\
+						.ToElements()
+				
+sectedPipes = []
+
+for pipe in pipesVisibleOnViewFC :
+	pipeLocationCurve = pipe.Location.Curve
+	
+	pntEnd0, pntEnd1 = pipeLocationCurve.GetEndPoint(0), pipeLocationCurve.GetEndPoint(1)
+	newP0UV = workingPlane.Project(pntEnd0)[0]
+	newP0 = workingPlane.Origin + newP0UV.U * workingPlane.XVec + newP0UV.V * workingPlane.YVec
+	newP1UV = workingPlane.Project(pntEnd1)[0]
+	newP1 = workingPlane.Origin + newP1UV.U * workingPlane.XVec + newP1UV.V * workingPlane.YVec
+	if newP0.DistanceTo(newP1) < 0.005 : continue
+	newLocationCurve = Line.CreateBound(newP0, newP1)
+	
+	PipeToDimIntersection  = newLocationCurve.Intersect(dimensionLine)
+	
+	if PipeToDimIntersection == SetComparisonResult.Disjoint :
+		continue
+		
+	sectedPipes.append(pipe)
+	
+sprinklersVisibleOnViewFC = FilteredElementCollector(doc, av.Id)\
+								.OfCategory(bic.OST_Sprinklers).WhereElementIsNotElementType()\
+								.ToElements()
+sectedSprinklers = []
+
+for sprinkler in sprinklersVisibleOnViewFC :
+	sprinklerProjectedPositionUV = workingPlane.Project(sprinkler.Location.Point)[0]
+	sprinklerProjectedPositionXYZ = workingPlane.Origin \
+										+ workingPlane.XVec * sprinklerProjectedPositionUV.U \
+										+ workingPlane.YVec * sprinklerProjectedPositionUV.V
+	toDimLineDistance = dimensionLine.Project(sprinklerProjectedPositionXYZ).Distance
+	if toDimLineDistance < 2 :
+		sectedSprinklers.append(sprinkler)
+		
+print(len(sectedSprinklers))
+											
+									
+dimReferences = ReferenceArray()
+
+for pipe in sectedPipes :
+	ref1 = Reference(pipe)
+	dimReferences.Append(ref1)
+	
+for sprinkler in sectedSprinklers :
+	ref2 = getReferenceForSprinkler(sprinkler)
+	if ref2 :
+		dimReferences.Append(ref2)
+
+opt = Options()
+opt.IncludeNonVisibleObjects = True
+opt.ComputeReferences = True
+opt.View = av
+for sprinkler in sectedSprinklers :	
+	pass
+	
+
+
+	
+	
+#raise
+	
+
+	
+tr = Transaction(doc, "new detail")
+
+tr.Start()
+#dim_line = doc.Create.NewDetailCurve(av, dimensionLine)
+new_dim = doc.Create.NewDimension(av, dimensionLine, dimReferences)
+tr.Commit()
+						
+
+	

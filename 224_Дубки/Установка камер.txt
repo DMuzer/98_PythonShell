@@ -1,0 +1,50 @@
+uidoc = uidoc.Application.ActiveUIDocument
+doc = uidoc.Document
+import math
+dut = 0.0032808398950131233
+
+tr = Transaction(doc)
+el_id = uidoc.Selection.GetElementIds()[0]
+el = doc.GetElement(el_id)
+p0 = el.Location.Point
+p00 = XYZ(p0.X, p0.Y,0)
+
+
+
+tr.Start("Add Cameras")
+while True :
+	try :
+		p1 = uidoc.Selection.PickPoint()
+		p1_0 = XYZ(p1.X, p1.Y,0)
+		pr = uidoc.Selection.PickPoint()
+		
+		
+		dp = p1_0 - p00
+		
+		new_dir_v = p1_0 - pr
+		new_angle = math.atan2(new_dir_v.Y, new_dir_v.X)
+		d_angle = new_angle - el.Location.Rotation + math.pi
+		
+		new_element_id = ElementTransformUtils.CopyElement(doc, el_id, dp)[0]
+		new_element = doc.GetElement(new_element_id)
+		
+		axis = Line.CreateBound(p1, p1+XYZ.BasisZ)
+		
+		new_element.Location.Rotate(axis, d_angle)
+		
+		level = uidoc.ActiveView.GenLevel
+		#new_element.LookupParameter("Уровень").Set(level.Id)
+		new_element.Parameter[BuiltInParameter.FAMILY_LEVEL_PARAM].Set(level.Id)
+		new_element.Parameter[BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM].Set(2000*dut)
+		
+		
+		
+		
+	except Exception as ex:
+		print(ex)
+		break
+		
+tr.Commit()
+
+
+

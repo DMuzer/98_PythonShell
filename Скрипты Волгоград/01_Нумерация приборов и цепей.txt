@@ -1,0 +1,137 @@
+#  coding: utf-8 
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.Exceptions
+import System 
+import clr
+
+import math, sys
+import clr
+
+import re
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+lib_path = r"D:\18_проектирование\98_PythonShell\Создание фильтров"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+import d72_create_circuits as dm3
+reload(dm3)
+#dm3.set_rs485_data()
+
+panels = dm3.dmPanels()
+
+def set_ar8(e) :
+	print(50*"-")
+	print("Обработка цепей расширителя")
+	circuits = e.circuits
+	p_name = e.name
+	panel_num = e.get_parameter_value("ADSK_Имя панели")
+	cont_num = e.get_parameter_value("ADSK_Номер контроллера") 
+	start_address = int(e.get_parameter_value("ADSK_Номер устройства"))
+	cable1 = dm3.get_cable("КПСнг(А)-FRLS 1x2x0,75")
+	print("Кабель {}".format(cable1))
+	
+	with dm.trans(doc) :
+		if circuits :	
+			for num, c in enumerate(circuits) :			
+				print("Цепь {}".format(c.name))
+				c.set_parameter("Выбор проводника",cable1.Id)
+				
+				
+				
+				
+				#Устанавливаем значения параметров для оборудования в цепи
+				for e1_num, e1 in enumerate(c.elements,1) :
+					eq_name = e1.get_parameter_value("ADSK_Имя устройства")
+					eq_pos = "{}.{}.{}.{}.{}".format(eq_name,panel_num, cont_num, num + start_address, e1_num)
+					
+					e1.set_parameter("ADSK_Имя панели", panel_num)
+					e1.set_parameter("ADSK_Номер контроллера", cont_num)
+					continue
+					e1.set_parameter("ADSK_Номер устройства", str(e1_num))
+					continue
+					e1.set_parameter("ADSK_Номер линии", num+start_address)
+					e1.set_parameter("Марка", eq_pos)
+					continue
+					if e1.e.Category.Name == "Электрооборудование" :
+						e1.set_parameter("Имя панели", eq_pos)
+				c.set_parameter("ADSK_Имя панели", p_name)
+				c.set_parameter("ADSK_Номер линии", num + start_address)
+				c.load_name = eq_pos
+				
+	
+def set_kdl(e) :
+	pass
+
+for p in panels[:] :
+	if p.mark == "С2000-АР8" :
+		#set_ar8(p)
+		pass
+	elif p.mark.StartsWith("С2000-АР2") :
+		print("Обработка : С2000-АР2")
+		set_ar8(p)
+		
+	elif p.mark == "БС (А) Пл-1-2вв-3.1" :
+		
+		print("Блок сопряжения")
+		#dm3.set_bs(p)
+	elif p.mark == "С2000-КДЛ" :
+		print("Обработка КДЛ : {} ".format(p.mark))
+		#set_kdl(p)
+		pass
+	else :
+	
+		print("Не обработано : {}".format(p.mark))
+		#pass
+		
+circuits = dm3.dmCircuits()
+
+for c in circuits[:0] :
+	if c.load_name == "ДПЛС" :
+		print(c.load_name)
+		dm3.set_dpls(c)
+
+		
+
+
+	
+
+
+		
+		

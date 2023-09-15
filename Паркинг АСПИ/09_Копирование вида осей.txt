@@ -1,0 +1,196 @@
+av = uidoc.ActiveView
+views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()}
+tv = views["О_ВПВ_Этаж 05. Секция 1"]
+import System
+
+class dmChLeaders :
+	def __init__(self, g, sv, tv) :
+		self.g = g
+		self.sv = sv
+		self.tv = tv
+		
+	def set_visible(self) :
+		print("set visible--")
+		tr = Transaction(doc)
+		tr.Start("hide element")
+		try :
+			if self.g.IsHidden(self.sv) :
+				self.visible = False	
+				self.tv.HideElements(System.Array[ElementId]([self.g.Id]))
+			else :
+				self.visible = True
+				self.tv.UnhideElements(System.Array[ElementId]([self.g.Id]))
+		except Exception as ex :
+			print("errorr set_visible")
+			print(ex)	
+		finally :
+			tr.Commit()
+			
+			
+			
+		
+
+	def set_leaders(self) :
+		if not self.visible : return
+		
+		print("устанавливаем выноски")
+	
+		self.l1 = self.g.GetLeader(DatumEnds.End0, self.sv)
+		self.l1_ = self.g.GetLeader(DatumEnds.End0, self.tv)
+		self.l2 = self.g.GetLeader(DatumEnds.End1, self.sv)
+		self.l2_ = self.g.GetLeader(DatumEnds.End1, self.tv)
+		
+		tr = Transaction(doc)
+		
+		if self.l1 :
+			print("set leader 1")
+				
+			if not self.l1_ :
+				tr.Start("add leader")
+				try :
+					self.l1_ =self.g.AddLeader(DatumEnds.End0, self.tv)
+					tr.Commit()
+				except :
+					tr.Rollback()
+				
+			z = self.l1_.End.Z
+			tr.Start("set leader")
+			self.l1_.End = XYZ(self.l1.End.X, self.l1.End.Y, z)
+			self.l1_.Elbow = XYZ(self.l1.Elbow.X, self.l1.Elbow.Y, z)
+			
+			try :
+				self.g.SetLeader(DatumEnds.End0, self.tv, self.l1_)
+				tr.Commit()
+			except :
+				tr.RollBack()
+		elif self.l1_ :
+			print("reset leader l1_")
+			
+			tr.Start("reset leader")
+			self.l1_.Elbow = self.l1_.End
+			try :
+				self.g.SetLeader(DatumEnds.End0, self.tv, self.l1_)
+				tr.Commit()
+			except :
+				tr.RollBack()
+			
+		if self.l2 :
+			print("set leader 2")
+			if not self.l2_ :
+				
+				tr.Start("set leaders to grid line")
+				try :
+					self.l2_ = self.g.AddLeader(DatumEnds.End1, self.tv)
+					tr.Commit()
+				except : 
+					tr.RollBack()
+					
+
+			
+			print('start transaction')
+			tr.Start("set leaders to grid line")
+			z = self.l2_.End.Z
+			self.l2_.End = XYZ(self.l2.End.X, self.l2.End.Y, z)
+			self.l2_.Elbow = XYZ(self.l2.Elbow.X, self.l2.Elbow.Y, z)
+			try :
+				self.g.SetLeader(DatumEnds.End1, self.tv, self.l2_)
+				tr.Commit()
+			except :
+				tr.RollBack()
+				
+		elif self.l2_ :
+			
+			tr.Start("remove leader")
+			try :
+				self.l2_.Elbow = self.l2_.End
+				self.g.SetLeader(DatumEnds.End1, self.tv, self.l2_)
+				tr.Commit()
+			except :
+				tr.RollBack()
+		
+				
+			
+		print("выноски установлены")
+			
+	def set_same_curves(self) :
+		if not self.visible :
+			return
+		print("set same curves)")
+			
+		self.curves_s = self.g.GetCurvesInView(DatumExtentType.ViewSpecific, self.sv)[0]
+		self.curves_t = self.g.GetCurvesInView(DatumExtentType.ViewSpecific, self.tv)[0]
+		z = self.curves_t.GetEndPoint(0).Z
+		p0 = self.curves_s.GetEndPoint(0)
+		p1 = self.curves_s.GetEndPoint(1)
+		c1 = Line.CreateBound(XYZ(p0.X, p0.Y, z), XYZ(p1.X, p1.Y, z))
+		tr = Transaction(doc)
+		tr.Start("set axis curve")
+		try :
+			self.g.SetCurveInView(DatumExtentType.ViewSpecific, self.tv, c1)
+			tr.Commit()
+		except :
+			tr.RollBack()
+			
+		
+		print("готово")
+	def set_bubbles(self) :
+		if not self.visible :
+			return
+		tr = Transaction(doc)
+		tr.Start("set bubbles")
+		try :
+		
+			if self.g.IsBubbleVisibleInView(DatumEnds.End0, self.sv) :
+				self.g.ShowBubbleInView(DatumEnds.End0, self.tv)
+			else :
+				self.g.HideBubbleInView(DatumEnds.End0, self.tv)
+				
+			if self.g.IsBubbleVisibleInView(DatumEnds.End1, self.sv) :
+				self.g.ShowBubbleInView(DatumEnds.End1, self.tv)
+			else :
+				self.g.HideBubbleInView(DatumEnds.End1, self.tv)
+			tr.Commit()
+		except Exception as ex :
+			print(ex)
+			tr.RollBack()
+		
+			
+		
+		
+
+axes = FilteredElementCollector(doc).OfClass(Grid).ToElements()
+
+#eid = uidoc.Selection.GetElementIds()[0]
+#e = doc.GetElement(eid)
+
+s_views = [vn for vn in views.keys() if vn.StartsWith("О_ВПВ_Этаж 02_")]
+for vn in s_views :
+	print(20*"-")
+	sv = views[vn]
+	print(sv.Name)
+	end_s = sv.Name.Split("_")[-1]
+	t_views = [v for v in views.values() if v.Name.StartsWith("О_ВПВ_Этаж") and v.Name.EndsWith(end_s) and v.Id != sv.Id]
+	print(20*"*")
+	for tv in t_views :
+		print(tv.Name)
+	
+		for axis in axes :
+			if not axis.CanBeVisibleInView(sv) : continue
+			if not axis.CanBeVisibleInView(tv) : continue
+			
+			sl = dmChLeaders(axis, sv, tv)
+			print("set visible")
+			
+			sl.set_visible()
+			
+			print("set_same_curves")
+			sl.set_same_curves()
+			print("set_bubbles")
+			sl.set_bubbles()
+			
+			sl.set_leaders()
+
+
+
+
+

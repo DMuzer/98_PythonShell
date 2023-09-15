@@ -1,0 +1,53 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+	
+
+#a= show_var_(dm.int_res)
+
+#dm.create_point(dm.int_res.XYZPoint)
+
+import dm_connect_pipe as dm
+reload(dm)
+
+dm.connect_sprinkler_man()
+
+__window__.Close()
+

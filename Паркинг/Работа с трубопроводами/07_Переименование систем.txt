@@ -1,0 +1,34 @@
+import collections 
+cnt = {}
+pipe_system = FilteredElementCollector(doc).OfClass(Plumbing.PipingSystem).ToElements()
+tr = Transaction(doc)
+tr.Start('rename system')
+for ps in pipe_system :
+	print(ps.Name)
+	pst = doc.GetElement(ps.GetTypeId())
+	
+	try :
+		cnt[pst.Abbreviation] += 1
+		new_name = "{}-{}".format(pst.Abbreviation, cnt[pst.Abbreviation])
+	except :
+		cnt[pst.Abbreviation] = 1000
+		new_name = "{}-{}".format(pst.Abbreviation, cnt[pst.Abbreviation])
+	ps.Name = new_name
+	print(new_name)
+	print(40*"--")
+cnt = {}
+for ps in pipe_system :
+	print(ps.Name)
+	pst = doc.GetElement(ps.GetTypeId())
+	
+	try :
+		cnt[pst.Abbreviation] += 1
+		new_name = "{}-{}".format(pst.Abbreviation, cnt[pst.Abbreviation])
+	except :
+		cnt[pst.Abbreviation] = 1
+		new_name = "{}-{}".format(pst.Abbreviation, cnt[pst.Abbreviation])
+	ps.Name = new_name
+	print(new_name)
+	print(40*"--")
+
+tr.Commit()

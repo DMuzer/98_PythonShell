@@ -1,0 +1,128 @@
+
+
+dut = 0.0032808398950131233
+def get_view(name) :
+	fc = FilteredElementCollector(doc).OfClass(View3D).ToElements()
+	for v in fc :
+		if v.Name == name :
+			return v
+
+	
+def get_all_pipes() :
+	fc = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+	return fc
+def proceed_intersections(l, lng) :
+	from collections import defaultdict
+	refs = defaultdict(list)
+	for cr in l :
+		if cr.Proximity > lng : continue
+		r = cr.GetReference()
+		refs[r.LinkedElementId].append(r)
+		
+	res = []
+		
+	for eid in refs :
+		print(len(refs[eid]))
+		if len(refs[eid]) == 2 :
+			p1 = refs[eid][0].GlobalPoint
+			p2 = refs[eid][1].GlobalPoint
+			p0 = (p1 + p2) * 0.5
+			dist = p2.DistanceTo(p1)
+			d = (p2 - p1).Normalize()
+			
+			res.append((p0, d, dist))
+			
+	return res
+	
+def create_sleeve(p, diam) :
+	#Создаем гильзу
+	global sleeve_type
+	import math
+	
+	d = p[1]
+	
+	a = math.atan2(d.Y, d.X)
+	print(a)
+	a2 = d.AngleTo(XYZ(d.X, d.Y, 0))
+	
+	print(a2)
+	
+	ax2 = XYZ(d.Y, -d.X, 0)
+	
+	tr = Transaction(doc)
+	
+	r_ax = Line.CreateUnbound(p[0], XYZ.BasisZ)
+	r_ax2 = Line.CreateUnbound(p[0], ax2)
+	
+	
+	tr.Start("Вставка гильзы")
+	
+	sleeve = doc.Create.NewFamilyInstance(p[0], sleeve_type, Structure.StructuralType.NonStructural)
+	sleeve.Location.Rotate(r_ax, a)
+	sleeve.Location.Rotate(r_ax2, a2)
+	thick_p = sleeve.LookupParameter("Гильза_длина")
+	thick_p.Set(p[2])
+	dn_p = sleeve.LookupParameter("DN")
+	dn_p.Set(diam)
+	tr.Commit()
+	pass
+	
+def get_sleeve_type(name) :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_PipeFitting).WhereElementIsElementType().ToElements()
+	
+	for e in fc :
+		if Element.Name.GetValue(e) == name : return e
+	
+	
+sleeve_type = get_sleeve_type("DM_Комплект гильзы прохода R20")
+		
+			
+v3d = get_view("DM_ОТМЕТКИ")
+print(v3d)
+
+
+wall_flt = ElementClassFilter(Wall)
+ref_i = ReferenceIntersector(wall_flt, FindReferenceTarget.Face, v3d)
+ref_i.FindReferencesInRevitLinks = True
+
+pipes = get_all_pipes()
+q = False
+for c in pipes :
+	print(c.LookupParameter("ИмяСистемы").AsString())
+	sname_p = c.LookupParameter("ИмяСистемы")
+	if not sname_p : 
+		print("нет параметра")
+		continue
+	sname = sname_p.AsString()
+	if not sname : continue
+	if not sname.StartsWith("В") : continue
+
+	lc = c.Location.Curve
+	p = lc.GetEndPoint(0)
+	d = lc.Direction
+	lng = lc.Length
+	
+	ints = ref_i.Find(p, d)
+	print(ints.Count)
+	
+	
+	
+	if ints.Count > 0 :	
+	
+		res = proceed_intersections(ints, lng)
+	
+		if len(res) > 0 :
+			for p in res :
+				print(p)
+				if abs(p[1].Z) < 1.9999 :
+					create_sleeve(p, c.Diameter)
+					
+					q = True
+					break
+			
+				if q : break
+
+
+
+
+	

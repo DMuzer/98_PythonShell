@@ -1,0 +1,23 @@
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.UI as UI
+
+uidoc = __revit__.ActiveUIDocument
+doc =uidoc.Document
+
+tap_coll = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_PipeFitting).WhereElementIsNotElementType().ToElements()
+tap_coll_ = [t for t in tap_coll if t.MEPModel.PartType == PartType.Cap]
+tr = Transaction(doc)
+
+for cap in tap_coll_[0:] :
+	conn = list(cap.MEPModel.ConnectorManager.Connectors)[0]
+	conn2 = next(iter([c for c in conn.AllRefs if c.Owner.Id != cap.Id]))
+	if cap.WorksetId != conn2.Owner.WorksetId :
+		tr.Start('1')
+		cap.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM).Set(conn2.Owner.WorksetId.IntegerValue)
+		
+		tr.Commit()
+
+	
+	
+
+

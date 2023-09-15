@@ -1,0 +1,101 @@
+"""
+Creates a TaskDialog
+
+TESTED REVIT API: -
+
+Author: Gui Talarico | github.com/gtalarico
+
+This file is shared on www.revitapidocs.com
+For more information visit http://github.com/gtalarico/revitapidocs
+License: http://github.com/gtalarico/revitapidocs/blob/master/LICENSE.md
+"""
+
+# Results here: https://imgur.com/4DiPYfe
+
+from Autodesk.Revit.UI import (TaskDialog, TaskDialogCommonButtons,
+                               TaskDialogCommandLinkId, TaskDialogResult)
+                               
+                   
+import subprocess
+title = 'Task Dialog Title'
+dialog = TaskDialog(title)
+
+# Properties
+dialog.MainInstruction = 'Text Header'
+dialog.MainContent = 'Text Content'
+dialog.FooterText = 'Footer Text'
+dialog.VerificationText = 'Verification Text'
+# dialog.ExpandedContent = expanded_content
+
+# Settings
+dialog.TitleAutoPrefix = False
+dialog.AllowCancellation = True
+
+# Add Button
+dialog.CommonButtons = TaskDialogCommonButtons.Ok | TaskDialogCommonButtons.Yes
+
+# Set Default Button
+dialog.DefaultButton = TaskDialogResult.None
+
+print('Исполняем внешний код')
+fn = r'D:\18_проектирование\RevitCode\01.Sprinkler.py'
+with open(fn) as f :
+	code = f.read()
+exec code
+
+# Add Command Link
+dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1,
+                      'Защитить спринклерами помещение',
+                      'Command Button Sub Text')
+dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2,
+                      'Command Button Text 2',
+                      'Command Button Sub Text 2')
+
+result = dialog.Show()
+
+if result == TaskDialogResult.Ok:
+    print('Dialog was OK')
+if result == TaskDialogResult.Yes:
+    print('Dialog was Yes')
+if result == TaskDialogResult.Cancel:
+    print('Dialog was Cancelled')
+if result == TaskDialogResult.CommandLink1:
+
+    print('---')
+    fn = r"D:\18_проектирование\RevitCode\02.return.py"
+
+    
+    j_room = """{"room": [[397241.0521168972, 426919.18421434937],\
+    [397241.0521168972, 430020.3797018456],\
+    [400853.7459705239, 430020.3797018456],\
+    [400853.7459705239, 429666.4581450871],\
+    [401625.88351658336, 429666.4581450871],\
+    [401625.88351658336, 428484.85727806564],\
+    [414340.8848967813, 428484.85727806564],\
+    [414340.8848967813, 426972.0559903063],\
+    [412549.22801312245, 426972.0559903063],\
+    [412549.22801312245, 424523.67817129625],\
+    [411458.4940527382, 424523.67817129625],\
+    [411458.4940527382, 426936.5757101566],\
+    [397311.2396224672, 426936.5757101566],\
+    [397241.0521168972, 426919.18421434937]],\
+    "max_dist": 3000, "max_radius": 2150}"""
+    
+    calc = subprocess.Popen(["python", fn], stdin= subprocess.PIPE, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    res = calc.communicate(j_room.encode())
+    
+    
+    print(res[0].decode('cp1251'))
+    print(res[1].decode('cp1251'))
+    
+    
+    
+if result == TaskDialogResult.CommandLink2:
+    print('выбираем помещение и получаем его очертания')
+    sel = get_selected_elements()
+    for e in sel :
+  		print(e.Id)
+  		
+  	geom = e[0].Geometry
+if dialog.WasVerificationChecked():
+    print('Verification was Checked')

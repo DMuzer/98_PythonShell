@@ -1,0 +1,28 @@
+st_str = """
+***************************************************************
+*** Открыть виды для работы с пересечением
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\05_Открыть виды пересечения.txt"
+***************************************************************
+
+***************************************************************
+"""
+print(st_str)
+clashDsIds = uidoc.Selection.GetElementIds()
+views = FilteredElementCollector(doc).OfClass(View).ToElements()
+viewsToOpen = []
+for clashId in clashDsIds :
+	clash = doc.GetElement(clashId)
+	if not type(clash) == DirectShape : continue
+	print(clash.Id)
+	
+	clashName = clash.LookupParameter("Наименование").AsString()
+	print(clashName)
+	
+	for view in views :
+		if view.Name.Contains(clashName + "_") : viewsToOpen.append(view)
+		
+for view in viewsToOpen :
+	uidoc.ActiveView = view
+		
+	
+	

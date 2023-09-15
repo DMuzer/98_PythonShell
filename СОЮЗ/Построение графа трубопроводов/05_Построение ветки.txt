@@ -1,0 +1,221 @@
+st = """
+Создание ветки
+Создание параллельной линии трубопровода
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Построение графа трубопроводов\05_Построение ветки.txt"
+"""
+print(st)
+dut = 0.0032808398950131233
+copyOffset = 250
+maxBranchDiameter = 65 * dut
+maxBranchRadius = maxBranchDiameter /2
+
+class dmElement :
+	def __init__(self, element) :
+		if isinstance(element, Element) :
+			self.element = element
+		elif isinstance(element, ElementId) :
+			self.element = doc.GetElement(element)
+		elif isinstance(element, Reference) :
+			self.element = doc.GetElement(element)	
+		elif isinstance(element, int) :
+			self.element = doc.GetElement(ElementId(element))
+	def __repr__(self) :
+		if hasattr(self.element, "MEPModel") : 
+			if hasattr(self.element.MEPModel, "PartType") :
+				return f"Элемент id {self.element.Id} {self.element.Category.Name} {self.element.MEPModel.PartType}"
+			else :
+				return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+				
+		return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+	def __hash__(self) :
+		return self.element.Id.IntegerValue
+	def __eq__(self, other) :
+		if isinstance(other, dmElement) :
+			return other.element.Id == self.element.Id
+		elif isinstance(other, Element) :
+			return other.Id == self.element.Id
+	def _getNeighbors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		neighbors = []
+		for connector in connectors :
+			if connector.ConnectorType or ConnectorType.End :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id :
+							neighbors.append(dmElement(c2.Owner))
+		return neighbors
+	neighbors = property(_getNeighbors)
+	
+	def _getLocation(self) :
+		return self.element.Location
+	Location = property(_getLocation)
+	
+	def _getId(self) :
+		return self.element.Id
+	Id = property(_getId)
+	
+	def _getNotConnectedConnector(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return [c for c in connectors if c.ConnectorType == ConnectorType.End and not c.IsConnected][0]
+	notConnectedConnector = property(_getNotConnectedConnector)
+	
+	def getLocationStartedAt(self, connector) :
+		location = self.Location.Curve
+		if location.GetEndPoint(0).DistanceTo(connector.Origin)\
+			< location.GetEndPoint(1).DistanceTo(connector.Origin) :
+			return location
+		else :
+			return location.CreateReversed() 
+	
+	def getAnotherConnector(self, connector) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		for connector2 in connectors :
+			if connector2.ConnectorType == ConnectorType.End and connector2.Id != connector.Id :
+				return connector2
+				
+	def _getConnectors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return connectors
+	Connectors = property(_getConnectors)
+	
+	def _getEndConnectors(self) :
+		return [connector for connector in self.Connectors if connector.ConnectorType == ConnectorType.End]
+	EndConnectors = property(_getEndConnectors)
+		
+	def nearestConnector(self, connector1) :
+		return min(self.EndConnectors, key = lambda x : x.Origin.DistanceTo(connector1.Origin))
+		
+	def connectToPipe(self, pipe2) :
+		ec10, ec11 = self.EndConnectors
+		ec20, ec21 = pipe2.EndConnectors
+		
+		c1, c2 = min(itertools.product(self.EndConnectors, pipe2.EndConnectors), 
+						key = lambda x : x[0].Origin.DistanceTo(x[1].Origin))
+		doc.Create.NewElbowFitting(c1, c2)
+	def _checkIsTerminate(self) :
+		for c in self.Connectors :
+			for c2 in c.AllRefs :
+				if c2.ConnectorType & ConnectorType.Physical and c2.Radius > maxBranchRadius :
+					return True
+		return False
+	IsTerminal = property(_checkIsTerminate)
+	def _getBranch(self) :
+		return dmBranch(self)
+	branch = property(_getBranch)
+	
+	def _checkIsPipe(self) :
+		return self.element.Category.Id.IntegerValue == int(BuiltInCategory.OST_PipeCurves) 
+	IsPipe = property(_checkIsPipe)
+	
+	def _checkIsSpinkler(self) :
+		return self.element.Category.Id.IntegerValue == int(BuiltInCategory.OST_Sprinklers) 
+	IsSprinkler = property(_checkIsSpinkler)
+	
+		
+class dmBranch :
+	def __init__(self, initElement) :
+		self.initElement = initElement
+		self._elements = None
+		
+	def _findElements(self) :
+		toVisit = set([self.initElement])
+		found = set([])
+		while toVisit :
+			current = toVisit.pop()
+			found.add(current)
+			if current.IsTerminal : continue
+			for next in current.neighbors :
+				if next not in found :
+					toVisit.add(next)
+		self._elements = list(found)
+		return self._elements
+	def _getElements(self) :
+		if not self._elements :
+			return self._findElements()
+		else : 
+			return self._elements
+	Elements = property(_getElements)
+	
+	def _getHorizontalPipes(self) :
+		for element in self.Elements :
+			if element.IsPipe and abs(element.Location.Curve.Direction.Z) < 0.1 :
+				yield(element)
+	horizontalPipes = property(_getHorizontalPipes)
+	
+	def setNewElevationForHorizontalPipes(self, level, elevation) :
+		tr = None 
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "change elevation")
+			tr.Start()
+		for pipe in self.horizontalPipes :
+			if pipe.element.ReferenceLevel.Id == level.Id :
+				newElevation = elevation				
+			else :
+				newElevation = level.Elevation - pipe.element.ReferenceLevel.Elevation + elevation	
+			
+			pipe.element.Parameter[BuiltInParameter.RBS_OFFSET_PARAM].Set(newElevation)
+			
+		if tr :
+			tr.Commit()
+			
+	def _getSprinklers(self) :
+		return [e for e in self.Elements if e.IsSprinkler]
+	sprinklers = property(_getSprinklers)
+				
+		
+
+elements = [dmElement(eRef) for eRef in uidoc.Selection.GetElementIds()]
+sprinklers = set([e for e in elements if e.IsSprinkler])
+branches = []
+
+while sprinklers :
+	sprinkler = sprinklers.pop()
+	branch = sprinkler.branch
+	print(len(sprinklers))
+	print(f"Количество спринклеров в ветке {len(branch.sprinklers)}")
+	print(branch.Elements)
+	sprinklers = sprinklers.difference(set(branch.sprinklers))
+	print(len(sprinklers))
+	branches.append(branch)
+	
+print(f"Количество веток : {len(branches)}")
+
+level = uidoc.ActiveView.GenLevel
+for branch in branches :
+	branch.setNewElevationForHorizontalPipes(level, 2950* dut)
+	
+	
+
+
+
+
+#branch.setNewElevationForHorizontalPipes(level, 2950 * dut)
+
+
+
+from collections import deque
+
+
+	
+print(st)
+print("завершено...")
+	
+	
+	
+
+
+

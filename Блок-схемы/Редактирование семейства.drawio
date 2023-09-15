@@ -1,0 +1,13 @@
+<mxfile host="65bd71144e">
+    <diagram id="F5jB0mdEUtk6mu3D1_dB" name="Page-1">
+        <mxGraphModel dx="1436" dy="991" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="&lt;a href=&quot;https://help.autodesk.com/view/RVT/2020/ENU/?guid=Revit_API_Revit_API_Developers_Guide_Revit_Geometric_Elements_Family_Documents_Managing_family_types_and_parameters_html&quot;&gt;Раздел помощи Ревит&amp;nbsp;&lt;br&gt;&lt;/a&gt;&lt;br&gt;&lt;a href=&quot;https://www.revitapidocs.com/2021.1/1cc4fe6c-0e9f-7439-0021-32d2e06f4c33.htm&quot;&gt;FamilyManager&lt;/a&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;алгоритм" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="70" y="80" width="490" height="250" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

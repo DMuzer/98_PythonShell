@@ -1,0 +1,108 @@
+"""
+***************************************************************
+*** Создание спринклеров по поверхности DirectShape
+*** 
+***************************************************************
+* 
+*
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+el_ref = uidoc.Selection.PickObject(OT.Element)
+el = doc.GetElement(el_ref)
+g = el.Geometry[Options()]
+
+solids = dm.dm_list([s for s in g if type(s) == Solid])
+#print(solids)
+faces = dm.dm_list()
+for s in solids :
+	print(s)
+	print(80*"-")
+	
+	for f in s.Faces :
+		try :
+			if f.FaceNormal.Z < -0.5 :
+				faces.append(f)
+		except :
+			pass
+		print(f)
+		
+m_step = 3900 * dut
+prot_radius = m_step * 2 ** 0.5
+angl = 0
+
+#ref_int = ReferenceIntersector(
+		
+print(faces)
+
+points = []
+
+for f in faces[:] :
+	print(f)
+	clss = f.GetEdgesAsCurveLoops()
+	z1 = list(clss[0])[0].GetEndPoint(0).Z 
+	print(clss)
+	pg = dm.get_PolygonFromCurveLoops(clss)
+	print(pg)
+	poss = dm.get_sprinkler_pos(pg, m_step, prot_radius, angl)
+	poss1  =  dm.get_PointsFromMultiPoint(poss, z1)
+	points.extend(poss1)
+	
+
+geom_a = System.Array[GeometryObject]([Point.Create(p) for p in points])
+
+with dm.trans(doc) :
+	ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+	ds.SetShape(geom_a)
+	
+	
+	
+
+
+
+

@@ -1,0 +1,46 @@
+
+#  coding: utf-8 
+
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit import DB
+import clr
+from pathlib import Path
+import sys
+from imp import reload
+
+libfld = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libfld not in sys.path :
+	sys.path.append(libfld)
+	
+try :
+	reload(dm)
+	print("Перезагрузились dm")
+except :
+	print("проблема с dm пробуем импортировать")
+	import dmRevitClasses as dm
+	print("dmRevitClasses импортировали")
+	
+	
+
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+#pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+allPiping = dm.getAllPipingElements()
+viewVisible = dm.getActiveViewPipingElements()
+
+with dm.trans() :
+	for element in allPiping :
+		element.Set("DM_Позиция_спец1", "-")
+	for element in viewVisible :
+		element.Set("DM_Позиция_спец1", "1")
+		
+		
+		
+	
+		

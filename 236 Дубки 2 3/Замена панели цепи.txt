@@ -1,0 +1,15 @@
+import Autodesk.Revit
+import Autodesk.Revit.UI as UI
+dut = 0.0032808398950131233
+#panel_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+#panel = doc.GetElement(panel_id)
+
+circuits = FilteredElementCollector(doc).OfClass(Electrical.ElectricalSystem).ToElements()
+tr = Transaction(doc)
+tr.Start("set new panel")
+
+for circuit in circuits :
+	print(circuit.BaseEquipment.Name)
+	if circuit.BaseEquipment.Name == "HDMI 3" :
+		circuit.SelectPanel(panel)
+tr.Commit()

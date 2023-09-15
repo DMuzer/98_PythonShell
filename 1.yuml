@@ -1,0 +1,10 @@
+
+// {type:state}
+(start)[Начало]->(Пользователь выбирает трубу)
+(Пользователь выбирает трубу)[Pause]->(Для каждог)
+(Пользователь выбирает трубу)[Stop]->(end)
+(Log retrieval)[Continue]->(Пользователь выбирает трубу)
+(Пользователь выбирает трубу)->(a = pipe)
+(a = pipe)[Unpause]->(Пользователь выбирает трубу)
+(a = pipe)[Data requested]->(Log retrieval|do / output log)
+(Log retrieval)->(end)

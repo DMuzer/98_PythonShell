@@ -1,0 +1,15 @@
+"""
+Создание семейства линии разрыва
+"""
+Crop = uidoc.ActiveView.CropBox
+insertPoint = Crop.Min + XYZ.BasisX + XYZ.BasisY + XYZ.BasisZ
+
+breakLineTypeId = ElementId(9781508)
+breakLineSymbol = doc.GetElement(breakLineTypeId)
+
+tr = Transaction(doc, "Создание линии разрыва")
+tr.Start()
+newBreakLine = doc.Create.NewFamilyInstance(insertPoint, 
+						breakLineSymbol, 
+						uidoc.ActiveView)
+tr.Commit()

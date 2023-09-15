@@ -1,0 +1,14 @@
+pipes = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+pipes00 = 0
+pipes01 = 0
+for pipe in pipes :
+	location = pipe.Location.Curve
+	connectors = {c.Id : c for c in pipe.ConnectorManager.Connectors if c.ConnectorType & ConnectorType.Physical}
+	
+	if connectors[0].Origin.DistanceTo(location.GetEndPoint(0)) < 0.01 :
+		pipes00 += 1
+	elif connectors[1].Origin.DistanceTo(location.GetEndPoint(0)) < 0.01 :
+		pipes01 += 1
+		
+print(f"pipes00 = {pipes00} шт. из {len(pipes)}")
+print(f"pipes01 = {pipes01} шт. из {len(pipes)}")

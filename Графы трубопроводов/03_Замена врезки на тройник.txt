@@ -1,0 +1,41 @@
+"""
+Замена врезки на тройниик
+"""
+
+from Autodesk.Revit import *
+et = UI.Selection.ObjectType.Element
+bic = BuiltInCategory
+fc = {(t.FamilyName, t.Name) : t for t in FilteredElementCollector(doc).OfCategory(bic.OST_PipeFitting).WhereElementIsElementType().ToElements()}
+tn = ('ADSK_СтальСварка_Врезка-тройник', "!Не учитывать")
+tee_type = fc[tn]
+
+
+takeoff = doc.GetElement(uidoc.Selection.PickObject(et))
+
+for c in takeoff.MEPModel.ConnectorManager.Connectors :
+	for c1 in c.AllRefs :
+		if c1.ConnectorType == ConnectorType.Curve :
+			cn1 = c1
+			
+for c in takeoff.MEPModel.ConnectorManager.Connectors :
+	for c1 in c.AllRefs :
+		if c1.ConnectorType == ConnectorType.End :
+			cn2 = c1
+p0_ = cn1.Origin
+pipe1 = cn1.Owner
+lc = pipe1.Location.Curve
+p0 = lc.Project(cn2.Origin).XYZPoint
+
+tr = Transaction(doc, "change fitting")
+tr.Start()
+doc.Delete(takeoff.Id)
+new_pipe_id = Plumbing.PlumbingUtils.BreakCurve(doc, pipe1.Id, p0)
+new_pipe = doc.GetElement(new_pipe_id)
+nc1 = sorted([cn_ for cn_ in new_pipe.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))[0]
+nc2 = sorted([cn_ for cn_ in pipe1.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))[0]
+
+new_fitting = doc.Create.NewTeeFitting(nc1, nc2, cn2)
+new_fitting.ChangeTypeId(tee_type.Id)
+
+tr.Commit()
+

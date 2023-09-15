@@ -1,0 +1,41 @@
+"""
+Установка маркировки на стояки
+"""
+
+dut = 0.0032808398950131233
+tagOrientation = TagOrientation.Horizontal
+tagMode = TagMode.TM_ADDBY_CATEGORY
+pipesVisibleOnView = FilteredElementCollector(doc, uidoc.ActiveView.Id)\
+							.OfClass(Plumbing.Pipe).ToElements()
+			
+viewFlt = VisibleInViewFilter(doc, uidoc.ActiveView.Id)	
+pipesStands = [pipe for pipe in pipesVisibleOnView 
+					if abs(pipe.Location.Curve.Direction.Z)>0.95 
+						and pipe.Location.Curve.Length > 800 * dut]
+print(len(pipesStands))
+pipesStands = [pipe for pipe in pipesStands 
+									if not any(type(doc.GetElement(eid)) == IndependentTag 
+											for eid in pipe.GetDependentElements(viewFlt))]
+											
+print(len(pipesStands))
+
+#pipesStands = [doc.GetElement(eid) for eid in uidoc.Selection.GetElementIds()]
+tagTypeId = ElementId(8619674)
+tr = Transaction(doc, "adding tags to pipe stands")
+tr.Start()
+for pipe in pipesStands :
+	pipeRef = Reference(pipe)
+	tagPnt = pipe.Location.Curve.GetEndPoint(0)\
+						+ uidoc.ActiveView.RightDirection\
+						+ uidoc.ActiveView.UpDirection * 0.5
+	newTag = IndependentTag.Create(doc, uidoc.ActiveView.Id, 
+									pipeRef, True,tagMode, tagOrientation, tagPnt)
+	newTag.ChangeTypeId(tagTypeId)
+	newTag.LeaderEndCondition = LeaderEndCondition.Free
+	
+	
+	
+
+tr.Commit()
+	
+

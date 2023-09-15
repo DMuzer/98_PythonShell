@@ -1,0 +1,174 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+				
+def make_point(p) :
+	l1 = Line.CreateBound(p-XYZ.BasisZ, p+XYZ.BasisZ)
+	dm1.create_model_line(l1)
+	
+	l1 = Line.CreateBound(p-XYZ.BasisX, p+XYZ.BasisX)
+	dm1.create_model_line(l1)
+	
+	l1 = Line.CreateBound(p-XYZ.BasisY, p+XYZ.BasisY)
+	dm1.create_model_line(l1)
+	
+def show_view_direction(p, view) :
+	l1 = Line.CreateBound(p, p + view.UpDirection)
+	l2 = Line.CreateBound(p, p + view.RightDirection)
+	l3 = Line.CreateBound(p, p + view.ViewDirection)
+	
+	dm1.create_model_line(l1)
+	dm1.create_model_line(l2)
+	dm1.create_model_line(l3)
+	
+
+
+
+def create_pipe_tag(pipe, trans=None, right_dir = 1) :
+	av = uidoc.ActiveView
+
+	doc = uidoc.Document
+	
+	rd = av.RightDirection
+	ud = av.UpDirection
+	sc = av.Scale
+	
+	
+	if right_dir > 0 :
+		lab_len = 1
+	else :
+		lab_len = 12
+		
+	unuc = list(pipe.ConnectorManager.UnusedConnectors)
+	
+	p0 = None
+	if len(unuc) > 0 :
+		p0 = unuc[0].Origin
+	
+	
+	lc = pipe.Location.Curve
+	
+	if rd.DotProduct(lc.Direction) < 0 :
+		lc = lc.CreateReversed()
+	
+	udp = ud.DotProduct(lc.Direction)
+	dir_v = ud
+	if udp > 0.1 :
+		dir_v = -dir_v
+		
+	if udp > 0.9 :
+		lc = lc.CreateReversed()
+		div_v = ud
+		
+	if p0 and (lc.GetEndPoint(0).DistanceTo(p0) > lc.GetEndPoint(1).DistanceTo(p0)) :
+		lc = lc.CreateReversed()
+		
+		
+	p1 = lc.GetEndPoint(0) + lc.Direction * 5 * dut * sc
+	p2 = p1 + 7 * dut *ud * sc + 5 * dut * rd * sc * right_dir
+	p3 = p2 + 1 * dut * rd * sc * right_dir
+	
+	
+	trans1 = None
+	
+	if trans is None :
+		trans1 = Transaction(doc)
+		trans1.Start("create pipe tag")
+		
+	tag = IndependentTag.Create(doc, av.Id, Reference(pipe), True, 
+								TagMode.TM_ADDBY_CATEGORY,
+								TagOrientation.Horizontal,
+								p1)
+								
+	tag.LeaderEndCondition = LeaderEndCondition.Free
+	tag.LeaderEnd = p1
+	tag.LeaderElbow = p2
+	tag.TagHeadPosition = p3
+	
+
+	if trans1 :
+		trans1.Commit()
+								
+
+av = uidoc.ActiveView
+
+doc = uidoc.Document
+
+rd = av.RightDirection
+ud = av.UpDirection
+vd = av.ViewDirection
+sc = av.Scale
+
+
+
+pipes = [doc.GetElement(eid) for eid in uidoc.Selection.GetElementIds()]
+pipes_ = [e for e in pipes if type(e) == Plumbing.Pipe]
+
+pipes = []
+for p in pipes_ :
+	lc = p.Location.Curve
+	lc_d = lc.Direction
+	print(1)
+	
+	if lc.Length / sc < 5 * dut :
+		print('пропускаем')
+		continue
+		
+	v_dir = vd.DotProduct(lc_d)
+	print(v_dir)
+	
+	if v_dir > 0.5 : 
+		continue
+		
+	pipes.append(p)
+
+
+
+with trans(doc) as tr :
+
+	for pipe in pipes :
+		create_pipe_tag(pipe, right_dir = 1, trans = tr)
+	
+	
+
+	

@@ -1,0 +1,153 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+				
+def get_sprinklers_types() :
+	fc = FilteredElementCollector(doc).OfCategory(bic.OST_Sprinklers).WhereElementIsElementType().ToElements()
+	res =  {Element.Name.GetValue(e) : e for e in fc}
+	for k in res :
+		print("{} : {}".format(k , res[k]))
+	return res
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+
+many = True
+
+if many :
+	duct_ids = uidoc.Selection.PickObjects(UI.Selection.ObjectType.LinkedElement)
+else :
+	duct_ids = [uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)]
+	
+pipe1_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe1 = doc.GetElement(pipe1_id.ElementId)
+pipe_u_1 = dm1.dm_pipe_utils(pipe1)
+
+
+
+ldoc_ins = doc.GetElement(duct_ids[0])
+ldoc = ldoc_ins.GetLinkDocument()
+trans1 = ldoc_ins.GetTotalTransform()
+
+ducts = [ldoc.GetElement(duct_id.LinkedElementId) for duct_id in duct_ids]
+
+for duct in ducts :
+
+	if duct.Category.Id.IntegerValue != int(bic.OST_DuctCurves) :
+		print("Не совпадате")
+		continue
+	else :
+		print("Совпадает")
+		
+
+		
+	
+
+	lc = duct.Location.Curve.CreateTransformed(trans1)
+	
+	if lc.Direction.Z > 0.7 :
+		print("Вертикальный воздуховод пропускаем")
+		continue
+	if lc.Length < 400 * dut :
+		continue
+		
+	
+	h1 = duct.Height
+	
+	
+	p_dist = 100 * dut
+	p_diam = 100 * dut
+	trans2 = Transform.CreateTranslation(XYZ(0,0, -(h1/2 + p_dist)))
+	
+	lc2 = lc.CreateTransformed(trans2)
+	lc3 = lc2.Clone()
+	d1 = h1/2 + p_dist + p_diam
+	
+	
+	spr_t = get_sprinklers_types()
+	spr_type_name = "Вниз под коробом в/н"
+	spr_id = spr_t[spr_type_name].Id
+	
+	s_dist = 3000 * dut
+	
+	import math
+	s_num = int(math.ceil(lc.Length / s_dist))
+	s_dist_f = lc.Length / s_num / 2
+	p0 = lc.GetEndPoint(0)
+	dir1 = lc.Direction
+	pts = [p0 + dir1 * (1 + i * 2) * s_dist_f for i in range(s_num)]
+	
+	view = uidoc.ActiveView
+	level = view.GenLevel
+	elev = level.Elevation
+	
+	sprs = None
+	
+	add_pipe = 1
+	add_sprinklers = 1
+	np = None
+	np_c = None
+	with trans(doc) :
+		if add_pipe :
+			np = pipe_u_1.get_copy_pipe(d = p_diam , lc = lc2, trans = False)
+			np_c = dm1.dm_pipe_2_connect(np)
+			
+		if add_sprinklers :
+			sprs = []
+			for p in pts :
+						
+				s1 = doc.Create.NewFamilyInstance(p-XYZ(0,0,elev)-XYZ(0,0,d1), spr_t[spr_type_name], level, bip.NonStructural)
+				sprs.append(s1)
+			
+	if np_c and sprs :
+		for s in sprs :
+			np_c.connect_equipment(s, next_size = 0, cap=False)
+			
+	
+	
+
+
+
+

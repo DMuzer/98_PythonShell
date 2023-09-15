@@ -1,0 +1,30 @@
+#spec = uidoc.ActiveView
+#print(spec)
+
+fc1 = set(FilteredElementCollector(doc, spec.Id).WhereElementIsNotElementType().ToElementIds())
+print(len(fc1))
+td = spec.GetTableData()
+ts = td.GetSectionData(1)
+tr = Transaction(doc)
+
+pos = 1
+for row_num in range(ts.NumberOfRows) :
+	
+	
+	tr.Start("1")
+	ts.RemoveRow(row_num)
+	
+	fc2 = set(FilteredElementCollector(doc, spec.Id).WhereElementIsNotElementType().ToElementIds())
+	print(len(fc2))
+	fc3 = set()
+	for eid in fc1 :
+		if not eid in fc2 :
+			fc3.add(eid)
+	
+	tr.RollBack()
+	tr.Start("renumber")
+	for eid in fc3 :
+		e=doc.GetElement(eid)
+		e.LookupParameter("ADSK_Позиция").Set("{}".format(pos))
+	tr.Commit()
+	pos += 1

@@ -1,0 +1,41 @@
+"""
+***************************************************************
+*** Переименование видов по группам
+*** СОЮЗ
+*** 
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с листами\02_Переименование видов по группам.txt"
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+def do_test(view) :
+	if not view.LookupParameter("Вид_Сортировка").AsString() == "ПТ16-ПТ" :
+		return False
+	if not view.LookupParameter("Вид_Назначение").AsString() == "Рабочие" :
+		return False
+		
+	if not isinstance(view, ViewPlan) :
+		return False
+	if view.IsTemplate : return False
+	
+	return True
+	
+views_fc = FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()
+
+views = []
+for view in views_fc :
+	if do_test(view) :
+		views.append(view)
+	
+tr = Transaction(doc)
+tr.Start("change plan names")
+print("Количество видов {}".format(len(views)))
+for view in views :
+	print(view.Name)
+	#print(view.IsTemplate)
+	
+	newName = "О_ПТ_{}_{:+.3f}".format(view.GenLevel.Name, view.GenLevel.Elevation/dut/1000)
+	print(newName)
+	view.Name = newName
+tr.Commit()

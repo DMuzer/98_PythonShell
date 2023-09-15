@@ -1,0 +1,83 @@
+"""
+***************************************************************
+*** Удаление спринклерной ветки.
+***************************************************************
+*  Для удаления ветки нужно выбрать любой элемент: спринклер или трубу
+*  макрос удалит все трубы и фитинги до питающего трубопровода
+* Питающим трубопроводом считаем любую трубу больше Дн=50
+***************************************************************
+"""
+
+from Autodesk.Revit import *
+
+while True :
+	try :
+		eid = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+		e0 = doc.GetElement(eid)
+	except :
+		break
+	dut = 0.0032808398950131233
+	def get_connected(e) :
+		if type(e) == ElementId :
+			e = doc.GetElement(e)
+		try :
+			cons = list(e.MEPModel.ConnectorManager.Connectors)
+		except :
+			cons = list(e.ConnectorManager.Connectors)
+			
+		cons1 =[]
+		for c in cons :
+			if c.Domain != Domain.DomainPiping : continue
+			if c.Radius > 39 * dut : continue
+			cons1.append(c)
+			
+		res = []
+		for c in cons1 :
+			for c1 in c.AllRefs :
+				if c1.Owner.Id != e.Id :
+					if type(c1.Owner) in [Plumbing.PipingSystem] :
+						continue
+					
+					if type(c1.Owner) == Plumbing.Pipe :
+						if c1.Owner.Diameter > 66 * dut :
+							continue
+					if c1.Owner.Category.Name == "Спринклеры" :
+						continue
+					res.append(c1.Owner)
+					print(type(c1.Owner))
+					
+		res = [e.Id for e in res]
+					
+		return res
+					
+					
+	visited = [e0.Id]
+	to_visit = get_connected(e0)
+	#print(refs)
+	i = 0
+	while to_visit :
+		i += 1
+		if i > 100 : break
+		e = to_visit.pop()
+		if e in visited : continue
+		
+		to_visit.extend(get_connected(e))
+		visited.append(e)
+	
+	for e in visited :
+		print(e)
+	
+	import System	
+	
+	
+	visited = [eid for eid in visited if doc.GetElement(eid).Category.Name != "Спринклеры"]
+	visited = System.Array[ElementId](visited)
+	
+	tr = Transaction(doc)
+	tr.Start("delete line")
+	doc.Delete(visited)
+	tr.Commit()
+		
+	
+		
+

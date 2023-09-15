@@ -1,0 +1,277 @@
+st = """
+****************************************************
+Создание расчетного графа для трубопровода и 
+Создание параллельной линии трубопровода
+вариант 2
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\06_Создание  параллельной ветки  трубы.txt"
+******************************************************
+"""
+print(st)
+dut = 0.0032808398950131233
+copyOffset = -200
+import itertools
+from Autodesk.Revit import *
+import math, sys
+import clr
+import System
+from System.Collections.Generic import IList, List
+from collections import deque
+bic = BuiltInCategory
+
+class dmElement :
+	def __init__(self, element) :
+		if isinstance(element, Element) :
+			self.element = element
+		elif isinstance(element, ElementId) :
+			self.element = doc.GetElement(element)
+		elif isinstance(element, Reference) :
+			self.element = doc.GetElement(element)	
+		elif isinstance(element, int) :
+			self.element = doc.GetElement(ElementId(element))
+	def __repr__(self) :
+		if hasattr(self.element, "MEPModel") : 
+			return f"Элемент id {self.element.Id} {self.element.Category.Name} {self.element.MEPModel.PartType}"
+			
+		return f"Элемент id {self.element.Id} {self.element.Category.Name}"
+	def __hash__(self) :
+		return self.element.Id.IntegerValue
+	def __eq__(self, other) :
+		if isinstance(other, dmElement) :
+			return other.element.Id == self.element.Id
+		elif isinstance(other, Element) :
+			return other.Id == self.element.Id
+	def _getNeighbors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		neighbors = []
+		for connector in connectors :
+			if connector.ConnectorType == ConnectorType.End :
+				for c2 in connector.AllRefs :
+					if c2.ConnectorType & ConnectorType.Physical\
+						and c2.Owner.Id != self.element.Id :
+							neighbors.append(dmElement(c2.Owner))
+		return neighbors
+	neighbors = property(_getNeighbors)
+	
+	def _getLocation(self) :
+		return self.element.Location
+	Location = property(_getLocation)
+	
+	def _getId(self) :
+		return self.element.Id
+	Id = property(_getId)
+	
+	def _getNotConnectedConnector(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return [c for c in connectors if c.ConnectorType == ConnectorType.End and not c.IsConnected][0]
+	notConnectedConnector = property(_getNotConnectedConnector)
+	
+	def getLocationStartedAt(self, connector) :
+		location = self.Location.Curve
+		if location.GetEndPoint(0).DistanceTo(connector.Origin)\
+			< location.GetEndPoint(1).DistanceTo(connector.Origin) :
+			return location
+		else :
+			return location.CreateReversed() 
+	
+	def getAnotherConnector(self, connector) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		
+		for connector2 in connectors :
+			if connector2.ConnectorType == ConnectorType.End and connector2.Id != connector.Id :
+				return connector2
+				
+	def _getConnectors(self) :
+		if hasattr(self.element, "MEPModel") :
+			connectors = self.element.MEPModel.ConnectorManager.Connectors
+		else :
+			connectors = self.element.ConnectorManager.Connectors
+		return connectors
+	Connectors = property(_getConnectors)
+	
+	def _getEndConnectors(self) :
+		return [connector for connector in self.Connectors if connector.ConnectorType == ConnectorType.End]
+	EndConnectors = property(_getEndConnectors)
+		
+	def nearestConnector(self, connector1) :
+		return min(self.EndConnectors, key = lambda x : x.Origin.DistanceTo(connector1.Origin))
+		
+	def getNearestConnector(self, pnt) :
+		return min(self.EndConnectors, key = lambda x : pnt.DistanceTo(x.Origin))
+		
+	def connectToPipe(self, pipe2) :
+		ec10, ec11 = self.EndConnectors
+		ec20, ec21 = pipe2.EndConnectors
+		
+		c1, c2 = min(itertools.product(self.EndConnectors, pipe2.EndConnectors), 
+						key = lambda x : x[0].Origin.DistanceTo(x[1].Origin))
+		doc.Create.NewElbowFitting(c1, c2)
+		
+	def getNeighborConnectedTo(self, connector) :
+		if connector.Owner.Id != self.Id : return
+		for c2 in connector.AllRefs :
+			print(self.Id, c2.Owner.Id, c2.ConnectorType)
+			if c2.ConnectorType & ConnectorType.Physical and\
+				c2.Owner.Id != self.Id :
+					return dmElement(c2.Owner)
+	def getConnectorConnectedTo(self, neighbor) :
+		for connector in self.Connectors :
+			for connector2 in connector.AllRefs :
+				if connector2.Owner.Id == neighbor.Id :
+					return connector
+			
+					
+	def _IfPipe(self) :
+		return self.element.Category.Id.IntegerValue == int(bic.OST_PipeCurves)
+	IsPipe = property(_IfPipe)
+	
+		
+		
+	
+		
+ot = UI.Selection.ObjectType.Element		
+				
+class dmCreateParallelPipeline :
+	def __init__(self) :
+		pass
+	def doInput(self, startDistance) :
+		self.pipe = doc.GetElement(uidoc.Selection.PickObject(ot))
+		self.pnt = uidoc.Selection.PickPoint()
+		
+		line1 = self.pipe.Location.Curve
+		line2 = Line.CreateUnbound(self.pnt, uidoc.ActiveView.ViewDirection)
+		
+		t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+		line1.ComputeClosestPoints(line2, True, False, False, t)
+		
+		self.pt1 = t.Item[0].XYZPointOnSecondCurve # точка откуда начинаются трубы
+		self.pt2 = t.Item[0].XYZPointOnFirstCurve  # точка выбора спроецированная на  какую-то из труб	
+		v = self.pt1 - self.pt2
+		
+		drc = v.CrossProduct(line1.Direction).Normalize()
+		if startDistance == 0 :
+			self.distance = t.Item[0].Distance  * drc.Z
+		else :
+			self.distance = startDistance * drc.Z
+		
+	def findStartElement(self) :
+		print("Находим стартовый элемент")
+		self.pipeElement = dmElement(self.pipe)
+		connector = self.pipeElement.getNearestConnector(self.pipe.Location.Curve.GetEndPoint(0))
+		neighbor = self.pipeElement.getNeighborConnectedTo(connector)
+		if not neighbor :
+			self.startElement = self.pipeElement
+			return self.startElement
+		
+		visited = set([self.pipeElement])
+		toVisit = deque([neighbor])
+		i = 0
+		while toVisit :
+			i += 1 
+			if i > 10000 : 
+				print("зациклено")
+				raise
+			current = toVisit.popleft()
+			visited.add(current)
+			neighbors = list(current.neighbors)
+			
+			if len(neighbors) == 1 and neighbors[0] in visited :
+				self.startElement = current
+				return current
+			
+			for neighbor in neighbors :
+				if neighbor not in visited :
+					toVisit.append(neighbor)
+					
+	def findSequence(self) :
+		print("вычисляем последовательность труб")
+		self.pipeSequence = []
+		toVisit = deque([self.startElement])
+		Visited = set()
+		tree =  {self.startElement : None}
+		i = 0
+		while toVisit :
+			i += 1
+			if i > 10000 : raise
+			current = toVisit.popleft()
+			if current.IsPipe :
+				self.pipeSequence.append(current)
+			for neighbor in current.neighbors :
+				if neighbor not in tree :
+					toVisit.append(neighbor)
+					tree[neighbor] = current	
+		self.tree = tree
+		
+	def createOffsetLine(self, distance = 0, distanceKDiameter = 0) :
+		if distanceKDiameter != 0 :
+			distance = self.element.Diameter * distanceKDiameter
+		elif distance == 0 :
+			distance = self.distance
+			
+		self.newPipes = []
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "создаем параллельные линии")
+			tr.Start()
+		for pipe in self.pipeSequence :
+			print(f"{pipe}\nпредшественник - {self.tree[pipe]}")
+			previuos = self.tree[pipe]
+			if previuos :
+				connector = pipe.getConnectorConnectedTo(previuos)
+			else :
+				connector = pipe._getNotConnectedConnector()
+			print(f"начинается с коннетора {connector}")	
+			location = pipe.getLocationStartedAt(connector)
+			
+			offsetDirection = location.Direction.CrossProduct(XYZ.BasisZ).Normalize()
+			offsetVector = offsetDirection * distance * math.copysign(1, self.distance)
+			if offsetVector.GetLength() < 0.00001 :
+				print("нулевой вектор")
+				offsetVector = previousOffsetVector
+			previousOffsetVector = offsetVector
+			startPoint = location.GetEndPoint(0)  + offsetVector
+			endPoint = location.GetEndPoint(1) + offsetVector
+			newLocation = Line.CreateBound(startPoint, endPoint)
+			
+			newPipe = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+			newPipe.Location.Curve = newLocation
+			self.newPipes.append(dmElement(newPipe))
+			
+		for pipe1, pipe2 in zip(self.newPipes[:-1], self.newPipes[1:]):
+			pipe1.connectToPipe(pipe2)
+			
+		
+		if tr : tr.Commit()
+			
+			
+			
+		
+
+numLines = 2
+offset = 300
+		
+
+cmd = dmCreateParallelPipeline()
+cmd.doInput(startDistance = 150*dut)
+cmd.findStartElement()
+cmd.findSequence()
+for i in range(numLines) :
+	distance = offset * dut * (i + 1)
+	cmd.createOffsetLine(distance = -distance)
+print(st)
+print("завершено...")
+	
+	
+	
+
+
+

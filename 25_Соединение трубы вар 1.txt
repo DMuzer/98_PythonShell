@@ -1,0 +1,397 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+#sys.path.append(r"D:\18_проектирование\98_PythonShell\dm_connect_pipe.py")
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+pipe_id1 = 1040649
+pipe_id2 = 1041626
+
+pipe_1 = doc.GetElement(ElementId(pipe_id1))
+pipe_2 = doc.GetElement(ElementId(pipe_id2))
+
+
+import dm_connect_pipe as dm
+reload(dm)
+
+
+conns = [c for c in pipe_1.ConnectorManager.Connectors]
+
+for c in conns :
+	print("Соединитель тип {}".format(c.ConnectorType))
+	
+print('------------')
+
+conns = [c for c in conns if c.ConnectorType == ConnectorType.End]
+
+for c in conns :
+	print("Соединитель тип {}".format(c.ConnectorType))
+
+lc_1 = pipe_1.Location.Curve
+p_01_1 = lc_1.GetEndPoint(0)
+#conns = sorted(conns, key = lambda x : x.Origin.DistanceTo(p_01_1))
+
+for c in conns :
+	print("Соединитель тип {} расстояние до начала {}".format(c.ConnectorType, p_01_1.DistanceTo(c.Origin)))
+	
+def get_ordered_end_connectors(p) :
+	p1 = p.Location.Curve.GetEndPoint(0)
+	conns = [c for c in p.ConnectorManager.Connectors if c.ConnectorType == ConnectorType.End]
+	conns = sorted(conns, key = lambda x : x.Origin.DistanceTo(p1))
+	return conns
+def get_ordered_connected_elements(p) :
+	lc = p.Location.Curve
+	p1 = lc.GetEndPoint(0)
+	conns = get_ordered_end_connectors(p)
+	
+	res = []
+	for c_ in conns :
+		for c__ in c_.AllRefs :
+			if c__.Owner.Id != p.Id :
+				res.append((c__.Owner, c__))
+			
+	return res
+	
+conns = get_ordered_end_connectors(pipe_1)
+for c in conns :
+	print("Соединитель тип {} расстояние до начала {}".format(c.ConnectorType, p_01_1.DistanceTo(c.Origin)))
+
+
+con_els = get_ordered_connected_elements(pipe_1)
+
+for ce_ in con_els :
+	print("Присоединен {}".format(ce_[0].Id))
+	
+p_0 = lc_1.Evaluate(0.4, True)
+
+def get_disconnecting_takeoffs(p, n_lc_1, n_lc_2) :
+	'''
+	Сбор информации об оборудовании которое подключено к трубе при помощи врезок.
+	На вход подается информация: 
+	p - труба.
+	n_lc_1 - Линия от которой не нужно отключать врезки
+	n_lc_2 - Линия от которой потребуется переключить врезки
+	
+	возвращается массив с кортежами:
+	(с_, takeoff, other_pipe_conn)
+	c_ - коннектор типа Curve
+	takeoff - элемент семейства врезки (который просто можно удалить при помощи функции doc.Delete()
+	other_pipe_conn - коннектор подключаемой трубы, его просто использовать при создании нового элемента врезки
+						doc.Create.NewTakeoffFitting()
+	'''
+	conns = [c_ for c_ in p.ConnectorManager.Connectors if c_.ConnectorType == ConnectorType.Curve]
+	res = []
+	for c_ in conns :
+		if n_lc_1.Distance(c_.Origin) > n_lc_2.Distance(c_.Origin) :
+			# dm.create_point(c_.Origin)
+			
+			takeoff = list(c_.AllRefs)[0].Owner
+			
+			for c__ in takeoff.MEPModel.ConnectorManager.Connectors :
+				for c___ in c__.AllRefs :
+					if (c___.Owner.Id != takeoff.Id) and (c___.Owner.Id != p.Id) :
+						other_pipe_conn = c___					
+						res.append((c_, takeoff, other_pipe_conn))
+	
+	
+	return res
+	
+lc_1 = pipe_1.Location.Curve
+lc_1_ = Line.CreateBound(lc_1.GetEndPoint(0), p_0)
+lc_1_2_ = Line.CreateBound(p_0, lc_1.GetEndPoint(1))
+
+conns_to = get_disconnecting_takeoffs(pipe_1, lc_1_, lc_1_2_)
+
+for c_ in conns_to :
+	print(c_)
+
+
+with trans(doc) :
+	for c_1 in conns_to :
+		#Удаляем врезку
+		doc.Delete(c_1[1].Id)
+		
+	print('--1')
+with trans(doc) :
+		
+	pipe_1_2_id = ElementTransformUtils.CopyElement(doc, pipe_1.Id, XYZ.Zero)[0]
+	pipe_1_2 = doc.GetElement(pipe_1_2_id)
+
+	
+	if conns[1].IsConnected :
+		conns[1].DisconnectFrom(con_els[1][1])
+		
+		conns2 = get_ordered_end_connectors(pipe_1_2)
+		conns2[1].ConnectTo(con_els[1][1])
+	else :
+		pipe_1_2.Location.Curve = lc_1_2_
+		pipe_1.Location.Curve = lc_1_
+		
+	print('---')
+	
+	for c_1 in conns_to :
+		doc.Create.NewTakeoffFitting(c_1[2], pipe_1_2)
+	
+
+		
+		
+
+
+
+		
+
+
+
+"""
+
+def get_pipe_cylinder(pipe, k) :
+	from System.Collections.Generic import List
+	d = pipe.LookupParameter("Диаметр").AsDouble() * k
+	
+	lc = pipe.Location.Curve
+	
+	p1 = lc.GetEndPoint(0) - lc.Direction * 1000
+	
+	plane = Plane.CreateByNormalAndOrigin(lc.Direction, p1)
+	
+	arc1 = Arc.Create(plane,  d/2, 0, math.pi)
+	arc2 = Arc.Create(plane, d/2, math.pi, math.pi * 2)
+	
+	cl = [CurveLoop.Create([arc1, arc2])]
+	
+	solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+	
+	cyl = GeometryCreationUtilities.CreateExtrusionGeometry(List[CurveLoop](cl), plane.Normal, 2000, solid_opt)
+	return cyl
+	
+def get_pipe_box(pipe) :
+	from System.Collections.Generic import List
+	lc = pipe.Location.Curve
+	p1 = lc.GetEndPoint(0)
+	p2 = lc.GetEndPoint(1)
+	d = lc.Direction
+	
+	plane = Plane.CreateByThreePoints(p1, p2, p1 - XYZ.BasisZ)
+	
+	p11 = p1 - d * 1000 - XYZ.BasisZ * 1000
+	p12 = p11 + XYZ.BasisZ * 2000
+	p13 = p12 + d * 2000
+	p14 = p13 - XYZ.BasisZ * 2000
+	
+	lines = [
+		Line.CreateBound(p11, p12),
+		Line.CreateBound(p12, p13),
+		Line.CreateBound(p13, p14),
+		Line.CreateBound(p14, p11),
+	]
+	
+	rect = [CurveLoop.Create(lines)]
+	solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+	solid = GeometryCreationUtilities.CreateExtrusionGeometry(List[CurveLoop](rect),
+										plane.Normal, dut)
+										
+	return solid
+	
+def create_direct_shape(solid) :	
+	category_id = ElementId(bic.OST_GenericModel)
+	with trans(doc, "solid_bbox_direct_shape") as tx:
+	    direct_shape = DirectShape.CreateElement(doc, category_id)
+	    direct_shape.SetShape([solid])
+	    
+def create_point(p, r = 1) :
+	from System.Collections.Generic import List
+	plane = Plane.CreateByOriginAndBasis(p, XYZ.BasisX, XYZ.BasisY)
+	
+	arc1 = Arc.Create(p-XYZ.BasisY*r, p+XYZ.BasisY *r, p+XYZ.BasisX *r)
+	create_model_line(arc1)
+	line1 = Line.CreateBound(p-XYZ.BasisY*r, p+XYZ.BasisY *r)
+	create_model_line(line1)
+	cl = [CurveLoop.Create([arc1, line1])]
+	
+	solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+	
+	fr = Frame(p, XYZ.BasisY, XYZ.BasisZ, XYZ.BasisX) 
+	
+	ball = GeometryCreationUtilities.CreateRevolvedGeometry(fr, List[CurveLoop](cl), 0, math.pi * 2)
+	create_direct_shape(ball)
+	return ball
+	    
+def create_model_line(curve) :
+	try :
+		plane = Plane.CreateByNormalAndOrigin(corve.Normal, curve.Center)
+	except :
+		p1 = curve.GetEndPoint(0)
+		p2 = curve.GetEndPoint(1)
+		p3 = p1 + XYZ(0.1, 0.3, 0.8)
+		plane = Plane.CreateByThreePoints(p1, p2, p3)
+		
+	with trans(doc, "1") :
+		sk_p = SketchPlane.Create(doc, plane)
+		ml = doc.Create.NewModelCurve(curve, sk_p)
+	    
+def get_split_point(cyl, box, pipe, pipe2) :
+	'''
+	Вычисляем точка перелома трубы и разрыва на трубе.
+	'''
+	lc = pipe.Location.Curve
+	lc2 = pipe2.Location.Curve
+	p1 = lc.GetEndPoint(0)
+	p2 = lc.GetEndPoint(1)
+	d1 = lc.Direction
+	l2 = Line.CreateBound(p1-d1*1000, p1+d1*1000)
+	
+	#create_model_line(l2)
+	int1 = cyl.IntersectWithCurve(l2, None)
+	res1 = None
+	if int1.SegmentCount > 0 :
+		
+		s = int1.GetCurveSegment(0)
+		p1 = s.GetEndPoint(0)
+		p2 = s.GetEndPoint(1)
+		
+		if lc.Distance(p1) > lc.Distance(p2) :
+			res1= p2
+		else :
+			res1=p1
+		
+		
+	
+	int2 = box.IntersectWithCurve(l2, None)
+	
+	if (res1 is None) and (int2.SegmentCount > 0) :
+		s = int2.GetCurveSegment(0)
+		
+		p1 = s.GetEndPoint(0)
+		p2 = s.GetEndPoint(1)
+		if lc2.Distance(p1) > lc2.Distance(p2) :
+			res1= p2
+		else :
+			res1= p1
+			
+	res2 = lc2.Project(res1).XYZPoint
+	return res1, res2
+	
+	return int1
+
+	    
+def get_nearest_end_point(p0, pipe) :
+	lc = pipe.Location.Curve
+	
+	p1 = lc.GetEndPoint(0)
+	p2 = lc.GetEndPoint(1)
+	
+	if p0.DistanceTo(p1) < p0.DistanceTo(p2) :
+		return p1
+	else :
+		return p2
+									
+		
+cyl_1 = get_pipe_cylinder(pipe_1, 3)
+box_1 = get_pipe_box(pipe_1)
+
+#create_direct_shape(cyl_1)
+#create_direct_shape(box_1)
+#Вычисляем точку перелома и точку разреза трубы
+pp1, pp2 = get_split_point(cyl_1, box_1, pipe_2, pipe_1)
+#находим ближайшую точку на присоединяемой трубе
+pp3 = get_nearest_end_point(pp1, pipe_2)
+
+
+#Созадем трубы копированием присоединяемой
+
+
+n_lc1 = Line.CreateBound(pp3,pp1)
+n_lc2 = Line.CreateBound(pp1, pp2)
+
+with trans(doc, "1") :
+	n_p1 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe_2.Id, XYZ.Zero)[0])
+	n_p1.Location.Curve = n_lc1
+	
+	n_p2 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe_2.Id, XYZ.Zero)[0])
+	n_p2.Location.Curve = n_lc2
+	
+	n_p01 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe_1.Id, XYZ.Zero)[0])
+	
+	
+# Теперь надо разделить вторую трубу, при том, что необходимо новую трубу сделать подключенной
+# Нужно получить коннекторы трубы в правильном порядке
+
+def get_pipe_connectors(pipe_1) :
+	p1 = pipe_1.Location.Curve.GetEndPoint(0)
+	conns = sorted(list(pipe_1.ConnectorManager.Connectors), key = lambda x : p1.DistanceTo(p1))
+	return conns
+	
+	
+
+conn1 = get_pipe_connectors(pipe_1)
+
+conn2 = get_pipe_connectors(n_p01)
+
+conn3 = get_pipe_connectors(n_p2)
+
+def get_opposite_connector(con) :
+	ref = list(con.AllRefs)
+	if ref[0].Owner.Id == con.Owner.Id :
+		return ref[1]
+	else :
+		return ref[0]
+
+
+	
+p01_ = pipe_1.Location.Curve.GetEndPoint(0)
+p02_ = pipe_1.Location.Curve.GetEndPoint(1)
+n_lc1 = Line.CreateBound(p01_,pp2)
+n_lc2 = Line.CreateBound(pp2, p02_)
+	
+with trans(doc, '1') :
+	if conn1[1].IsConnected :
+		con_ = get_opposite_connector(conn1[1])
+		conn1[1].DisconnectFrom(con_)
+		conn2[1].ConnectTo(con_)
+	pipe_1.Location.Curve = n_lc1
+	n_p01.Location.Curve = n_lc2
+	
+	doc.Create.NewTeeFitting(conn1[1], conn2[0], conn3[1])
+	
+
+	
+	
+
+print(con_)
+
+"""
+	
+
+
+
+
+
+

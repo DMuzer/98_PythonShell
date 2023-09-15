@@ -1,0 +1,92 @@
+"""
+***************************************************************
+*** Анализ пространств и вычисление пространств для прохода труб
+*** 
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import time
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+spr1_id = ElementId(8647027)
+
+
+
+for sp in mapp.spaces_not_protected[:] :
+	try :
+		
+		print(sp.Name)
+		
+		
+		fs = dm.dmFreeSpaceSolid(sp)
+		
+		
+		fs.take_pipe_solid_from_direct_shape(8711567)
+		fs.modify_pipe_space_for_pipelines(dn=150)
+		#fs.show_pipe_space_solid()
+		
+		tt1 = time.time()
+		#fs.substract_parking_solid()
+		#fs.show_space_solid()
+		#fs.substract_floors(True)
+		#fs.substract_ducts(False)
+		#fs.substract_ducts_geometry(True)
+		tt2 = time.time()
+		print("Время вычитания полов составило {} с.".format(tt2-tt1))
+		
+		fs.show_pipe_space_solid()
+		
+		
+		#sp.is_protected = 1
+	except Exception as ex:
+		print(50*"'")
+		print("Ошибка в основном цикле")
+		print(ex)
+		pass
+		print(50*"'")

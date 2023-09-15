@@ -1,0 +1,16 @@
+from Autodesk.Revit import UI as UI
+pipe1_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe1 = doc.GetElement(pipe1_id)
+
+pipe2_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+pipe2 = doc.GetElement(pipe2_id)
+
+trans = Transaction(doc)
+trans.Start("Move pipe")
+
+pipe1.LookupParameter("Базовый уровень").Set(pipe2.LookupParameter("Базовый уровень").AsElementId())
+pipe1.LookupParameter("Отметка посередине").Set(pipe2.LookupParameter("Отметка посередине").AsDouble())
+trans.Commit()
+
+
+

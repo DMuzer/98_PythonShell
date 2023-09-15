@@ -1,0 +1,139 @@
+"""
+***************************************************************
+*** Создание разреза по выделенной трубе
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\03.2_Создать разрез поперек трубы(скрипт).txt"
+***************************************************************
+*  Выбирается труба и создается рабочий разрез так, чтобы
+* на разрезе была видна труба для упрощения работы с пересечениями
+* код в модуле d57_work_section_create.py
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import d57_work_section_create as dm57
+
+reload(dm)	
+reload(dm1)
+reload(dm57)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def get_working_section_type(along = True) :
+	#along -True - находит тип для сечения вдоль трубы
+	#along - False - находит тип для сечения поперек трубы
+	#Выбираем все типы видов
+	fc = FilteredElementCollector(doc).OfClass(ViewFamilyType)
+	#Выбираем все сечения
+	fc2 = list(FilteredElementCollector(doc).OfClass(ViewSection))
+	
+	for e in fc2[::-1] :
+		vt_id = e.GetTypeId()
+		if vt_id != ElementId.InvalidElementId :
+			last_type = doc.GetElement(vt_id)
+			break
+	#Выбираем последний созданный
+	lname = Element.Name.GetValue(last_type)		
+	#print("Последний использованный {}".format(lname))
+			
+	view_types = set()
+	
+	
+	for e in fc :
+		#print(type(e))
+		if not e.ViewFamily == ViewFamily.Section :
+			#print("Это не сечение")
+			continue
+		#print(Element.Name.GetValue(e))
+		view_types.add(e)
+		
+	#print(view_types)
+	
+	along_name = "Разрез_ПТ_Рабочий_вдоль трубы"
+	across_name = "Разрез_ПТ_Рабочий_поперек трубы"
+	res = None
+	for e in view_types :
+		tname = Element.Name.GetValue(e)
+		if (((tname == along_name) and along) or
+				((tname == across_name and not along))):
+			res = e
+			
+	#print("Найдено {}".format(t))
+	
+	if not res :
+		res = last_type
+		
+	if not res :
+		pass
+	return res
+	
+	return res
+	
+def get_new_number() :
+	fc = FilteredElementCollector(doc).OfClass(ViewSection).ToElements()
+
+	nums = [0]
+	for e in fc :
+		if e.Name.Contains("Разрез поперек трубы") :
+			
+			n = e.Name
+			num1 = n.split(" ")[-1]
+			try :
+				nums.append(int(num1))
+			except :
+				pass
+				
+	new_num = max(nums) + 1
+	return new_num
+	
+vt_id = get_working_section_type(along = False).Id
+
+
+new_number = get_new_number()
+new_name = "Разрез поперек трубы {}".format(new_number)
+
+new_section = dm57.dm_WorkSectionCreation(
+		doc = doc,
+		uidoc = uidoc,
+		ViewTypeId = vt_id)
+new_section.Pipe_pickup()
+new_section.CreateNormalSection(new_name = new_name)
+
+
+
+#__window__.Close()

@@ -1,0 +1,25 @@
+bic =BuiltInCategory
+pipes = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+access = FilteredElementCollector(doc).OfCategory(bic.OST_PipeAccessory).WhereElementIsNotElementType().ToElements()
+tr = Transaction(doc, "connec accessories")
+tr.Start()
+for acs in access :
+	pass
+	
+	#cns = [c for c in acs.MEPModel.ConnectorManager.UnusedConnectors]
+	
+	if not acs.MEPModel.ConnectorManager : continue
+
+
+	for pipe in pipes :
+		
+		for c1 in pipe.ConnectorManager.UnusedConnectors :
+			for c2 in acs.MEPModel.ConnectorManager.UnusedConnectors :
+				d = c1.Origin - c2.Origin
+				if d.Normalize().IsAlmostEqualTo(c2.CoordinateSystem.BasisZ) and d.GetLength() < 0.2 :
+					print("Можно подключить")
+					c2.ConnectTo(c1)
+					
+		
+tr.Commit()		
+	

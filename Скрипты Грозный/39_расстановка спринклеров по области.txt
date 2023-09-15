@@ -1,0 +1,109 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sel0 = uidoc.Selection.GetElementIds()
+
+if len(sel0) > 0 :
+	sel1 = sel0
+print(sel0)
+
+for e in sel1 :
+	print(type(doc.GetElement(e)))
+	
+
+import dm_connect_2 as dm
+
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+app = dm.dmApp(doc)
+
+vn = app.views['Потолки'] 
+ls = app.detail_linestyles['ADSK_Сплошная_Синяя_4']
+frt = app._get_filled_region_types()["DM_Зона_орошения_спринклера"]
+
+flt = ElementIdSetFilter(sel1)
+fc = FilteredElementCollector(doc).OfClass(FilledRegion).WherePasses(flt).ToElements()
+
+#fr = dm.dm_FilledRegion(fc[0])
+#contour = fr.contour_nts
+
+max_step = 3000 * dut
+prot_radius = 3000*dut * 2 ** 0.5 / 2
+
+#ra = math.degrees(fc[0].LookupParameter("DM_Поворот").AsDouble())
+
+sp = app.spaces.gi(2)
+print(sp.get_view_name())
+dv = sp.get_draft_view(create=True)
+print(dv.Name)
+
+
+
+
+
+#fr.CalculateSprinklerPositions()
+#pg2 = dm.get_sprinkler_pos(contour, max_step, prot_radius, rot_angle = 22.5)
+#pnts2 = None
+#pnts2 = dm.get_s prinkler_pos(contour, max_step, prot_radius, rot_angle = 22.5)
+#pnts3 = fr.draw_sprinklers(vn, 1, ls)
+#fr.draw_sprinkler_covering(vn, frt)
+
+
+for r in list(fc)[:1] :
+	print("!")
+	
+	fr = dm.dm_FilledRegion(r)
+	fr.contour_nts
+	fr.draw_sprinklers()
+	fr.draw_sprinkler_covering()
+
+
+
+
+
+
+
+
+
+
+
+	
+	
+	
+
+
+
+
+

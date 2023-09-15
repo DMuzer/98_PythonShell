@@ -1,0 +1,83 @@
+import Autodesk.Revit.UI as UI
+
+uidoc = uidoc.Application.ActiveUIDocument
+doc = uidoc.Document
+
+tr = Transaction(doc)
+
+code = ".7."
+s_num = 39
+while True :
+	try :
+		e_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+		e = doc.GetElement(e_ref)
+		
+		if e.Category.Name == "Текстовые примечания" :
+			tr.Start('renumber')
+			
+			prev = e.Text.split('.')
+			if len(prev) > 2 :
+				prev[-2] = "3"
+				pass
+			
+			prev[-1] = "{}".format(s_num)
+			
+			if e.Text.TrimEnd().EndsWith("*") :
+				prev[-1] += "*"
+			
+			text1 = ".".join(prev)
+			text1 = "{}{}".format(code, s_num)
+			e.Text = text1
+			
+			if e.Width < 0.05 :
+				e.Width = 0.05
+			tr.Commit()
+		elif e.Category.Name.Contains('Марки') :
+			print("Марка")
+			
+			eid = e.TaggedLocalElementId
+			e1 = doc.GetElement(eid)
+			param = e1.LookupParameter("Марка")
+			text = param.AsString()
+			
+			e = e1
+			
+			prev = text.split('.')
+			if len(prev) > 2 :
+				prev[-2] = "2"
+			if len(prev) >3 :
+				prev.pop(1)
+			prev[-1] = "{}{}".format(code, s_num)
+			
+			if text.TrimEnd().EndsWith("*") :
+				prev[-1] += "*"
+			
+			text1 = ".".join(prev)
+			text1 = "{}{}".format(code, s_num)
+			
+			
+			
+			tr.Start("renumber")
+			param.Set(text1)
+			tr.Commit()
+			
+		else :
+			param = e.LookupParameter("Марка")
+			tr.Start("renumber")
+			param.Set("{}{}".format(code, s_num))
+			tr.Commit()
+		s_num += 1
+		
+		if e.Category.Name == "Электрооборудование" :
+			param = e.LookupParameter("Имя панели")
+			tr.Start("renumber")
+			param.Set(text)
+			tr.Commit()
+			
+		
+		
+
+	
+	except Exception as ex:
+		print(ex)
+		break

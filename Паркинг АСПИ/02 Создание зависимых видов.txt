@@ -1,0 +1,14 @@
+tr = Transaction(doc)
+av = uidoc.ActiveView
+base_name = av.Name
+tr.Start("duplicate views")
+num = 1
+for i in range(5) :
+	new_view_id = av.Duplicate(ViewDuplicateOption.AsDependent)
+	new_view = doc.GetElement(new_view_id)
+	new_view_name = "{}. Экспликация {}".format(base_name, num)
+	num +=1
+	new_view.Name = new_view_name
+	
+tr.Commit()
+	

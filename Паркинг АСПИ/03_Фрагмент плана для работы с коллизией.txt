@@ -1,0 +1,69 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+def en(x) :
+	return Element.Name.GetValue(x)
+
+def get_plan2copy(z) :
+	def test_plan_name(l) :
+		wrds = "план шаблон фрагмент".split()
+		n = en(l)
+		for w in wrds :
+			if not re.match(".*{}.*".format(w), n, re.I) : return False	
+		return True
+
+	fec = list(FilteredElementCollector(doc).OfClass(Level).ToElements())
+	fcl = [l1 for l1 in fec if l1.Elevation <= z]
+	if len(fcl) > 0 :
+		lev = max(fcl, key = lambda x : x.Elevation)
+	else :
+		lev = fec[0]
+
+	fc = list(FilteredElementCollector(doc).OfClass(ViewPlan).ToElements())
+	plans = [pl1 for pl1 in fc if test_plan_name(pl1)]
+	plans2 = [pl1 for pl1 in plans if pl1.GenLevel.Id == lev.Id]
+
+	
+
+	return plans2[0]
+	
+objs = [doc.GetElement(o) for o in uidoc.Selection.GetElementIds()]
+bbs = [o.get_BoundingBox(None) for o in objs]
+
+bb = BoundingBoxXYZ()
+
+minx = min([b.Min.X for b in bbs])-1000*dut
+miny = min([b.Min.Y for b in bbs])-1000*dut
+minz = min([b.Min.Z for b in bbs])-1000*dut
+maxx = max([b.Max.X for b in bbs])+1000*dut
+maxy = max([b.Max.Y for b in bbs])+1000*dut
+maxz = max([b.Max.Z for b in bbs])+1000*dut
+
+bb.Min = XYZ(minx, miny, minz)
+bb.Max = XYZ(maxx, maxy, maxz)
+
+	
+plan2copy = get_plan2copy(-5)
+
+print(en(plan2copy))
+
+tr = Transaction(doc)
+tr.Start('copy plan')
+
+new_plan = doc.GetElement(plan2copy.Duplicate(ViewDuplicateOption.Duplicate))
+new_plan.CropBox = bb
+new_plan.CropBoxActive = True
+new_plan.CropBoxVisible = True
+
+vr = new_plan.GetViewRange()
+tvp = maxz - doc.GetElement(vr.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation
+vr.SetOffset(PlanViewPlane.TopClipPlane, tvp)
+new_plan.SetViewRange(vr)
+
+
+tr.Commit()
+
+uidoc.ActiveView = new_plan

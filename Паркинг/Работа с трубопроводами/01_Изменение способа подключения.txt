@@ -1,0 +1,43 @@
+"D:\18_проектирование\98_PythonShell\Паркинг\Работа с трубопроводами\01_Изменение способа подключения.txt"
+
+import clr
+
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+
+from Autodesk.Revit import DB
+from Autodesk.Revit import UI
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+pipe_ref = uidoc.Selection.GetElementIds()[0]
+pipe = doc.GetElement(pipe_ref)
+
+pipe_type_id = pipe.GetTypeId()
+pipe_type = doc.GetElement(pipe_type_id)
+
+rpm = pipe_type.RoutingPreferenceManager
+
+print(rpm.GetNumberOfRules(RoutingPreferenceRuleGroupType.Junctions))
+print(rpm.PreferredJunctionType)
+
+tr = Transaction(doc)
+tr.Start("Изменение способа подключения трубопровода")
+
+if rpm.PreferredJunctionType == PreferredJunctionType.Tee :
+	rpm.PreferredJunctionType = PreferredJunctionType.Tap
+else :
+	rpm.PreferredJunctionType = PreferredJunctionType.Tee
+	
+	
+tr.Commit()
+
+
+
+

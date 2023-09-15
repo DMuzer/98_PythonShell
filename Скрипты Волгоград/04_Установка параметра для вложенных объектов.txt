@@ -1,0 +1,33 @@
+import Autodesk.Revit.UI as UI
+ot = UI.Selection.ObjectType
+
+
+def set_part(part, e_ref) :
+	tr = Transaction(doc)
+	
+	e = doc.GetElement(e_ref)
+	tr.Start("Установка принадлежности")
+	param = e.LookupParameter("ADSK_Принадлежность к разделу")
+	param.Set(part)
+	
+	for seid in e.GetSubComponentIds() :
+		se = doc.GetElement(seid)
+		param = se.LookupParameter("ADSK_Принадлежность к разделу")
+		param.Set(part)
+		
+	tr.Commit()
+
+			
+
+part = "Слаботочный лоток"
+while True :
+	try :
+		e_ref  = uidoc.Selection.PickObject(ot.Element)
+		set_part(part, e_ref)
+	except :
+		break
+
+
+
+
+

@@ -1,0 +1,16 @@
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с текстом\02_Копирование текста.txt"
+
+import Autodesk.Revit.UI as UI
+tr = Transaction(doc)
+while True :
+	try :
+		o = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+		if isinstance(o, TextNote) :
+			tr.Start("Set text")
+			o.Text = templ.format(start)
+			tr.Commit()
+			start += 1
+			
+	except :
+		raise
+		break

@@ -1,0 +1,152 @@
+import subprocess
+import json
+
+n_path = r'D:\18_проектирование\98_PythonShell'
+
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+def get_room_bottom(room) :
+	geom = room.Geometry[Options()]
+	
+	faces = []
+	for s in geom :
+		if type(s) == Solid :			
+			for f in s.Faces :
+				if type(f) != PlanarFace : continue
+				if f.FaceNormal.Z < -0.7 :
+					faces.append(f)
+					
+	return faces
+	
+def get_face_boundaries(f) :	
+	loops = f.GetEdgesAsCurveLoops()	
+	edges = []	
+	global arc
+	for loop in loops :
+		l1 = []
+		for l in loop :
+			if type(l) == Line :
+				p = l.GetEndPoint(0)
+				l1.append((p.X, p.Y))
+			else :
+				pnts = l.Tessellate()
+				for p in pnts :
+					l1.append((p.X, p.Y))			
+		edges.append(l1)		
+	return edges
+			
+def get_face_data(face, max_dist = 3000, max_radius = 2150, boundary_step = 500):
+	#Возврат структуры координат границы 
+	dut = 0.0032808398950131233
+	#print('get_face_data')
+		
+	b = get_face_boundaries(face)
+	#print(b)
+		
+	room = [[]]
+	
+	res = {
+		"room" : b,
+		"max_dist" : max_dist * dut,
+		"max_radius" : max_radius * dut,
+		"boundary_step" : boundary_step * dut
+	}
+	
+	return res
+	
+def get_room_data(room, max_dist = 3000, max_radius = 2150, boundary_step = 500) :
+	bottom_faces = get_room_bottom(room)
+	#print(bottom_faces)
+	
+	res = []
+	
+	for f in bottom_faces :
+		f_data = get_face_data(f,max_dist, max_radius, boundary_step)
+		if not f_data is None :
+			res.append(f_data)
+			
+	return res
+	
+	
+def get_rooms_data(rooms, max_dist = 3000, max_radius = 2150, boundary_step = 500) :
+	res = []
+	for room in rooms :
+		r_data = get_room_data(room,max_dist, max_radius, boundary_step)
+		if not r_data is None :
+			res.append(r_data)				
+	return res
+
+
+points = []
+sels = uidoc.Selection
+sp_coll = FilteredElementCollector(doc, uidoc.Selection.GetElementIds()).OfCategory(BuiltInCategory.OST_MEPSpaces)
+rooms = sp_coll.ToElements()
+
+d = get_rooms_data(rooms)
+#print(d)
+
+	
+#points = get_room_boundary(room_id)
+
+
+print('---')
+fn = r"D:\18_проектирование\RevitCode\02.return.py"
+
+j_data = json.dumps(d[1][0])
+
+print(j_data)
+
+
+    
+subp = subprocess.Popen(['python', fn], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+
+
+
+res = subp.communicate(j_data.encode())
+print(res[0])
+
+
+
+def create_sprinkler(pos, single = True, point = False) :
+	spr_t_col = FilteredElementCollector(doc)
+	spr_t_col.OfClass(FamilySymbol).OfCategory(BuiltInCategory.OST_Sprinklers)
+
+	
+	spr_t_id = doc.GetElement(ElementId(1044421))
+    
+	level_id = uidoc.ActiveView.GenLevel
+	str_t = Structure.StructuralType.NonStructural
+	
+	tr = Transaction(doc)
+	tr.Start("1")
+	
+	
+	if single :
+		if point :
+			location = pos
+		else :
+			location = xyz(*pos)
+		doc.Create.NewFamilyInstance(location, spr_t_id, level_id, level_id, str_t)
+	else :
+		for p in pos :
+			if point :
+				location = p
+			else :
+				location = xyz(*p)
+			doc.Create.NewFamilyInstance(location, spr_t_id, level_id, str_t)
+				
+		
+									
+	tr.Commit()
+	
+
+pnts = json.loads(res[0])
+pnts_xyz = [XYZ(p[0], p[1], 1000*dut) for p in pnts]
+
+#create_sprinkler(pnts_xyz, single = False, point = True)
+
+
+

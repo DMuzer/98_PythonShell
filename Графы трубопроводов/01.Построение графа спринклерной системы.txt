@@ -1,0 +1,184 @@
+import itertools
+import collections
+
+def set_color(e, r=0,g=0,b=0, a=0, view = None) :
+    color = Color(r,g,b)
+    if not view :
+        view = uidoc.ActiveView
+    ogs = OverrideGraphicSettings()
+    ogs.SetProjectionLineColor(color)
+    ogs.SetSurfaceTransparency(a)
+    ogs.SetSurfaceForegroundPatternColor(color)
+    #ogs.SetSurfaceForegroundPatternId(ElementId(19))
+    ogs.SetProjectionLineColor(color)
+    ogs.SetCutLineColor(color)
+
+    try :
+        view.SetElementOverrides(e.Id, ogs)
+    except Exception as ex:
+        print("Исключение при задании цвета set_color")
+        print(ex)
+        try :
+            tr = Transaction(doc)
+            tr.Start("set color")
+            view.SetElementOverrides(e.Id, ogs)
+            
+            tr.Commit()
+            print("поправлено")
+        except :
+        	print("не получилось")
+            
+
+
+class Vertex :
+	def __init__(self, key) :
+		self.key = key
+		self.connections = {}
+	def __repr__(self) :
+		return "Вершина графа {}".format(self.key)
+	def add_adj(self,vertex, weight = 1) :
+		self.connections[vertex] = weight
+	def get_connections(self) :
+		return self.connections.keys()
+	def get_weight(self, vertex) :
+		return self.connections[vertex]
+		
+	def red(self)  :
+		e = doc.GetElement(ElementId(self.key[0]))
+		set_color(e, r=255, g=0, b=0, a=0)
+	def gray(self) :
+		e = doc.GetElement(ElementId(self.key[0]))
+		set_color(e, r=80, g=80, b=80, a = 80)
+		
+class Graph :
+	def __init__(self) :
+		self.vertex_dict = {}
+		self.id_dict = {}
+	def add_vertex(self, key) :
+		new_vertex = Vertex(key) 
+		if not key in self.vertex_dict :
+			if key[0] in self.id_dict :
+				self.id_dict[key[0]].append(key)
+			else :
+				self.id_dict[key[0]] = [key]
+			self.vertex_dict[key] = new_vertex
+	def get_vertex(self, key) :
+		if key in self.vertex_dict :
+			return self.vertex_dict[key]
+		return None
+		
+	def __getitem__(self, key) :
+		return self.get_vertex(key)
+		
+	def add_edge(self, f, t,weight =1) :
+		if f not in self.vertex_dict :
+			self.add_vertex(f)
+		if t not in self.vertex_dict :
+			self.add_vertex(t)
+		self.vertex_dict[f].add_adj(self.vertex_dict[t], weight)
+		
+	def dfs(self, start, target) :
+		pass
+		
+	def wfs(self, start, end) :
+		current = start
+		visited = set()
+		self.prev = {current : None}
+		to_visit = collections.deque([current])
+		i = 0
+		while to_visit :
+			i += 1
+			if i > 1000 : 
+				print("Не нашли")
+				break
+			current = to_visit.popleft()
+			visited.add(current)
+			print("current {}".format(current))
+			if current == end : 
+				print(i)
+				return True
+			
+			for nv in self[current].connections :
+				print("connection {}".format(nv.key))
+				if nv.key in visited : continue
+				if nv.key == end :
+					print("Нашли добавили")
+				to_visit.append(nv.key)
+				self.prev[nv.key] = current
+		
+import time
+tt1 = time.time()
+
+g = Graph()
+spr_fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Sprinklers)
+spr_fc.WhereElementIsNotElementType()
+spr_set = set(spr_fc.ToElementIds())
+visited = set()
+i = 0
+while spr_set :
+	if i > 10000 : break
+	i += 1
+	eid = spr_set.pop()
+	visited.add(eid)
+	e = doc.GetElement(eid)
+	print(20*'-')
+	print("{} тип {}".format(e.Id, e))
+	try :
+		conns = e.MEPModel.ConnectorManager.Connectors
+	except :
+		conns = e.ConnectorManager.Connectors
+	for c in conns :
+		print("Коннектор {}".format(c.Id))
+		key = (e.Id.IntegerValue, c.Id)
+		g.add_vertex((e.Id.IntegerValue, c.Id))
+		
+		for c2 in c.AllRefs :
+			if not (c2.ConnectorType & ConnectorType.Physical) : continue
+			
+			print("{} - {}".format(c2.Owner.Id, c2.Owner))
+			if not c2.Owner.Id in visited : spr_set.add(c2.Owner.Id)
+			
+			key2 = (c2.Owner.Id.IntegerValue, c2.Id)
+			g.add_edge(key, key2)
+	if conns.Size > 1 :
+		for e1, e2 in itertools.combinations(conns, 2) :
+			key1, key2 = (e1.Owner.Id.IntegerValue, e1.Id), (e2.Owner.Id.IntegerValue, e2.Id)
+			g.add_edge(key1, key2)
+			g.add_edge(key2, key1)
+			
+
+key_start = g.id_dict[1045512][0]
+key_start = g.id_dict[1045512][0]
+key_start = g.id_dict[1045709][0]
+key_end = g.id_dict[1045754][0]
+
+res = g.wfs(key_start, key_end)
+if res :
+	print("Найдено")
+	
+
+for v in g.vertex_dict.values() :
+	v.gray()
+	
+current = key_end 
+i = 0
+while current :
+	i += 1
+	if i > 10000 :
+		break
+	
+	e = doc.GetElement(ElementId(current[0]))
+	set_color(e, r=200, g=0, b=0, a=0, view = av)
+	#print(current)
+	current = g.prev[current]
+	
+	
+	
+			
+tt2 = time.time()
+
+print("Время выполнения {} с".format(tt2-tt1))
+
+
+
+		

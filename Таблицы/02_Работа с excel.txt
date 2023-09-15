@@ -1,0 +1,60 @@
+import clr
+clr.AddReferenceByPartialName("Microsoft.Office.Interop.Excel")
+import Microsoft.Office.Interop.Excel as excel
+
+from System.Runtime.InteropServices import Marshal
+#ex_app = Marshal.GetActiveObject("Excel.Application")
+import itertools
+
+fn = r"D:\18_проектирование\26_Кабели\Кабели1.xlsx"
+print(fn)
+
+num_pairs = [1,2,4,6,8,10]
+diam = ["0,5", 		"0,64", 	"0,80", 	"0,97", 	"1,13", 	"1,38", 	"1,78" ]
+sect = ["0,2мм²", 	"0,35мм²",	"0,5мм²",	"0,75мм²",	"1,0мм²",	"1,5мм²",	"2,5мм²" ]
+
+ex_app = excel.ApplicationClass()
+ex_wb = ex_app.Workbooks.Open(fn)
+ws = ex_wb.WorkSheets(1)
+row_num = 1
+col_num = 1
+
+for i1, i2 in itertools.product(range(len(num_pairs)), range(len(diam))) :
+	s = "КСРВнг(А)-FRLS {}x2x{} мм ({})".format(num_pairs[i1], diam[i2], sect[i2])
+	s1 = "{}x2x{}".format(num_pairs[i1],sect[i2])
+	print(s)
+	
+	row_num = 2 + i1 * len(num_pairs) + i2
+	
+	
+	ws.Cells(row_num, 1).value2 = s
+	ws.Cells(row_num, 2).value2 = "Огнестойкие кабели парной скрутки КСРВнг(А)-FRLS для ОПС, СОУЭ и АПС. ТУ 3581-014-39793330-2009"
+	ws.Cells(row_num, 3).value2 = s
+	ws.Cells(row_num, 4).value2 = s1
+	ws.Cells(row_num, 5).value2 = ""
+	ws.Cells(row_num, 6).value2 = "Паритет"
+	ws.Cells(row_num, 7).value2 = "м"
+	ws.Cells(row_num, 9).value2 = "Кабели, провода, шнуры"
+	ws.Cells(row_num, 10).value2 = 0
+	
+	
+	
+	
+
+
+while True :
+	val = ws.Cells(row_num, col_num).Value()
+	if val is None : break
+	print(val)
+	
+	col_num += 1
+	if col_num > 50 : break
+	
+
+	
+ex_wb.Save()
+ex_wb.Close()
+ex_app = None
+	
+
+	

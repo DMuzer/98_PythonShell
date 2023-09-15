@@ -1,0 +1,17 @@
+"""
+Смена отметок трубопроводов
+паркинг АСПИ
+"""
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+pipes = FilteredElementCollector(doc, uidoc.ActiveView.Id).OfClass(Plumbing.Pipe).ToElements()
+tr = Transaction(doc, "change elevation")
+tr.Start()
+for pipe in pipes :
+	if abs(pipe.Location.Curve.Direction.Z) > 0.05 : continue
+	
+	elevation = pipe.Parameter[BuiltInParameter.RBS_OFFSET_PARAM].AsDouble() / dut
+	pipe.Parameter[BuiltInParameter.RBS_OFFSET_PARAM].Set(2600 * dut)
+	print(elevation)
+
+tr.Commit()
+	

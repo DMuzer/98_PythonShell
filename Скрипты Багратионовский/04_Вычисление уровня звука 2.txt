@@ -1,0 +1,187 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import itertools
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+from collections import defaultdict
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+import time
+
+
+app = dm.dmApp(doc)
+
+quad_size = 250 * dut
+h_quad_size = quad_size / 2
+
+tt1 = time.time()
+tt2_ = tt1
+tt3_ = tt1
+sps = 0
+err = 0
+
+space_errors = set()
+
+results = {}
+
+for sp in app.spaces.values() :
+	#print(1)
+	sps += 1
+
+	lsl = sp.loud_speakers
+	if len(lsl) == 0 :
+		continue
+	ls_pos = [(ls.e.Location.Point, ls.sound_level) for ls in lsl]
+	print(1)
+	ls_pos = [(nts_geom.Point(p[0].X, p[0].Y), p[1]) for p in ls_pos]
+	print(2)
+	
+	pg = sp.get_contours_polygon()
+	ei = pg.EnvelopeInternal
+	x_steps = math.ceil(ei.Width/quad_size)
+	y_steps = math.floor(ei.Height/quad_size)
+	xx = [ei.MinX + h_quad_size + quad_size * step for step in range(int(x_steps))]
+	yy = [ei.MinY + h_quad_size + quad_size * step for step in range(int(y_steps))]
+	
+	xy_ = [nts_geom.Point(x,y) for x, y in itertools.product(xx,yy)]
+	xy = [p for p in xy_ if pg.Covers(p)]
+	
+	res = []
+	
+	for p in xy :
+		# дистанции до колонок
+		try :
+			ds1 = [(p.Distance(p1[0])/dut/1000-1, p1[1]) for p1 in ls_pos]
+			ds1 = [p1 if p1[0] > 0.1 else (0.1, p1[1]) for p1 in ds1]
+			ds = [p1 for p1 in ds1 if p1[0] > 0 and p1[1] > 0]
+			
+			s_levels = [ p1[1] - 20 ** math.log10(p1[0]) for p1 in ds]
+			
+			s1 = sum([10**(0.1 * s_level) for s_level in s_levels])	
+			try :
+				s_level =  10 * math.log10(s1)
+			except :
+				print(ls_pos)
+				print(ds)
+				print(ds1)
+				print(s_levels)
+				print(s1)
+				pass
+			res.append((p, s_level))
+			
+			
+		except Exception as ex:
+			print(ex)
+			print(s1)
+		
+			space_errors.add(sp.space.Number)
+			err += 1
+			pass
+	results[sp.space.Number] = res
+		
+	tt3_ = time.time()
+	print("время {}".format(tt3_-tt2_))
+	tt2_ = tt3_
+
+	
+
+	
+
+
+
+for sn in space_errors :
+	print(sn)
+	
+print(len(space_errors))
+
+for k in list(results.keys())[:10] :
+	print(50*"-")
+	print(results[k])
+	
+tt2 = time.time()
+
+print("время выполнения {} с".format(tt2-tt1))
+print("обработано {} помещений".format(sps))
+print("Ошибок {}".format(err))
+
+view = uidoc.ActiveView
+
+vf = VisibleInViewFilter(doc, view.Id)
+fc = FilteredElementCollector(doc).WherePasses(vf).OfCategory(bic.OST_MEPSpaces).ToElements()
+
+def create_filled_reg(p) :
+	import System
+
+    slen = 250 * dut
+    slen_2 = slen /2
+
+    p1 = XYZ(p.X-slen_2, p.Y-slen_2, 0)
+    p2 = p1 + XYZ.BasisY * slen
+    p3 = p2 + XYZ.BasisX * slen
+    p4 = p3 - XYZ.BasisY * slen
+    
+    lines = [Line.CreateBound(p1, p2),
+    Line.CreateBound(p2, p3),
+    Line.CreateBound(p3, p4),
+    Line.CreateBound(p4, p1)]
+        
+    cl = CurveLoop()
+    reg_type_id = ElementId(29560)
+    
+    for l in lines : 
+        cl.Append(l)
+        
+    loops = System.Array[CurveLoop]([cl])
+        
+    view = uidoc.ActiveView
+
+    ogs = OverrideGraphicSettings()
+
+    
+    with dm1.trans(doc) :
+        fr = FilledRegion.Create(doc, reg_type_id, view.Id, loops)
+	
+
+
+for s in list(fc)[:10] :
+	create_filled_reg(s.Location.Point)
+
+
+
+	
+	
+	
+
+
+

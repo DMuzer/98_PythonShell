@@ -1,0 +1,110 @@
+"""
+***************************************************************
+*** Заполнение параметров ИмяСистемы для всех элементов и
+*** и вложенных элементов в семействах.
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\08.1_Заполнение параметров ИмяСистемы.txt"
+***************************************************************
+*  Имя системы берется по параметру Имя системы контейнера.
+** всем вложенным элементам присваивается значение параметра
+*** Имя системы узла
+***************************************************************
+"""
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import System
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+OT = UI.Selection.ObjectType
+
+el_cats = System.Array[bic]([bic.OST_PipeCurves, 
+				bic.OST_PipeFitting, 
+				bic.OST_PipeAccessory,
+				bic.OST_MechanicalEquipment, bic.OST_Sprinklers
+				])
+				
+cat_flt = ElementMulticategoryFilter(el_cats)
+fc =FilteredElementCollector(doc).WherePasses(cat_flt).WhereElementIsNotElementType().ToElements()
+
+tr = Transaction(doc)
+tr.Start("update parameter ИмяСистемы")
+for e in fc :
+	#print(e)
+
+	
+	if type(e) == Plumbing.Pipe :
+		to_proc = [e]
+	else :
+		if e.SuperComponent :
+			continue
+		to_proc = [e] + [doc.GetElement(eid) for eid in e.GetSubComponentIds()]
+	
+
+		
+	sys_name = e.LookupParameter("Имя системы").AsString()
+	if not sys_name :
+		sys_name = "-"
+		ws = doc.GetWorksetTable().GetWorkset(e.WorksetId)
+		if ws.Name.Contains("ВПВ") :
+			sys_name = "В2.-"
+		elif ws.Name.Contains("ПТ"):
+			sys_name = "В21.-"
+			
+	zone_name_param = e.LookupParameter("О_Здание_Секция")
+	if zone_name_param :
+		zone_name = zone_name_param.AsString()
+			
+		
+	#print(sys_name)
+	
+	while to_proc :
+		e = to_proc.pop()
+
+		if type(e) != Plumbing.Pipe :
+			to_proc += [doc.GetElement(eid) for eid in e.GetSubComponentIds()]
+		p = e.LookupParameter("ИмяСистемы")
+		if p :				
+			p.Set(sys_name)
+		
+		zone_name_param = e.LookupParameter("О_Здание_Секция")
+		if zone_name_param and zone_name :
+			zone_name_param.Set(zone_name)
+		
+		
+		
+tr.Commit()
+		
+		
+	
+	
+	
+	
+	

@@ -1,0 +1,46 @@
+class dmLink :
+	def __init__(self, link) :
+		self.link = link
+		self.doc = link.GetLinkDocument()
+		self.T = link.GetTotalTransform().Inverse
+	def __repr__(self) :
+		return "dmLink: {}".format(self.link.Name)
+	def getElements(self, e) :
+		self.bb = e.get_BoundingBox(None)
+		Min = self.bb.Transform.OfPoint(self.bb.Min)
+		Max = self.bb.Transform.OfPoint(self.bb.Max)
+		self.ol = Outline(self.T.OfPoint(Min), self.T.OfPoint(Max))
+		self.otl_flt = BoundingBoxIntersectsFilter(self.ol)
+		fc = FilteredElementCollector(self.doc).WherePasses(self.otl_flt)
+		res = fc.ToElements()
+		print(len(res))
+	
+		
+		
+		for e in res :
+			print(e)
+		
+		return res
+		
+		
+		
+		
+class dmDocument :
+	def __init__(self, doc) :
+		self.doc = doc
+		
+	def __repr__(self) :
+		return "dmDocument"
+	def getAllLinks(self) :
+		fc=  FilteredElementCollector(self.doc).OfClass(RevitLinkInstance).ToElements()
+		res = [dmLink(e) for e in fc]
+		return res
+	
+		
+dmDoc = dmDocument(doc) 
+links = dmDoc.getAllLinks()
+e = doc.GetElement(ElementId(8814458))
+
+print(links[0].getElements(e))
+		
+	

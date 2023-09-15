@@ -1,0 +1,99 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import itertools
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+view = uidoc.ActiveView
+
+vf = VisibleInViewFilter(doc, view.Id)
+fc = FilteredElementCollector(doc).WherePasses(vf).OfCategory(bic.OST_MEPSpaces).ToElements()
+
+def create_filled_reg(p) :
+	import System
+	slen = 250 * dut
+	slen_2 = slen /2
+	
+	p1 = XYZ(p.X-slen_2, p.Y-slen_2, 0)
+	p2 = p1 + XYZ.BasisY * slen
+	p3 = p2 + XYZ.BasisX * slen
+	p4 = p3 - XYZ.BasisY * slen
+	
+	lines = [Line.CreateBound(p1, p2),
+	Line.CreateBound(p2, p3),
+	Line.CreateBound(p3, p4),
+	Line.CreateBound(p4, p1)]
+	    
+	cl = CurveLoop()
+	reg_type_id = ElementId(29560)
+	
+	for l in lines : 
+	    cl.Append(l)
+	    
+	loops = System.Array[CurveLoop]([cl])
+	    
+	view = uidoc.ActiveView
+	
+	ogs = OverrideGraphicSettings()
+	
+	
+
+	fr = FilledRegion.Create(doc, reg_type_id, view.Id, loops)
+	
+def create_cross(p) :
+	import System
+	slen = 250 * dut
+	slen_2 = slen /2
+	
+	p1 = XYZ(p.X-slen_2, p.Y-slen_2, 0)
+	p2 = p1 + XYZ.BasisY * slen
+	p3 = p2 + XYZ.BasisX * slen
+	p4 = p3 - XYZ.BasisY * slen
+	
+	l1 = Line.CreateBound(p1, p3)
+	l2 = Line.CreateBound(p2, p4)
+	
+	c1 = doc.Create.NewDetailCurve(view, l1)
+	c2 = doc.Create.NewDetailCurve(view, l2)
+	
+	view.SetElementOverrides(c1.Id, ogs)
+	view.SetElementOverrides(c2.Id, ogs)
+	
+	
+ogs = OverrideGraphicSettings()
+color = Color(100, 255, 100)
+ogs.SetProjectionLineColor(color)
+ogs.SetProjectionLineWeight(5)
+
+
+
+
+import time
+tt1 = time.time()
+
+tr = Transaction(doc)
+tr.Start("1")
+
+for s in list(fc)[:10] :
+	print(s.Number)
+	for i in range(500) :
+		#create_filled_reg(s.Location.Point)
+		create_cross(s.Location.Point)
+	
+tr.Commit()
+tt2 = time.time()
+
+print("Время выполнения {}".format(tt2-tt1))
+
+

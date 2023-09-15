@@ -1,0 +1,98 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+
+@contextmanager
+def trans(doc, a) :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+
+bic = BuiltInCategory
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+def get_linked_docs(doc) :
+	docs_coll = FilteredElementCollector(doc).OfCategory(bic.OST_RvtLinks).WhereElementIsNotElementType()
+	
+	for d in docs_coll.ToElements() :
+		if d.Name.Contains("ентиляц") :
+			l_doc = (d.GetLinkDocument(), d.GetTotalTransform())	
+			
+	return l_doc
+	
+
+l_doc = get_linked_docs(doc)
+
+duct_coll = FilteredElementCollector(l_doc[0]).OfCategory(bic.OST_DuctCurves).WhereElementIsNotElementType()
+ductf_coll = FilteredElementCollector(l_doc[0]).OfCategory(bic.OST_DuctFitting).WhereElementIsNotElementType()
+
+
+geom = [el.Geometry[Options()].GetTransformed(l_doc[1]) for el in column_coll.ToElements()]
+geom += [el.Geometry[Options()].GetTransformed(l_doc[1]) for el in ductf_coll.ToElements()]
+#elem_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+#elem =  doc.GetElement(elem_id.ElementId)
+#transf = elem.GetTotalTransform()
+#link_doc = elem.GetLinkDocument()
+#elem2 = link_doc.GetElement(elem_id.LinkedElementId)
+#geom = elem2.Geometry[Options()].GetTransformed(elem.GetTotalTransform())
+
+
+solids = []
+def get_solids_list(geom) :
+	res = []
+	print(type(geom))
+	
+	if type(geom) == GeometryInstance : 
+		print('geometryInstance')
+		g = geom.GetInstanceGeometry()
+		res = list(g)
+		
+	if type(geom) == GeometryElement :
+		print('geometryElement')
+		for g in list(geom) :
+			res += get_solids_list(g)
+		
+	if type(geom) == Solid :
+		print(geom)
+		return [geom]
+		
+	return res
+	
+solids = []
+
+for g_ in geom :
+	solids += get_solids_list(g_)	
+	
+
+cat = ElementId(bic.OST_GenericModel)
+print('созддаем')
+
+res_sol = solids[0]
+exps = 0
+for s_ in solids[1:] :
+	try :
+		res_sol = BooleanOperationsUtils.ExecuteBooleanOperation(res_sol, s_, DB.BooleanOperationsType.Union)
+	except :
+		exps +=1
+		
+print("ошибок объединения: {}".format(exps))
+
+
+
+
+
+with trans(doc, "a") as tr :
+	dir_s  = DirectShape.CreateElement(doc, cat)
+	dir_s.SetShape([res_sol])
+	
+
+	
+	
+
+
+

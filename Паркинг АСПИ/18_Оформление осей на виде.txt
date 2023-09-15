@@ -1,0 +1,54 @@
+class dmAxis :
+	def __init__(self,axis, view) :
+		self.axis = axis
+		self.view = view
+	def __repr__(self) :
+		return f"Ось {self.axis.Name}"
+	def _getLine(self) :
+		return self.axis.GetCurvesInView(DatumExtentType.ViewSpecific, self.view.view)[0]
+	line = property(_getLine)
+	def _getProjectedLine(self) :
+		plane = Plane.CreateByNormalAndOrigin(self.view.view.ViewDirection, self.view.view.Origin)
+		line = self.line
+		p1 = line.GetEndPoint(0)
+		p2 = line.GetEndPoint(1)
+		p10uv = plane.Project(p1)[0]
+		p10xyz = plane.Origin + plane.XVec * p10uv.U + plane.YVec * p10uv.V
+		p20uv = plane.Project(p2)[0]
+		p20xyz = plane.Origin + plane.XVec * p20uv.U + plane.YVec * p20uv.V
+		res = Line.CreateBound(p10xyz, p20xyz)
+		return res
+	projectedLine = property(_getProjectedLine)
+	
+class dmViewBorderLine:
+	def __init__(self, line, view) :
+		self.line = line
+		self.view = view
+	def __repr__(self) :
+		return f"Линия границы {self.line}"
+	def _getAxes(self) :
+		for axis in self.view.axes :
+			if self.line.Intersect(axis.projectedLine) == SetComparisonResult.Overlap :
+				yield dmAxis(axis, self.view)
+	axes = property(_getAxes)
+		
+class dmView:
+	def __init__(self, view) :
+		self.view = view
+		self.doc = view.Document
+	def _get_axes(self) :
+		return FilteredElementCollector(self.doc, self.view.Id)\
+				.OfClass(Grid).ToElements()
+	axes = property(_get_axes)
+	
+	def _getBorderLines(self) :
+		cm = self.view.GetCropRegionShapeManager()
+		crop = cm.GetCropShape()
+		for cl in crop :
+			for c in cl :
+				yield dmViewBorderLine(c, self)
+	borderLines = property(_getBorderLines)
+		
+		
+		
+view = dmView(uidoc.ActiveView)

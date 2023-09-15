@@ -1,0 +1,313 @@
+from Autodesk.Revit import *
+uidoc = __revit__.ActiveUIDocument
+import itertools
+import System
+doc = uidoc.Document
+av = uidoc.ActiveView
+bic = BuiltInCategory
+dut = 0.0032808398950131233
+base_diameter = {
+	1 :40,
+	2 : 40,
+	3 : 50,
+	4 : 50,
+	5 : 65,
+	6 : 65,
+	7 : 65,
+	8 : 65,
+	9 : 65,
+	10: 65,
+	11 : 65, 
+	12 : 65
+}
+
+def set_color(e, r=0,g=0,b=0, a=0, view = None) :
+    color = Color(r,g,b)
+    if not view :
+        view = uidoc.ActiveView
+    ogs = OverrideGraphicSettings()
+    ogs.SetProjectionLineColor(color)
+    ogs.SetSurfaceTransparency(a)
+    #ogs.SetSurfaceForegroundPatternColor(color)
+    #ogs.SetSurfaceForegroundPatternId(ElementId(19))
+    ogs.SetProjectionLineColor(color)
+    ogs.SetCutLineColor(color)
+
+    try :
+        view.SetElementOverrides(e.Id, ogs)
+    except Exception as ex:
+        #print("Исключение при задании цвета set_color")
+        #print(ex)
+        try :
+            tr = Transaction(doc)
+            tr.Start("set color")
+            view.SetElementOverrides(e.Id, ogs)
+            
+            tr.Commit()
+            print("поправлено")
+        except :
+            pass
+def reset_colors() :
+	flt = ElementMulticategoryFilter(System.Array[bic](
+		[bic.OST_PipeCurves, bic.OST_PipeFitting,
+		bic.OST_Sprinklers, bic.OST_PipeAccessory, bic.OST_MechanicalEquipment
+		]
+		))
+	fc = FilteredElementCollector(doc, uidoc.ActiveView.Id).WherePasses(flt).ToElements()
+	for e in fc :
+		set_color(e, 100, 100, 100, 0)
+		
+class dmConnector :
+	def __init__(self, connector) :
+		self.c = connector
+	def set_diameter(self, d) :
+		self.connectorInfo = self.c.GetMEPConnectorInfo()
+		print(self.c.Owner.Id)
+		diameter = True
+		ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_DIAMETER))
+		print(ass_par_id)
+		if ass_par_id == ElementId(-1): 
+			diameter = False
+			ass_par_id = self.connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_RADIUS))
+		print(ass_par_id)
+		
+		if not ass_par_id :
+			return
+		ass_par = self.c.Owner.Document.GetElement(ass_par_id)
+		ass_par = self.c.Owner.LookupParameter(ass_par.GetDefinition().Name)
+		
+		if not ass_par : return
+		
+		if diameter :
+			ass_par.Set(d)
+		else :
+			ass_par.Set(d/2)
+	
+	def get_sprinkler_count(self) :
+		connected = set()
+		to_visit = set()
+		visited = set([self.c.Owner.Id])
+		for c1 in self.c.AllRefs :
+			if c1.ConnectorType & ConnectorType.Physical and c1.Owner != self.c.Owner :
+				to_visit.add(c1.Owner.Id)
+		i = 0
+		while to_visit :
+			i =+ 1
+			if i > 10000 : return 
+			current_id = to_visit.pop()
+			visited.add(current_id)
+			current = dmElement(doc.GetElement(current_id))		
+		return 0
+		
+
+class dmPipe:
+	def __init__(self, pipe) :
+		self.pipe = pipe
+	def get_end_fittings(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			if not c.ConnectorType == ConnectorType.End :
+				continue
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(c1.Owner)
+		return res
+	def get_outer_connectors(self) :
+		res = []
+		for c in self.pipe.ConnectorManager.Connectors :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.pipe.Id :
+					res.append(dmConnector(c1))
+		return res
+		
+	def get_inner_connectors(self) :
+		return [dmConnector(c) for c in self.pipe.ConnectorManager.Connectors]
+	def set_diameter(self, d, tr_ = None) :
+		if not tr_ :
+			tr = Transaction(doc, "change diam")
+			tr.Start()
+		print(self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].AsDouble())
+		self.pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(d * dut)
+		for c in self.get_outer_connectors() :
+			try :
+				c.set_diameter(d * dut)
+			except :
+				pass
+		if not tr_ :
+			tr.Commit()
+
+class dmBranch :
+	def __init__(self, e) :
+		self.e = e
+		self.start_elements = set()
+	def get_elements(self) :
+		to_visit = set([self.e.e.Id])	
+		res = set()
+		self.start_elements = set()
+		i = 0
+		while to_visit :
+			i += 1
+			if i > 10000 : 
+				print("зациклено")
+				return
+			current_id = to_visit.pop()	
+			current = dmElement(doc.GetElement(current_id))
+			res.add(current_id)
+			for e in current.get_neighbours() :
+				if not e.IsMainLine :
+					if not e.e.Id in res :
+						to_visit.add(e.e.Id)
+				else :
+					self.start_elements.add(current.e.Id)
+		self.start_elements = set([dmElement(doc.GetElement(eid)) for eid in self.start_elements])
+		return [dmElement(doc.GetElement(eid)) for eid in res]
+	def get_sprinklers(self) :
+		return [e for e in self.get_elements() if e.IsSprinkler]
+	def get_sprinklers_count(self) :
+		return len(self.get_sprinklers())
+	sprinklers_count = property(get_sprinklers_count)
+	def get_base_diameter(self) :
+		return base_diameter[self.sprinklers_count]
+	base_diameter = property(get_base_diameter)
+	
+	def get_base_line(self) :
+		prev = list(self.start_elements)[0]
+		print(21)
+		current = prev.get_second_in_line()
+		res = [prev]
+		i = 0
+		while current :
+			i +=1 
+			if i > 10000 : print("overload"); return
+			res.append(current)
+			next = current.get_next_in_line(prev)
+			prev = current
+			current = next
+			
+		return res
+		
+	def set_line_diameter(self) :
+		d = self.base_diameter
+		line = self.get_base_line()
+		print(line)
+		print(d)
+		tr = Transaction(doc, 'change diameters')
+		tr.Start()
+		for e in line[::-1] :
+			#e.show_element()
+			e.set_pipe_diameter(d, tr)
+		tr.Commit()
+			
+	def show(self, r= 0, g=255, b=0) :
+		tr = Transaction(doc, "set color")
+		tr.Start()
+		for e in self.get_elements() :
+			e.show_element(r, g, b)
+		tr.Commit()
+		
+			
+class dmElement :
+	def __init__(self, e) :
+		self.e = e
+	def __repr__(self) :
+		return "Элемент вер.2 {} {}".format(self.e.Category.Name, self.e.Id)
+	def get_branch(self) :
+		""" Создает объект ветка со стартовым элементом"""
+		return dmBranch(self)
+	def get_neighbours(self) :
+		"""возвращает соединенные элементы"""
+		if hasattr(self.e, "MEPModel") :
+			conns = self.e.MEPModel.ConnectorManager.Connectors
+		else :
+			conns = self.e.ConnectorManager.Connectors
+		res = []
+		for c1 in conns :
+			for c2 in c1.AllRefs :
+				if c2.ConnectorType & ConnectorType.Physical :
+					if c2.Owner.Id != self.e.Id :
+						res.append(dmElement(c2.Owner))
+		return sorted(res, key = lambda x : x.e.Id)
+	def check_IsSprinkler(self) :
+		return self.e.Category.Id.IntegerValue == int(bic.OST_Sprinklers) 
+	IsSprinkler = property(check_IsSprinkler)
+	def check_IsMainLine(self) :
+		if self.e.Category.Id.IntegerValue == int(bic.OST_PipeCurves) :
+			return self.e.Diameter > 81 * dut 
+		if self.e.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+			if self.e.MEPModel.PartType == PartType.Tee :
+				return any([c.Radius * 2 > 81 * dut for c in self.e.MEPModel.ConnectorManager.Connectors])
+		return False
+	IsMainLine = property(check_IsMainLine)
+	
+	def get_second_in_line(self) :
+		for e in self.get_neighbours() :
+			if not e.IsMainLine :
+				return e
+	
+	def get_next_in_line(self, prev=None) :
+		"""Возвращает следующий элемент в линии"""
+		if hasattr(self.e, "MEPModel") :
+			end_conns = [c for c in self.e.MEPModel.ConnectorManager.Connectors if c.ConnectorType == ConnectorType.End]
+		else :
+			end_conns = [c for c in self.e.ConnectorManager.Connectors if c.ConnectorType == ConnectorType.End]
+		print(len(end_conns))
+		
+		# исключаем отворот тройника
+		if len(end_conns) == 3 :
+			for c1_, c2_ in itertools.combinations(end_conns,2) :
+				if c1_.CoordinateSystem.BasisZ.DotProduct(c2_.CoordinateSystem.BasisZ) == -1 :
+					end_conns = [c1_, c2_]
+		res = []
+		for c in end_conns :
+			for c1 in c.AllRefs :
+				if c1.ConnectorType & ConnectorType.Physical and c1.Owner.Id != self.e.Id :
+					res.append(c1.Owner)
+		
+		if prev :
+			res = [dmElement(e) for e in res if e.Id != prev.e.Id]
+			
+		elif len(res) > 0 :
+			res = [dmElement(res[0])]
+		else :
+			return 
+		if len(res) > 0 :
+			return res[0]
+		
+	def show_element(self, a=250, g =0, b=0) :	
+		set_color(self.e, a, g, b, 0, )
+	def set_pipe_diameter(self, d, tr = None) : 
+		if type(self.e) == Plumbing.Pipe :
+			pipe = dmPipe(self.e)
+			pipe.set_diameter(d, tr)
+		
+
+					
+#reset_colors()
+
+while True :
+
+	e_refs = set([r.ElementId for r in uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)])
+	
+	while e_refs :
+		e_ref = e_refs.pop()
+		
+		e = dmElement(doc.GetElement(e_ref))
+		branch = e.get_branch()
+		print("Количество спринклеров {}".format(branch.sprinklers_count))
+		
+		for e1 in branch.get_elements() :
+			if e1.e.Id in e_refs : e_refs.remove(e1.e.Id)
+			
+		try :
+			branch.set_line_diameter()
+			branch.show()
+		except :
+			breach.show(255,0,0)
+		
+	break
+
+
+
+
+
+

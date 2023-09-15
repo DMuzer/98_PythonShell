@@ -1,0 +1,88 @@
+"""
+***************************************************************
+*** Расстановка спринклеров по пространствам
+*** 
+***************************************************************
+* Убрано ограничение на то чтобы спринклер проецировался на 
+* трубу, при необходимости добавляется дополнительный участок трубы
+* чтобы подойти к точке подключения
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import d56_create_sprinklers as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+for p in dm3.spr_z.pos :
+	#print(p)
+	pos2 = dm3.spr_z.pos.Difference(p)
+	#p2 = geoms.Point(nts.Operation.Distance.DistanceOp(pos2, p).NearestPoints()[0]))
+	
+	p2_ = nts.Operation.Distance.DistanceOp(pos2, p).NearestPoints()[0]
+	p2 = nts_geom.Point(p2_)
+
+
+	
+	if p.Distance(p2) < 1400 * dut :
+		print(p)
+		print(p2)
+		
+		ls =  nts_geom.LineString(System.Array[nts_geom.Coordinate]([
+						nts_geom.Coordinate(p.X, p.Y), 
+						nts_geom.Coordinate(p2.X, p2.Y), 
+						]))
+		print(ls)
+		
+		intr = dm3.spr_z.pg.Boundary.Intersects(ls)
+		print(intr)
+		if not intr :
+			print("Близко проверяем")
+			pos3 = pos2.Difference(p2)
+			
+			
+			
+		else :
+			print("Пересекается геометрия")
+		
+		print(50*'-')
+

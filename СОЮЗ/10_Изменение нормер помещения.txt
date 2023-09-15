@@ -1,0 +1,26 @@
+sflt = Mechanical.SpaceFilter()
+fc = FilteredElementCollector(doc).WherePasses(sflt).ToElements()
+
+tr = Transaction(doc)
+tr.Start("update space names")
+
+for s in fc :
+	print(Element.Name.GetValue(s))
+	print(s.Number)
+	
+	n_param = s.LookupParameter("Номер помещения")
+	if n_param :
+		num = n_param.AsString()
+		
+	if num : 
+		print(num)
+		num = num.Replace("_-", "-")
+		num = num.Replace("_",".")
+		print(num)
+		sn_param = s.LookupParameter("Номер")
+		sn_param.Set(num)
+		
+	n_param = s.LookupParameter("Имя помещения")
+
+
+tr.Commit()

@@ -1,0 +1,157 @@
+"""
+***************************************************************
+*** ПРОСТАНОВКА ОБОЗНАЧЕНИЙ ТРУБ НА ТЕКУЩЕМ ВИДЕ
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Маркировка труб\01 Маркировка труб на текущем виде.txt"
+***************************************************************
+* 
+***************************************************************
+"""
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+from dm_connect_2 import trans
+
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+OT = UI.Selection.ObjectType
+
+
+
+class dmCheckProjection(object) :
+	def __init__(self, av) :
+		self.av = av
+		
+		mng = uidoc.ActiveView.GetCropRegionShapeManager()
+		cl = mng.GetCropShape()
+		
+		try :
+			pl = cl[0].GetPlane()
+			pl_n = pl.Normal
+		
+			
+		
+			
+			
+			sld = GeometryCreationUtilities.CreateExtrusionGeometry(cl, pl_n, 0.01)
+			f = None
+			for f_ in sld.Faces :
+				if f_.FaceNormal.IsAlmostEqualTo(pl_n) :
+					self.f = f_
+					
+			self.all = False
+		except :
+			self.all = True
+	def is_inside(self, p1) :
+		print("Проверяем")
+		if self.all : 
+			return True 
+		else :
+			return self.f.Project(p1)
+		
+
+
+def create_tags_on_view(av, check) :
+
+	pipes = FilteredElementCollector(doc, av.Id).OfClass(Plumbing.Pipe).ToElements()
+
+	tr = Transaction(doc)
+	tr.Start("Add tag for pipe")
+	
+	for pipe1 in pipes :
+	
+		cns1 = list(pipe1.ConnectorManager.Connectors)
+		p1 = pipe1.Location.Curve.GetEndPoint(0)
+		
+		cns1 = sorted(cns1, key = lambda x : p1.DistanceTo(x.Origin))
+		
+		cns2 = [(cns1[i].Origin, cns1[i+1].Origin) for i in range(len(cns1)-1)]
+		
+		
+		
+	
+		
+		for seg in cns2 :
+		
+		
+			l = seg[1] - seg[0]
+			lxy = XYZ(l.X, l.Y, 0)
+			
+			if lxy.GetLength() / av.Scale < 7 * dut : 
+				continue
+				
+			v = l.Normalize()
+			
+			print("Длина {}".format(l.GetLength()/dut))
+			print("lxy {}:".format(lxy.GetLength()/dut))
+			print("l {}:".format(l.GetLength()))
+			
+			
+			if lxy.GetLength() / av.Scale < 120 * dut :
+				m = (seg[1] + seg[0]) * 0.5 - 5 * dut * v
+				
+				if not check.is_inside(m) :
+						continue
+				
+				tag = IndependentTag.Create(doc, av.Id, Reference(pipe1), False, 
+											TagMode.TM_ADDBY_CATEGORY,
+											TagOrientation.Horizontal,
+											m)
+											
+			else :
+				num = int(math.ceil(l.GetLength() / (120 * dut * av.Scale)))
+				l1 = l.GetLength() / num
+				print("Количество сегментов {}".format(num))
+				print("120 * dut * av.Scale {}:".format(120 * av.Scale))
+				print("l {}:".format(l.GetLength()/dut))
+				
+				for i in range(num) :
+					print(i)
+					m = seg[0] + (0.5 + i) * l1 * v
+					print(m)
+					print(check.is_inside(m))
+					if not check.is_inside(m) :
+						continue
+					tag = IndependentTag.Create(doc, av.Id, Reference(pipe1), False, 
+								TagMode.TM_ADDBY_CATEGORY,
+								TagOrientation.Horizontal,
+								m)
+					
+			
+		
+	tr.Commit()
+			
+	
+
+av = uidoc.ActiveView
+check = dmCheckProjection(av)
+create_tags_on_view(av, check)
+	
+
+
+
+

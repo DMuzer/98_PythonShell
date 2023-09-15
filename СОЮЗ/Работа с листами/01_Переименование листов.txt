@@ -1,0 +1,28 @@
+fc = FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()
+sheets = []
+
+for sheet in fc :
+	print(sheet.Name)
+	print(sheet.SheetNumber)
+	if sheet.SheetNumber.StartsWith("1.1") :
+		if sheet.SheetNumber != "1.1.1" and sheet.SheetNumber != "1.1.2" :
+			sheets.append(sheet)
+print(20*"-")
+sheets = sorted(sheets, key = lambda x : int(x.SheetNumber.Split(".")[-1]))
+			
+for sheet in sheets :
+	print(sheet.Name)
+	
+tr = Transaction(doc)
+tr.Start("set sheet name")
+for i in range(1, 10) :
+	sheet = sheets[0]
+	sheets.remove(sheet)
+	sheet.Name = "План {} этажа с располжоением оборудования и трубопроводов ВПВ".format(i)
+	
+for i in range(1, 10) :
+	sheet = sheets[0]
+	sheets.remove(sheet)
+	sheet.Name = "План {} этажа с располжоением оборудования и трубопроводов ПТ".format(i)
+	
+tr.Commit()

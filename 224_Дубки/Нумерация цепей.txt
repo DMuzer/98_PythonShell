@@ -1,0 +1,48 @@
+def get_circuits(stype = Electrical.ElectricalSystemType.Data) :
+	fc = FilteredElementCollector(doc)
+	fc.OfClass(Electrical.ElectricalSystem)
+	fc.ToElements()
+	res = []
+	
+	for e in fc :
+		if e.SystemType == stype :
+			res.append(e)			
+	return res
+	
+def update_system(s) :
+	loadName = ""
+	for e in s.Elements :
+		loadName = e.LookupParameter("Марка").AsString()
+	tr = Transaction(doc)
+	tr.Start("update {}".format(s.Name))
+	s.LoadName = loadName
+	s.LookupParameter("ADSK_Имя панели").Set(s.PanelName)
+	tr.Commit()
+	
+circuits = get_circuits()
+
+panels = {}
+
+
+for c in circuits :
+	#update_system(c)
+	if c.PanelName in panels :
+		panels[c.PanelName].append(c)
+	else :
+		panels[c.PanelName] = [c]
+		
+		
+for p in panels :
+	panels[p] = sorted(panels[p], key = lambda x : int(x.LoadName.split(".")[-1]))
+	
+tr = Transaction(doc)
+tr.Start("enumerate")
+for p in panels :
+	print(50*"-")
+	print(p)
+	print(50*"-")
+	for num, c in enumerate(panels[p], 1) :
+		print(c.LoadName)
+		c.LookupParameter("ADSK_Номер линии").Set(num)
+		
+tr.Commit()

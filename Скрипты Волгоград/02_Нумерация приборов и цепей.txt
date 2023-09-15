@@ -1,0 +1,20 @@
+import re
+fc = FilteredElementCollector(doc).OfClass(Electrical.ElectricalSystem).ToElements()
+
+def renumber_rs485(c) :
+	
+	for e in c.Elements :
+		print(e)
+
+for c in fc :
+	#print(c.PanelName)
+	panel = c.BaseEquipment
+	if panel :
+		pan_type = doc.GetElement(panel.GetTypeId())	
+		if re.match(".*пульт.*С2000М.*", pan_type.FamilyName, re.I) :
+			c2000 = panel
+			int_ = c
+			print(c.LoadName)
+			print(pan_type.FamilyName)
+			print(panel.Id)
+			renumber_rs485(c)

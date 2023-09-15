@@ -1,0 +1,17 @@
+
+fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks).WhereElementIsNotElementType().ToElements()
+
+trans = Transaction(doc)
+trans.Start("Установка видимости даты в основной надписи")
+for tb in fc :
+	try :
+		tb.LookupParameter('Строка1_Дата').Set(True)
+		tb.LookupParameter('Строка2_Дата').Set(True)
+		tb.LookupParameter('Строка3_Дата').Set(True)
+		tb.LookupParameter('Строка4_Дата').Set(True)
+	
+	except Exception as ex:
+		print(ex)
+		pass
+		
+trans.Commit()

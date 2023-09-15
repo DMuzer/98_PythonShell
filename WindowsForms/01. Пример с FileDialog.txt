@@ -1,0 +1,14 @@
+import clr
+clr.AddReference('System')
+clr.AddReference('System.Windows.Forms')
+import System
+import System.Windows.Forms as WinForms
+message = "Cancel this operation?"
+caption = "Alert"
+buttons = WinForms.MessageBoxButtons.YesNo
+result = WinForms.MessageBox.Show(message, caption, buttons)
+if result == WinForms.DialogResult.Yes:
+    WinForms.MessageBox.Show("Great, it's canceled!")
+    System.Console.Write("Success!")
+else:
+    print "Sorry, something went wrong!"

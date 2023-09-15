@@ -1,0 +1,12 @@
+def get_dlc_mark() :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericAnnotation).WhereElementIsElementType().ToElements()
+	for e in fc :
+		print(Element.Name.GetValue(e))
+		if Element.Name.GetValue(e) == "DM_схема_БЦК_марка" :
+			return e
+		
+e = get_dlc_mark()
+
+
+	
+	

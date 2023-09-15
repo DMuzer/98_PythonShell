@@ -1,0 +1,64 @@
+import clr
+clr.AddReference('System')
+clr.AddReference('System.Drawing')
+clr.AddReference('System.Windows')
+clr.AddReference('System.Windows.Forms')
+import System
+import System.Windows
+import System.Windows.Forms as WinForms
+
+def f_click(self, e) :
+	print(e)
+	self.Text = "Кнопку нажали"
+R1 = None	
+def tb1_keydown(self, e) :
+	"""
+	print("tb1_keydown(self, e)")
+	print(e)
+	print("KeyCode".format(e.KeyCode))
+	print(type(e.KeyCode))
+	print(e.Alt)
+	print("KeyValue : {} ".format(1))
+	"""
+	global R1
+	
+	if ord(e.KeyChar) == 13 :
+		R1 = self.Text
+
+		self.Parent.Close()
+	
+
+	
+def f1_keydown(self, e) :
+	print(" f1_keydown")
+
+b1 = WinForms.Button()
+
+b1.Text="Дима"
+b1.Location = System.Drawing.Point(10,10)
+b1.Size = System.Drawing.Size(100, 50)
+b1.Click += f_click
+
+tb1 = WinForms.TextBox()
+tb1.Location = System.Drawing.Point(10, 80)
+tb1.Size = System.Drawing.Size(300, 50)
+tb1.KeyPress += tb1_keydown
+
+
+f1.KeyDown += f1_keydown
+
+
+
+
+f1 = WinForms.Form()
+f1.Controls.Add(b1)
+f1.Controls.Add(tb1)
+
+
+
+
+
+
+f1.ShowDialog()
+
+print(R1)

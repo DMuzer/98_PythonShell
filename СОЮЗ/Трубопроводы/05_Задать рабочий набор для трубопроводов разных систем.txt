@@ -1,0 +1,67 @@
+st = """
+Начало работы....
+Задание рабочего набора для трубопроводов для разных типов систем
+Создание параллельной линии трубопровода
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\05_Задать рабочий набор для трубопроводов разных систем.txt"
+"""
+print(st)
+bic = BuiltInCategory
+import System
+dut = 0.0032808398950131233
+worksets ={ws.Name : ws for ws in FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset).ToWorksets()}
+pt_ws = worksets["Связи ИС"]
+vpv_ws = worksets["DM_ВПВ"]
+spr_ws = worksets["DM_ПТ_-1_Этаж"]
+flt = ElementMulticategoryFilter(System.Array[bic]([
+	bic.OST_PipeCurves, bic.OST_PipeFitting, bic.OST_PipeAccessory, bic.OST_Sprinklers]))
+pipework = FilteredElementCollector(doc, uidoc.ActiveView.Id).WherePasses(flt)\
+	.WhereElementIsNotElementType().ToElements()
+	
+tr = Transaction(doc, "смена рабочего набора элементов")
+tr.Start()
+for element in pipework :
+	if element.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
+		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(spr_ws.Id.IntegerValue)
+	abbreviation = element.LookupParameter("Сокращение для системы").AsString()
+	if not abbreviation : continue
+	if abbreviation.StartsWith("В21.") :
+		pass
+		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(spr_ws.Id.IntegerValue)
+		
+		continue
+	if abbreviation.StartsWith("ВПВ 2.") :
+		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(vpv_ws.Id.IntegerValue)
+		continue
+		
+	
+		
+	
+tr.Commit()
+	
+
+	
+	
+
+"""
+tr = Transaction(doc, 'change workset for ff instances')
+tr.Start()
+for instance in instances :
+	if not instance.Name.Contains("СОЮЗ_ОВ") and\
+		not instance.Name.Contains("СОЮЗ_ВК") and\
+		not instance.Name.Contains("СОЮЗ_СС") and\
+		not instance.Name.Contains("СОЮЗ_ЭОМ") : continue
+	print(instance.Name)
+	instance.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(pt_ws.Id.IntegerValue)
+	typeId = instance.GetTypeId()
+	linkType = doc.GetElement(typeId)
+	linkType.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(pt_ws.Id.IntegerValue)
+tr.Commit()
+"""
+st = """
+Задание рабочего набора для трубопроводов для разных типов систем
+Создание параллельной линии трубопровода
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\05_Задать рабочий набор для трубопроводов разных систем.txt"
+Работа окончена...
+"""
+print(st)
+	

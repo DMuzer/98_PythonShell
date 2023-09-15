@@ -1,0 +1,29 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+
+objs = [doc.GetElement(o) for o in uidoc.Selection.GetElementIds()]
+
+syst = []
+for o in objs :
+	for c in o.MEPModel.ConnectorManager.Connectors :
+		print(c.MEPSystem.Name)
+		print(c.MEPSystem.SystemType)
+		print(c.MEPSystem.SystemType == Plumbing.PipeSystemType.FireProtectWet)
+		if c.MEPSystem.SystemType != Plumbing.PipeSystemType.FireProtectWet : 
+			print("Удаляем")
+			syst.append(c.MEPSystem)
+			
+tr = Transaction(doc)
+tr.Start("delete system")
+for s in syst :
+	print(s)
+	try :
+		doc.Delete(s.Id)
+		pass
+	except :
+		pass
+tr.Commit()

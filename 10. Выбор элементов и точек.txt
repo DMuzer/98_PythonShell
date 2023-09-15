@@ -1,0 +1,88 @@
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import Curve, CurveLoop, DirectShape, ElementId, Line, XYZ
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+from Autodesk.Revit.DB import BuiltInCategory as Bic
+from System.Collections.Generic import List
+#from rpw import db, ui, doc, uidoc
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+ids = [1043791, 1043801]
+ids = [1045763]
+                                                        
+pipes = [doc.GetElement(ElementId(id)) for id in ids]
+
+def pipe_create_elbow(doc, p1, p2) :
+	cons = []
+	for p in [p1, p2] :
+		cons += list (p.ConnectorManager.Connectors)
+	
+	cons_p = []
+
+	for i1 in range(len(cons)-1) :
+		for i2 in range(i1+1, len(cons)) :
+			c1 = cons[i1]
+			c2 = cons[i2]
+			
+			if c1.Owner.Id == c2.Owner.Id : continue
+			
+			cons_p.append((c1, c2, c1.Origin.DistanceTo(c2.Origin)))
+
+		cons_p.sort(key = lambda x : x[2])
+
+
+
+
+	tr = Transaction(doc, "create pipe elbow")
+	tr.Start()	
+	doc.Create.NewElbowFitting(cons_p[0][0], cons_p[0][1])	
+	tr.Commit()
+	
+dut = 0.0032808398950131233
+from Autodesk.Revit.UI import Selection
+#el = uidoc.Selection.PickObject(Selection.ObjectType.Element);
+spr = doc.GetElement(el.ElementId)
+
+sp = spr.Location.Point
+print(sp)
+
+#sp = XYZ(0,0,0)
+
+sp0 = sp - XYZ(0,0,3000*dut)
+sp1 = sp0 + XYZ(3000*dut,0,0)
+sp2 = sp1 + XYZ(-300*dut, 0, 2700*dut)
+
+from System.Collections.Generic import List
+from Autodesk.Revit.DB import SolidOptions, GeometryCreationUtilities
+
+lines = List[Curve]()
+lines.Add(Line.CreateBound(sp0, sp1))
+lines.Add(Line.CreateBound(sp1, sp2))
+lines.Add(Line.CreateBound(sp2, sp))
+lines.Add(Line.CreateBound(sp, sp0))
+
+form = [CurveLoop.Create(lines)]
+import math
+
+fr = Frame(sp, XYZ(1,0,0), XYZ(0,1,0), XYZ(0,0,1))
+
+rot = GeometryCreationUtilities.CreateRevolvedGeometry(fr, List[CurveLoop](form), 0, 2 * math.pi)
+
+category_id = ElementId(Bic.OST_GenericModel)
+tr = Transaction(doc)
+tr.Start('Create sprinkler zone')
+
+direct_shape = DirectShape.CreateElement(doc, category_id)
+direct_shape.SetShape([rot])
+tr.Commit()
+
+
+
+
+
+
+
+
+

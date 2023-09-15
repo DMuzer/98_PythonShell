@@ -1,0 +1,87 @@
+import re
+
+def get_family(name) :
+	fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_FireAlarmDevices).WhereElementIsElementType().ToElements()
+	
+	for e in fc :
+		if re.match(name, Element.Name.GetValue(e), re.I) :
+			return e
+			
+class LoadOpts(IFamilyLoadOptions) :
+	def OnFamilyFound(self, familyInUse, overwriterParamterValues) :
+		overwriterParamterValues = True
+		print("OnFamilyFound")
+		return True
+		
+	def OnSharedFamilyFound(self, sharedFamily, familyInUse, source, overwriteParameterValues) :
+		source = Familysource.Family
+		overwriteParameterValues = True
+		print("OnFamilyFound")
+		return True
+				
+def get_parameter(fm, name) :
+	for p in fm.Parameters :
+		if re.match(name, p.Definition.Name, re.I) :
+			return p
+			
+def get_ext_definition(name) :
+	deffile = doc.Application.OpenSharedParameterFile()
+	
+	for g in deffile.Groups :
+		print(58*"-")
+		print(g.Name)
+		for p in g.Definitions :
+			print(p.Name)
+			if re.match(name, p.Name) :
+				return p
+		
+ext_def = get_ext_definition("ADSK_Количество")
+
+sensor_type = get_family("извещатель.*дымовой", )
+
+family_doc = doc.EditFamily(sensor_type.Family)
+family_manager = family_doc.FamilyManager
+
+quantity_param = get_parameter(family_manager, "ADSK_Количество")
+family_type = family_manager.CurrentType
+
+for p in family_manager.Parameters :
+	if p.StorageType == StorageType.Double :
+		print("{:15} : {}".format(p.Definition.Name, family_type.AsDouble(p)))
+	if p.StorageType == StorageType.String :
+		print("{:15} : {}".format(p.Definition.Name, family_type.AsString(p)))
+		
+
+
+print(family_manager.CurrentType.Name)
+
+trans = Transaction(family_doc)
+trans.Start("Добавление типа")
+
+try :
+
+
+	family_manager.SetFormula(quantity_param, "1")
+	#family_manager.SetFormula(quantity_param, None)
+	
+	trans.Commit()
+	
+	loadOpts = LoadOpts()
+	family= family_doc.LoadFamily(doc, loadOpts)
+	
+	trans.Start("111")
+	family_manager.SetFormula(quantity_param, None)
+	trans.Commit()
+	
+	
+	loadOpts = LoadOpts()
+	
+	family= family_doc.LoadFamily(doc, loadOpts)
+	
+	
+
+except Exception as ex:
+	print("Ошибка")
+	print(ex)
+	trans.RollBack()
+

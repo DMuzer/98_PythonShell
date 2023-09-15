@@ -1,0 +1,6 @@
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sel = uidoc.Selection.GetElementIds()
+line = doc.GetElement(sel[0])
+print(line.Location.Curve.GetEndPoint(0), line.Location.Curve.GetEndPoint(1))

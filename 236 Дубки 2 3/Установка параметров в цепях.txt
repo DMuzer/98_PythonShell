@@ -1,0 +1,17 @@
+fc =sorted(FilteredElementCollector(doc).OfClass(Electrical.ElectricalSystem).ToElements(), key = lambda x : x.Id)
+tr = Transaction(doc)
+tr.Start("set camera name")
+
+
+for c in fc :
+	print(c.LookupParameter("Имя нагрузки").AsString())
+	for e in c.Elements :
+		mrk = e.LookupParameter("Марка").AsString()
+	pname = c.PanelName
+	c.LookupParameter("ADSK_Имя панели").Set(pname)
+	c.LookupParameter("ADSK_Номер линии").Set(int(c.CircuitNumber))
+	c.LookupParameter("Имя нагрузки").Set(mrk)
+	
+tr.Commit()
+	
+		

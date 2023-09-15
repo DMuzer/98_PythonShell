@@ -1,0 +1,181 @@
+#  coding: utf-8 
+"""
+Обход трубой препятствия с указанием вручную. При этом обход выполняется перпендикулярно 
+экрану
+"D:\18_проектирование\98_PythonShell\Паркинг АСПИ\12_Сделать обход трубы вручную.txt"
+"""
+
+import System
+import math
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+from System.Collections.Generic import IList, List
+
+pipeDistanceMan = 70 * dut
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+check_print=True
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+print("d58_pipe_bypass")
+
+av = uidoc.ActiveView
+vud = av.ViewDirection
+
+def get_nearest_end_connector(element, pnt) :	
+	if hasattr(element, "ConnectorManager") :
+		return min([connector for connector 
+							in element.ConnectorManager.Connectors
+							if connector.ConnectorType == ConnectorType.End],
+							key = lambda x : pnt.DistanceTo(x.Origin))
+	else :
+		return min([connector for connector 
+							in element.MEPModel.ConnectorManager.Connectors
+							if connector.ConnectorType == ConnectorType.End],
+							key = lambda x : pnt.DistanceTo(x.Origin))
+
+if not av.SketchPlane :
+    pl1 = Plane.CreateByNormalAndOrigin(av.ViewDirection, av.Origin,)
+    with dm.trans(doc) :
+        sk_pl = SketchPlane.Create(doc, pl1)
+        av.SketchPlane = sk_pl
+        
+def doBypass() :
+	global pipeDistanceMan
+	pipe_ref    = uidoc.Selection.PickObject(OT.Element)
+	pipe        = doc.GetElement(pipe_ref)
+	
+	if not type(pipe) == Plumbing.Pipe :
+		raise
+	
+	p1_     = uidoc.Selection.PickPoint()
+	p2_     = uidoc.Selection.PickPoint()
+	p3_     = uidoc.Selection.PickPoint()
+	
+	
+	
+	plc = pipe.Location.Curve
+	pdir = plc.Direction
+	
+	
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+	auxLine1 = Line.CreateUnbound(p1_, uidoc.ActiveView.ViewDirection)
+	plc.ComputeClosestPoints(auxLine1, True, False, False, t)
+	
+	p1 = t.Item[0].XYZPointOnFirstCurve
+	
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+	auxLine2 = Line.CreateUnbound(p2_, uidoc.ActiveView.ViewDirection)
+	plc.ComputeClosestPoints(auxLine2, True, False, False, t)
+	
+	p2 = t.Item[0].XYZPointOnFirstCurve
+	
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+	auxLine3 = Line.CreateUnbound(p3_, uidoc.ActiveView.ViewDirection)
+	plc.ComputeClosestPoints(auxLine3, True, False, False, t)
+	
+	p3 = t.Item[0].XYZPointOnFirstCurve
+	if pipeDistanceMan == 0 :
+		pipeDistance = t.Item[0].Distance
+	else :
+		pipeDistance = pipeDistanceMan
+		
+	if pipeDistance < 2 * pipe.Diameter + 20 * dut :
+		pipeDistance = 3 * pipe.Diameter + 20 * dut
+	v3s=1
+	v3 = math.copysign(v3s, uidoc.ActiveView.UpDirection.DotProduct(p3_ - p3))
+	print(f"pipeDistanceMan = {pipeDistanceMan}")
+	print(f"pipe distance = {pipeDistance}")
+	
+	print(p1, p2, pipeDistance/dut)
+	sp0 = plc.GetEndPoint(0)
+	p1, p2 = sorted([p1, p2], key = lambda x : plc.GetEndPoint(0).DistanceTo(x))
+	
+	
+	
+	
+	tr = Transaction(doc, "add bypass")
+	tr.Start()
+	pipe2id 	= Plumbing.PlumbingUtils.BreakCurve(doc, pipe.Id, p1)
+	pipe2 		= doc.GetElement(pipe2id)
+	
+	
+	pipe3id 	= Plumbing.PlumbingUtils.BreakCurve(doc, pipe.Id, p2)
+	pipe3 		= doc.GetElement(pipe3id)
+	
+	ElementTransformUtils.MoveElement(doc, pipe3.Id, uidoc.ActiveView.ViewDirection * -pipeDistance)
+	
+	newPipe3Id 		= ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0]
+	newPipe4Id		= ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0]
+	newPipe3 	= doc.GetElement(newPipe3Id)
+	newPipe4 	= doc.GetElement(newPipe4Id)
+	
+	newPipe3LocationEnd1 = pipe3.Location.Curve.GetEndPoint(0)
+	newPipe4LocationEnd1 = pipe3.Location.Curve.GetEndPoint(1)
+	newPipeLocation3 = Line.CreateBound(p1, newPipe3LocationEnd1)
+	newPipeLocation4 = Line.CreateBound(p2, newPipe4LocationEnd1)
+	
+	newPipe3.Location.Curve = newPipeLocation3
+	newPipe4.Location.Curve = newPipeLocation4
+	
+	c11 = min(pipe2.ConnectorManager.Connectors, key = lambda x : x.Origin.DistanceTo(p1))
+	c12 = min(newPipe3.ConnectorManager.Connectors, key = lambda x : x.Origin.DistanceTo(p1))
+	
+	
+	
+	c21 = min(newPipe3.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(newPipe3LocationEnd1))
+	c22 = min(pipe3.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(newPipe3LocationEnd1))
+	c31 = min(pipe3.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(newPipe4LocationEnd1))
+	c32 = min(newPipe4.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(newPipe4LocationEnd1))
+	c41 = min(newPipe4.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(p2))
+	c42 = min(pipe.ConnectorManager.Connectors, key = lambda x :\
+					x.Origin.DistanceTo(p2))
+	
+	
+	doc.Create.NewElbowFitting(c11, c12)
+	doc.Create.NewElbowFitting(c21, c22)
+	doc.Create.NewElbowFitting(c31, c32)
+	doc.Create.NewElbowFitting(c41, c42)
+	
+	
+	
+	tr.Commit()
+	
+while True :
+	doBypass()
+
+
+
+
+
+
+
+
+

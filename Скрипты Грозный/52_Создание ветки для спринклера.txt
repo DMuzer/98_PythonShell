@@ -1,0 +1,70 @@
+"""
+**************************************************
+* Построение ветки спринклеров
+****************************************************
+
+Для построение ветки необходимо выбрать спринклера и выбрать трубу магистрали для 
+
+"""
+
+import Autodesk.Revit.DB as DB
+import Autodesk.Revit.UI as UI
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+sel_els = UI.Selection.ObjectType.Element
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+#app = dm.dmApp(doc)
+
+"""
+*************************************************************
+* Окончание секции инициализации
+*************************************************************
+"""
+
+def get_min_elevations(sprs) :
+	"""
+		Вычисление минимальной отметки расположения трубы
+	"""
+
+#Выбор трубы
+
+#pipe_ref = uidoc.Selection.PickObject(sel_els)
+#pipe = doc.GetElement(pipe_ref)
+
+
+#Выбор спринклеров
+
+#sprs_l = uidoc.Selection.PickObjects(sel_els)
+sprs = [doc.GetElement(e_ref) for e_ref in sprs_l]
+sprs = [e for e in sprs if e.Category.Id.IntegerValue == int(bic.OST_Sprinklers)]
+print(sprs)

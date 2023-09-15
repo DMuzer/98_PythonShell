@@ -1,0 +1,157 @@
+"""
+***************************************************************
+*** Копирование объектов из вставленных файлов 
+*** как Direct Shape в пределах диапазона активного вида
+***  "D:\18_проектирование\98_PythonShell\
+			СОЮЗ\Работа с вставленными файлами\
+				01_Копирование объектов из вставленных файлов.txt"
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+floors = []
+levels = set()
+l_lines = []
+
+av = mapp.views[view_name]
+
+bb = av.GetSectionBox()
+
+print(av.IsSectionBoxActive)
+
+bb_vec = bb.Max - bb.Min
+
+trf = bb.Transform
+
+p1 = trf.OfPoint(bb.Min)
+p2 = p1 + XYZ(bb_vec.X, 0,0)
+p3 = p2 + XYZ(0, bb_vec.Y, 0)
+p4 = p3 + XYZ(-bb_vec.X, 0,0)
+
+p5 = p1 + XYZ(0,0,bb_vec.Z)
+
+lines = System.Collections.Generic.List[Curve]([
+	Line.CreateBound(p1, p2), 
+	Line.CreateBound(p2, p3),
+	Line.CreateBound(p3, p4),
+	Line.CreateBound(p4, p1),
+	#Line.CreateBound(p1, p5),
+	#Line.CreateBound(bb.Min, bb.Max),
+])
+
+solid_base = System.Array[CurveLoop]([CurveLoop.Create(lines)])
+
+
+#ds = dm.create_ds(lines)
+#ds = dm.create_ds(Line.CreateBound(p1, p1 + bb_vec))
+
+
+solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+bound_solid = GeometryCreationUtilities.CreateExtrusionGeometry(solid_base, XYZ.BasisZ,
+										bb_vec.Z, solid_opt)
+#ds2 = dm.create_ds(bound_solid)
+										
+									
+
+
+for lf in mapp.linked_files :
+	
+	print(lf)
+	print(lf.Name)
+	ldoc = lf.GetLinkDocument()
+	print(ldoc)
+	if not ldoc :
+		print("Не загружен документ, пропускаем")
+		continue
+		
+	if ldoc.IsDetached :
+		continue
+
+		
+	
+	ttrans = lf.GetTotalTransform()
+
+
+	fc = FilteredElementCollector(ldoc).OfCategory(bic.OST_Walls).WhereElementIsNotElementType().ToElements()
+
+	if len(fc) == 0 : 
+		continue
+	print("Количество элементов {}".format(len(fc)))
+	
+	for floor in fc :
+		try :
+			g = floor.Geometry[Options()]
+			g = g.GetTransformed(ttrans)
+			
+			g2 = []
+			
+			for s in g :
+				if isinstance(s, Solid) :
+					s2 = BooleanOperationsUtils.ExecuteBooleanOperation(s, bound_solid, BooleanOperationsType.Intersect)
+					if s2.Volume > 0.01 :
+						g2.append(s2)
+					
+			
+			dm.create_ds(g2)
+
+
+		except Exception as ex:
+			print(ex)
+			pass
+			
+print(20*"-")
+
+
+
+
+	
+
+	
+	

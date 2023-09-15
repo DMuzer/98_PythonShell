@@ -1,0 +1,28 @@
+st_str = """
+***************************************************************
+*** Пометить отработанное пересечение
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\04_Пометить отработанное пересечение.txt"
+***************************************************************
+
+***************************************************************
+"""
+print(st_str)
+def setProcessed(collision) :
+	
+	collisionName = collision.LookupParameter("Наименование").AsString()
+	print(collisionName)
+	
+	views = FilteredElementCollector(doc).OfClass(View).ToElements()
+	tr = Transaction(doc, "Пометка отработанных коллизий")
+	tr.Start()
+	collision.LookupParameter("О_Примечание").Set("resolved")
+	for view in views :
+		if view.Name.Contains(collisionName+"_") :
+			#print(f"{view.Name} - {type(view)}")
+			view.LookupParameter("Вид_Подзаголовок").Set("resolved")
+	tr.Commit()
+	
+for collisionRef in uidoc.Selection.GetElementIds() :
+	collision = doc.GetElement(collisionRef)
+	if not isinstance(collision, DirectShape) : continue
+	setProcessed(collision)

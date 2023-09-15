@@ -1,0 +1,117 @@
+"""
+***************************************************************
+*** Заполнение параметров для труб и прочих семейств
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\08_Заполнение параметров.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+fc = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+
+tr = Transaction(doc)
+
+
+pipe_names = {
+	15.0 * dut : "Трубы водогазопроводные DN15 15х2,8",
+	20.0 * dut : "Трубы водогазопроводные DN20 20х2,5",
+	25.0 * dut : "Трубы водогазопроводные DN25 25х3,2",
+	32.0 * dut : "Трубы водогазопроводные DN32 32х3.2",
+	40.0 * dut : "Трубы водогазопроводные DN40 40x3.5",
+	50.0 * dut : "Трубы электросварные DN50 57х3.5",
+	65.0 * dut : "Трубы электросварные DN65 76х4",
+	80.0 * dut : "Трубы электросварные DN80 89х4",
+	100.0 * dut : "Трубы электросварные DN100 108х4",
+	125.0 * dut : "Трубы электросварные DN125 133х4.5",
+	150.0 * dut : "Трубы электросварные DN150 159х4.5",
+	200.0 * dut : "Трубы электросварные DN200 219х4.5",
+	225.0 * dut : "Трубы электросварные DN225 244,5х5",
+	250.0 * dut : "Трубы электросварные DN250 273х5",
+	
+}
+pipe_gost = {
+	15.0 * dut : "ГОСТ 3262-75",
+	20.0 * dut : "ГОСТ 3262-75",
+	25.0 * dut : "ГОСТ 3262-75",
+	32.0 * dut : "ГОСТ 3262-75",
+	40.0 * dut : "ГОСТ 3262-75",
+	50.0 * dut : "ГОСТ 10704-91",
+	65.0 * dut : "ГОСТ 10704-91",
+	80.0 * dut : "ГОСТ 10704-91",
+	100.0 * dut : "ГОСТ 10704-91",
+	125.0 * dut : "ГОСТ 10704-91",
+	150.0 * dut : "ГОСТ 10704-91",
+	200.0 * dut : "ГОСТ 10704-91",
+	225.0 * dut : "ГОСТ 10704-91",
+	250.0 * dut : "ГОСТ 10704-91",
+	
+}
+
+k_len = 1.1
+tr.Start("Update parameters")
+for p in fc :
+
+		naim_param = p.LookupParameter("ADSK_Наименование")
+		d = p.Diameter 
+		if naim_param :
+			
+			naim_param.Set(pipe_names[d])
+			
+		p_len = round(p.Location.Curve.Length * k_len / dut / 100) / 10
+		len_param = p.LookupParameter("ADSK_Количество")
+		if len_param :
+			len_param.Set(p_len)
+			
+		unit = p.LookupParameter("ADSK_Единица измерения")
+		if unit :
+			unit.Set("м.")
+		
+		gr_par = p.LookupParameter("DM_Группирование")
+		if gr_par :
+			gr_par.Set("50_Трубы")
+			
+		gost_par = p.LookupParameter("ADSK_Марка")
+		if gost_par :
+			gost_par.Set(pipe_gost[d])
+			
+
+			
+	
+
+tr.Commit()
+	
+
+
+
+
+
+

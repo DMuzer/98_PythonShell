@@ -1,0 +1,140 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+app = dm.dmApp(doc)
+p_id = ElementId(2504244)
+pipe = doc.GetElement(p_id)
+
+bb = pipe.get_BoundingBox(None)
+
+def get_solid_from_bb(bb, z1, z2) :
+	p_min = bb.Min
+	p_max = bb.Max
+	
+	p_bot = [
+		XYZ(p_min.X, p_min.Y, z1),
+		XYZ(p_min.X, p_max.Y, z1),
+		XYZ(p_max.X, p_max.Y, z1),
+		XYZ(p_max.X, p_min.Y, z1), 
+		XYZ(p_min.X, p_min.Y, z1),
+		]
+	
+	lines = [Line.CreateBound(p1_, p2_) for p1_, p2_ in zip(p_bot[:-1], p_bot[1:])]
+	print(lines)
+	curve_loop = CurveLoop.Create(System.Array[Curve](lines))
+	c_loops = System.Array[CurveLoop]([curve_loop])
+	solid = GeometryCreationUtilities.CreateExtrusionGeometry(c_loops, XYZ.BasisZ, z2-z1)
+	
+	return solid
+	
+def get_links() :
+	fc = FilteredElementCollector(doc).OfClass(RevitLinkInstance).WhereElementIsNotElementType().ToElements()
+	return fc
+	
+def get_elements_from_link(l, bb) :
+	l_doc = l.GetLinkDocument()
+	tr1 = l.GetTotalTransform()
+	tr2 = tr1.Inverse
+	
+	min_p = tr2.OfPoint(bb.Min)
+	max_p = tr2.OfPoint(bb.Max)
+	
+	outl = Outline(min_p, max_p)
+	print(min_p, max_p)
+	flt = BoundingBoxIntersectsFilter(outl)
+	flt2 = ElementMulticategoryFilter(System.Array[BuiltInCategory]([bic.OST_Floors, 
+										bic.OST_Ceilings, bic.OST_Walls]))
+	res = FilteredElementCollector(l_doc).WherePasses(flt).ToElements()
+	return res
+	
+def create_direct_shape(g) :
+	try :
+		g = System.Array[GeometryObject](g)
+	except :
+		g = System.Array[GeometryObject]([g])
+	with dm.trans(doc) :
+		ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+		ds.SetShape(g)
+		
+
+		
+	
+sld1 = get_solid_from_bb(bb, -4800 * dut, 0)
+links = get_links()
+
+bb = sld1.GetBoundingBox()
+options1 = Options()
+options1.DetailLevel = ViewDetailLevel.Fine
+options1.IncludeNonVisibleObjects = False
+
+g2 = []
+
+for l in links :
+	elems = get_elements_from_link(l, bb)
+	trans1 = l.GetTotalTransform()
+	
+	for e in elems :
+		g = e.Geometry[options1]
+		if not g : continue
+		g = g.GetTransformed(trans1)
+		g1 = []	
+		for g_ in g :
+			if type(g_) != Solid : continue
+			g1.append(g_)
+			
+	g2 += g1
+	print(g1)
+	print(len(g1))
+	
+
+with dm.trans(doc) :
+	ds = DirectShape.CreateElement(doc, ElementId(bic.OST_GenericModel))
+	for g_ in g3 :
+		try :
+
+			ds.AppendShape(System.List[GeometryObject](g_))
+		except :
+			print('---')
+			pass
+	
+
+
+
+
+
+
+

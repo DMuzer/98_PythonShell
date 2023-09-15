@@ -1,0 +1,79 @@
+#  coding: utf-8 
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import Autodesk.Revit.Exceptions
+import System 
+import clr
+
+import math, sys
+import clr
+
+import re
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+lib_path = r"D:\18_проектирование\98_PythonShell\Создание фильтров"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+reload(dm)	
+reload(dm1)
+
+import d71_renumber_equipment as dm3
+
+reload(dm3)
+
+
+system_01 = dm3.panel.systems[0]
+elements = system_01.elements
+
+
+
+print(1)	
+nearest1 = dm3.panel.get_nearest(system_01)
+print(2)
+nearest2 = nearest1.get_nearest(system_01)
+
+
+
+
+
+
+
+
+
+
+
+
+	

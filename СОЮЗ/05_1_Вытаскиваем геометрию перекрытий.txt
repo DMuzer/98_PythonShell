@@ -1,0 +1,109 @@
+"""
+***************************************************************
+*** ВЫТАСКИВАЕМ ГЕОМЕТРИЮ ИЗ ПРОСТРАНСТВ И ПЕРЕКРЫТИЙ ДЛЯ
+*** АЛГОРИТМОВ РАЗМЕЩЕНИЯ СПРИНКЛЕРОВ
+***************************************************************
+* 
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+mapp = dm.dmApp(doc)
+
+sp1 = mapp.spaces['С1_-1_Т1_04']
+
+#fr = sp1.draw_space_as_region(view = uidoc.ActiveView)
+
+pg_sp1 = sp1.get_contours_polygon() #get_contours_polygon
+
+def get_floor_polygons(floor) :
+	elev = floor.LookupParameter("Отметка низа").AsDouble()
+	
+	geoms = floor.Geometry[Options()]
+	
+	faces = []
+	
+	polygons = []
+	
+	for g in geoms :
+		if isinstance(g, Solid) :
+			for face in g.Faces :
+				if face.FaceNormal.Z < -0.9 :
+					faces.append(face)
+					cloops = face.GetEdgesAsCurveLoops()
+					pg = dm.get_PolygonFromCurveLoops(cloops)
+					polygons.append(pg)
+					
+
+	polygons = [(elev, pg) for pg in polygons]
+	return polygons 
+
+def get_floors_from_links() :
+	geometries = []
+	res = []
+	for linstance in mapp.linked_files :
+		try :
+			ldoc = linstance.GetLinkDocument()
+			l_floors = [(linstance, f) for f in FilteredElementCollector(ldoc).OfClass(Floor).ToElements()]
+			
+			res.extend(l_floors)
+		except :
+			pass
+	return res
+
+floors = get_floors_from_links()
+
+
+#floor = doc.GetElement(ElementId(6159382))
+#geoms = floor.Geometry[Options()]
+
+#pg = get_floor_polygons(floor)
+
+#pg1 = pg[0][1]
+#pg2 = pg1.Intersection(pg_sp1)
+
+#dm.draw_polygon(pg2, view = uidoc.ActiveView)
+

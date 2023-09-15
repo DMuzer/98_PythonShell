@@ -1,0 +1,39 @@
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+
+max_step = 3500 * dut
+av = uidoc.ActiveView
+spr_id = uidoc.Selection.GetElementIds()[0]
+spr = doc.GetElement(spr_id)
+plane = Plane.CreateByNormalAndOrigin(av.ViewDirection, spr.Location.Point)
+
+tr = Transaction(doc)
+tr.Start("set workplane")
+sk_plane = SketchPlane.Create(doc, plane)
+av.SketchPlane = sk_plane
+tr.Commit()
+
+px1 = uidoc.Selection.PickPoint()
+px1uv = plane.Project(px1)[0]
+px2 = uidoc.Selection.PickPoint()
+px2uv = plane.Project(px2)[0]
+py1 = uidoc.Selection.PickPoint()
+py1uv = plane.Project(py1)[0]
+
+start_uv = UV(px1uv.U, py1uv.V)
+dist = px2.V - px1.V
+num_s = int(math.ceil(dist / max_step))
+step_len = dist / num_s
+start_point = plane.Evaluate(start_uv)
+
+for i in range(num_s) :
+	l = (i + 0.5) * step_len
+	
+
+
+
+

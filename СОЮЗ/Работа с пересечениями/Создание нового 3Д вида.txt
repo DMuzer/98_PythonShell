@@ -1,0 +1,37 @@
+view_types = FilteredElementCollector(doc).OfClass(ViewFamilyType).ToElements()
+view_types_3D = {Element.Name.GetValue(vt) : vt for vt in view_types if vt.ViewFamily == ViewFamily.ThreeDimensional}
+e1 = doc.GetElement(ElementId(9092474))
+p1 = e1.Location.Point
+
+
+
+
+tr = Transaction(doc)
+tr.Start("create 3d view")
+
+new_view = View3D.CreateIsometric(doc, view_types_3D.values()[-1].Id)
+num = 1
+while True :
+	try :
+		new_view.Name = "Новый вид_{}".format(num)
+		break
+	except :
+		num += 1
+		if num > 10 : break
+		
+sbox = new_view.GetSectionBox()
+
+sbox.Min = p1 - XYZ(5,5,5)
+sbox.Max = p1 + XYZ(5,5,15)
+new_view.SetSectionBox(sbox)
+
+fd = XYZ(1,-1,-0.5).Normalize()
+ud = 
+vo = ViewOrientation(p1 - 20* XYZ(1,-1,-0.5).Normalize(), ud, fd)
+#vo.ForwardDirection = 
+#
+new_view.SetOrientation(vo)
+
+tr.Commit()
+
+uidoc.ActiveView = new_view

@@ -1,0 +1,41 @@
+from Autodesk.Revit import *
+bic = BuiltInCategory
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+pipes = list(FilteredElementCollector(doc, uidoc.ActiveView.Id).OfClass(Plumbing.Pipe).ToElements())
+
+flt1 = VisibleInViewFilter(doc, uidoc.ActiveView.Id)
+flt2 = ElementClassFilter(IndependentTag)
+flt3 = LogicalAndFilter(flt1, flt2)
+
+#od_tag = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+#odt = od_tag.GetTypeId()
+#id_tag = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+#idt = id_tag.GetTypeId()
+tr = Transaction(doc, "change tags")
+
+
+for pipe in pipes[0:] :
+
+	de = pipe.GetDependentElements(flt3)
+	
+	for eid in de :
+		e = doc.GetElement(eid)
+		#print(e)
+		tt = doc.GetElement(e.GetTypeId())
+		tname = Element.Name.GetValue(tt)
+		#print(tname)
+		
+		if tname == "Диаметр_Толщина стенки_12" and pipe.Diameter / dut > 40:
+			print("Найдено несовпадение труба больше 40")
+			tr.Start()
+			e.ChangeTypeId(odt)
+			tr.Commit()
+		elif tname == "Внешний диаметр_Толщина стенки_12" and pipe.Diameter / dut < 50:
+			print("Найдено несовпадение труба меньше 40")
+			tr.Start()
+			e.ChangeTypeId(idt)
+			tr.Commit()
+			
+		
+		
+

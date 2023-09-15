@@ -1,0 +1,264 @@
+"""
+Гидравлический расчет.
+Построение графа для расчета
+"""
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+import System
+from collections import deque
+import heapq
+av = uidoc.ActiveView
+dut = UnitUtils.ConvertToInternalUnits(1, UnitTypeId.Millimeters)
+bic = BuiltInCategory
+import itertools
+import sys
+
+def set_color(e, r=0,g=0,b=0, a=0, view = None) :
+    color = Color(r,g,b)
+    if not view :
+        view = uidoc.ActiveView
+    ogs = OverrideGraphicSettings()
+    ogs.SetProjectionLineColor(color)
+    ogs.SetSurfaceTransparency(a)
+    ogs.SetSurfaceForegroundPatternColor(color)
+    ogs.SetSurfaceForegroundPatternId(ElementId(19))
+    ogs.SetProjectionLineColor(color)
+    ogs.SetCutLineColor(color)
+
+    try :
+        view.SetElementOverrides(e.Id, ogs)
+    except Exception as ex:
+        #print("Исключение при задании цвета set_color")
+        #print(ex)
+        try :
+            tr = Transaction(doc)
+            tr.Start("set color")
+            view.SetElementOverrides(e.Id, ogs)
+            
+            tr.Commit()
+            print("поправлено")
+        except :
+            pass
+
+
+class Vertex :
+	def __init__(self, key) :
+		self.key = key
+		self.connections = {}
+	def add_adj(self, vertex, weight = 1) :
+		self.connections[vertex] = weight
+	def get_connections(self) :
+		return self.connections.keys()
+	def get_weight(self, vertex) :
+		return self.connections[vertex]
+	def __repr__(self) :
+		return f"Вершина {self.key}"
+class Graph :
+	def __init__(self) :
+		self.vertex_dict = {}
+		self.vertex_ids = {}
+	def add_vertex(self, key) :
+		new_vertex = Vertex(key)
+		if key[0] in self.vertex_ids :
+			self.vertex_ids[key[0]].add(key)
+		else :
+			self.vertex_ids[key[0]] = set([key])
+			
+		self.vertex_dict[key] = new_vertex
+		return new_vertex
+	def get_vertex(self, key) :
+		if key in self.vertex_dict :
+			return self.vertex_dict[key]
+		return None
+	def add_edge(self, f, t, weight =1) :
+		if f not in self.vertex_dict :
+			self.add_vertex(f)
+		if t not in self.vertex_dict :
+			self.add_vertex(t)
+		self.vertex_dict[f].add_adj(self.vertex_dict[t], weight)
+		
+	def create(self, e) :
+		to_visit = set([e.Id.IntegerValue])
+		visited = set()
+		#print(to_visit)
+		
+		
+		while to_visit :
+			current_id = to_visit.pop()
+			visited.add(current_id)
+			current = doc.GetElement(ElementId(current_id))
+			if hasattr(current, "MEPModel") :
+				conns = [c for c in current.MEPModel.ConnectorManager.Connectors if c.IsConnected]
+			else :
+				conns = [c for c in current.ConnectorManager.Connectors if c.IsConnected]
+			
+			new_v = [(current_id, c.Id) for c in conns]
+			print(new_v)
+			for v1, v2 in itertools.combinations(new_v, 2) :
+				print(v1, v2)
+				self.add_edge(v1,v2)
+				self.add_edge(v2, v1)
+			for c1 in conns :
+				for c2 in c1.AllRefs :
+					#print(c2.ConnectorType)
+					other_id = c2.Owner.Id.IntegerValue
+					if c2.ConnectorType &  ConnectorType.Physical :
+						if c2.Owner.IsHidden(uidoc.ActiveView) : continue
+						v1, v2 = (c1.Owner.Id.IntegerValue, c1.Id), (c2.Owner.Id.IntegerValue, c2.Id)
+						self.add_edge(v1, v2)
+						self.add_edge(v2, v1)
+						
+						if not other_id in visited :
+							to_visit.add(other_id)
+							
+	def wfs(self, start_v, end_v) :
+		pass
+		prev = {start_v : None}
+		to_visit = deque([start_v])
+		visited = set({})
+		found = False
+		i = 0
+		while to_visit :
+			i += 1
+			#print(len(to_visit))
+			if i > 10000 : 
+				print("cycled...")
+				return
+			current = to_visit.popleft()
+			if current in visited : continue
+			visited.add(current)
+			if current[0] == end_v[0] : 
+				found = True
+				break
+			v = self.vertex_dict[current]
+			
+			for v2 in v.get_connections() :
+				if not v2.key in prev :
+					prev[v2.key] = current
+					to_visit.append(v2.key)
+		res = []
+		if found :
+			print("Нашли")
+			print(prev)
+			i = 0
+			current = end_v
+			while current :
+				res.append(current)
+				current = prev[current]
+				i += 1
+				if i > 10000 : 
+					print("зацикл на поиске пути")
+					return
+			return res
+			
+	def precalc(self) :
+		self.vertex_data['p'] = {}
+		self.verex_data['q'] = {}
+			
+	def dijkstra(self, start) :
+		self.distances = {vertex : float("inf") for vertex in self.vertex_dict}
+		self.distances[start] = 0
+		pq = [(0, start)]
+		
+		while len(pq) > 0 :
+			current_distance, current_vertex = heapq.heappop(pq)
+			cv = self.vertex_dict[current_vertex]
+			if current_distance > self.distances[current_vertex] :
+				continue
+			
+			for neighbor in cv.get_connections() :
+				print(neighbor)
+				print("в словаре {}".format(neighbor in self.distances))
+				if not neighbor in self.vertex_dict : continue
+				weight = cv.get_weight(neighbor)
+				print(neighbor)
+				print(self.distances)
+				try :
+					print(self.distances[neighbor])
+				except :
+					print("ошибка не найден сосед в словаре расстояний")
+					print(neighbor)
+				print("вес ребра {}, расстояние {}, предыдущее расстояние {}"\
+						.format(weight, current_distance,  distances[neighbor]))
+				distance = current_distance + weight
+				
+				if distance < distances[neighbor] :
+					pass
+					
+		
+				
+			
+					
+		
+def reset_elements_colors() :
+	flt = ElementMulticategoryFilter(System.Array[bic]([
+		bic.OST_PipeCurves, bic.OST_Sprinklers, 
+		bic.OST_PipeFitting, bic.OST_PipeAccessory,
+		bic.OST_MechanicalEquipment]))
+		
+	tr = Transaction(doc, "reset colors")
+	tr.Start()
+	for e in FilteredElementCollector(doc, av.Id).WherePasses(flt).ToElements() :
+		set_color(e, 100, 100,100,0)
+		
+	tr.Commit()
+						
+def show_elements(l) :
+	tr = Transaction(doc, "show elements")
+	tr.Start()
+	for eid in l :
+		e = doc.GetElement(ElementId(eid))
+		set_color(e, 255, 0,0,0)
+	
+	tr.Commit()
+				
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+		
+av = uidoc.ActiveView
+#start_ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+#start_e = doc.GetElement(start_ref)
+
+print(1)
+sprinklers = FilteredElementCollector(doc, av.Id).OfCategory(BuiltInCategory.OST_Sprinklers).ToElements()
+print(len(sprinklers))
+
+e = doc.GetElement(ElementId(1218479))
+g = Graph()
+g.create(e)
+print(g.vertex_dict)
+print(g.vertex_ids)
+
+start_v = list(g.vertex_ids[e.Id.IntegerValue])[0]
+
+#show_elements(g.vertex_ids)
+reset_elements_colors()
+#1228182
+print("этап {}".format(2))
+#reset_elements_colors()
+#to_show = set([eid for eid, _ in path])
+#show_elements(to_show)
+spr = sprinklers[5]
+v1key = g.vertex_ids[spr.Id.IntegerValue].pop()
+v1 = g.vertex_dict[v1key]
+
+print("этап {}".format(3))
+c2 = list(v1.get_connections())[0]
+print(c2)
+
+for v1 in g.vertex_dict.values() :
+	print(20*"-")
+	for v2 in v1.get_connections() :
+		print(v2.key)
+		if v2.key in g.vertex_dict :
+			print("Нет такой")
+			raise
+		
+	
+	
+
+#start1 = list(g.vertex_ids[1228174])[0]
+#g.dijkstra(start1)
+
+
+

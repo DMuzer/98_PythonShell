@@ -1,0 +1,25 @@
+
+fc = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)
+fc = fc.WhereElementIsNotElementType().ToElements()
+trans = Transaction(doc)
+trans.Start("chage title types")
+for b in fc :
+	
+	vs_id = b.OwnerViewId
+	view = doc.GetElement(vs_id)
+	try :
+		b.LookupParameter("Строка2_Дата").Set(True)
+		b.LookupParameter("Строка3_Дата").Set(True)
+	except:
+		pass
+	razd = view.LookupParameter("ADSK_Штамп Раздел проекта").AsString()
+	
+	"""
+	
+	if razd == "ГПТ" :
+		if b.GetTypeId().IntegerValue != 276280 :
+		
+			b.ChangeTypeId(ElementId(276280))
+	"""
+
+trans.Commit()

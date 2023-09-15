@@ -1,0 +1,81 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+				
+import clr
+from System.Collections.Generic import IList, List	
+
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+pipe1 = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element).ElementId)
+pipe2 = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element).ElementId)
+
+lc1 = pipe1.Location.Curve
+lc2 = pipe2.Location.Curve
+
+t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+    
+lc1.ComputeClosestPoints(lc2, True, True, False, t)
+pt1 = t.Item[0].XYZPointOnFirstCurve
+pt2 = t.Item[0].XYZPointOnSecondCurve
+
+lc3 = Line.CreateBound(pt1, pt2)
+
+with trans(doc) :
+	pipe3 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe1.Id, XYZ.BasisX)[0])	
+	pipe3.Location.Curve = lc3
+	
+	conns = sorted([c for c in pipe3.ConnectorManager.Connectors if c.ConnectorType == ConnectorType.End], key = lambda x : pt1.DistanceTo(c.Origin))
+	
+	doc.Create.NewTakeoffFitting(conns[0], pipe1)
+	doc.Create.NewTakeoffFitting(conns[1], pipe2)
+	
+
+
+
+
+
+
+

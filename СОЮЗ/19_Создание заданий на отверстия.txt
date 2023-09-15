@@ -1,0 +1,141 @@
+st_cmt = """
+***************************************************************
+*** Создание задания на отверстия. Выбирается труба 
+*** находятся пересечения этой трубы со стенами и создается задание на  отвестие с нужными размерами
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\03_Пакетное создание видов с пересечениями.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+from Autodesk.Revit import *
+import System
+
+from collections import deque
+dut = 0.0032808398950131233
+
+worksets = {e.Name : e for e in FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset)}
+holeWorkset = worksets["DM_Задания_отверстия"]
+ 
+
+
+viewFlt = ElementClassFilter(
+		Wall
+)
+nonStructural = Structure.StructuralType.NonStructural
+intersectorViews = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+intersectorView = intersectorViews["DM_3Д_Задание отверстия"]
+intersector = ReferenceIntersector(viewFlt, FindReferenceTarget.All, intersectorView)
+intersector.FindReferencesInRevitLinks = True
+
+holeTypes = {t.Name : t for t 
+					in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericModel)\
+					.WhereElementIsElementType().ToElements()}
+holeType = holeTypes['SP_Отверстие круглое_Вертикальное']
+
+
+
+def createHole(pipe) :
+
+	ViewPoint = pipe.Location.Curve.GetEndPoint(0)
+	ViewDirection = pipe.Location.Curve.Direction
+	pipeLen = pipe.Location.Curve.Length
+	
+	references = intersector.Find(ViewPoint, ViewDirection)
+	print(len(references))
+	references = sorted([ref for ref in references if ref.Proximity < pipeLen], key = lambda x : x.Proximity)
+	print(len(references))
+	
+	objStack = set()
+	refDeque = []
+	refSequence = []
+	for refCtx in references :
+		ref = refCtx.GetReference()
+		print(f"{refCtx.Proximity/dut:.02f} - {ref.ElementId} - {ref.LinkedElementId}")
+		if not objStack :
+			#если пустой то помещаем в стек
+			refDeque.append((refCtx, ref))
+			objStack.add((ref.ElementId.IntegerValue, ref.LinkedElementId.IntegerValue))
+		else :
+			oTuple = (ref.ElementId.IntegerValue, ref.LinkedElementId.IntegerValue) 
+			if oTuple in objStack :
+				print(2)
+				for obj in refDeque[::-1] :
+					print(3)
+					if obj[1].ElementId.IntegerValue == ref.ElementId.IntegerValue and\
+						obj[1].LinkedElementId.IntegerValue == ref.LinkedElementId.IntegerValue :
+							objStack.discard(oTuple)
+							refDeque.remove(obj)
+							break
+				refSequence.append((obj[0], refCtx))
+	
+	holes = []
+	if len(refSequence) == 1 :
+		holes = [refSequence[0]]
+	else :
+		refSequence = deque(refSequence)
+		current = refSequence.popleft()
+		while refSequence :
+			next = refSequence.popleft()
+			print(f"current - {current[1].Proximity/dut}\nnext  - {next[0].Proximity/dut}")
+			if abs((current[1].Proximity-next[0].Proximity)) < 20 * dut :
+				print(f"расстояние = {(current[1].Proximity-next[0].Proximity)/dut}")
+				print("расширяем")
+				current = (current[0], next[1])
+					
+			else :
+				print("добавляем ")
+				holes.append(current)
+				current =  next
+			
+			if not refSequence :
+				print("добавляем текущую")
+				holes.append(current)
+	import math
+	holeDirection = math.atan2(ViewDirection.Y, ViewDirection.X) - math.pi / 2
+	holeDiameter = math.ceil((pipe.Diameter/dut + 50) / 10) * 10 * dut
+	tr = Transaction(doc, "add holes")
+	tr.Start()
+	for hole in holes :
+		print(20*"-")
+		print(hole[0].Proximity/dut)
+		print(hole[1].Proximity/dut)
+		
+		try :
+			toDivisionName = doc.GetElement(hole[0].GetReference()).Name.split("_")[1]
+		except :
+			toDivisionName = "-" 
+		
+		centerDistance = (hole[0].Proximity + hole[1].Proximity)/2
+		p1 = ViewPoint + centerDistance * ViewDirection
+		holeWidth = abs(hole[0].Proximity - hole[1].Proximity) + 40 * dut
+		
+		z = p1.Z - pipe.ReferenceLevel.Elevation - holeDiameter / 2
+		p1_ = XYZ(p1.X, p1.Y, 0)
+		rotationAxis = Line.CreateUnbound(p1, XYZ.BasisZ)
+		
+		newHole =doc.Create.NewFamilyInstance(p1_, holeType, pipe.ReferenceLevel, nonStructural)
+		newHole.LookupParameter("О_Отверстие_Ширина").Set(width)
+		newHole.LookupParameter("О_Отверстие_Отметка_Базового уровня").Set(0)
+		newHole.LookupParameter("О_Отверстие_Высота").Set(holeDiameter)
+		newHole.LookupParameter("О_Отверстие_Высота_От базового уровня").Set(z)
+		newHole.LookupParameter("SP_Отверстие_Выдал отдел").Set("ПТ")
+		newHole.LookupParameter("SP_Отверстие_Выдал отделу").Set(toDivisionName)
+		newHole.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(holeWorkset.Id.IntegerValue)
+		newHole.Location.Rotate(rotationAxis, holeDirection)
+		
+		
+	tr.Commit()	
+
+while True :
+	pipeRef = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+	pipe = doc.GetElement(pipeRef)		
+	createHole(pipe)
+		
+			
+				
+			
+			
+		
+
+

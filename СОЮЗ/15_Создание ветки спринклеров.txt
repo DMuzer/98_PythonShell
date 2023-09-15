@@ -1,0 +1,97 @@
+dut = 0.0032808398950131233
+
+margin_rel = False
+margin = 200 * dut
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+import dm_connect_3 as dm3
+import dmRouting_01 as dm_rt
+
+reload(dm)	
+reload(dm1)
+reload(dm3)
+reload(dm_rt)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+OT = UI.Selection.ObjectType
+
+
+mapp = dm.dmApp(doc)
+sprinklers1 = [doc.GetElement(id) for id in  [
+ElementId(7723578),
+ElementId(7723579),
+ElementId(7723590),
+ElementId(7723588),
+ElementId(7725042),
+ElementId(7723589)]]
+pipe = doc.GetElement(ElementId(7723728))
+
+sprinklers2 = [doc.GetElement(id) for id in  [
+            ElementId(7727613),
+            ElementId(7727635),
+            ElementId(7727648)]]
+            
+sprinklers = sprinklers2
+pipe = doc.GetElement(ElementId(7723728))
+
+
+"""
+spr_id = uidoc.Selection.PickObjects(OT.Element)
+spr = [doc.GetElement(sid) for sid in spr_id]
+sprinklers = [e for e in spr if e.Category.Id.IntegerValue == int(bic.OST_Sprinklers)]
+pipe_ref = uidoc.Selection.PickObject(OT.Element)
+pipe = doc.GetElement(pipe_ref)
+
+if pipe.Category.Id.IntegerValue !=  int(bic.OST_PipeCurves) : raise
+
+"""
+
+
+sline = dm_rt.dmCreateSprinklerLine(sprinklers, pipe)
+sline.do_precalc()
+
+for tv in sline.traces_variants :
+	print(tv.get_score())
+
+#sline.optimal_trace.do_calc()
+
+#sline.show_optimal_trace()
+
+
+
+#sline.create_line()
+#sline.delete_line()
+
+
+

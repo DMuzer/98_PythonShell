@@ -1,0 +1,46 @@
+def get_connected_elements(p) :
+	if type(p) == ElementId :
+		p = doc.GetElement(p)
+	try :
+		conns = p.ConnectorManager.Connectors
+	except :
+		conns = p.MEPModel.ConnectorManager.Connectors
+	res = []
+	
+	for c in conns :
+		if c.ConnectorType != ConnectorType.End : continue
+		for r in c.AllRefs :
+			if r.Owner.Id != p.Id :
+				res.append(r.Owner)
+	return res
+	
+def get_connected_parts() :
+	while len(to_visit) > 0 :
+		part_id = to_visit.pop()
+		conn_parts = get_connected_elements(part_id)
+		
+		
+		for p in conn_parts :
+			if not p.Id in parts_id : parts_id.append(p.Id)
+			if not p.Id in visited_parts : to_visit.append(p.Id)
+			
+		visited_parts.append(part_id)
+		
+		
+		
+		
+	return 
+	
+def print_parts() :
+	for p_id in parts_id :
+		p = doc.GetElement(p_id)
+		print("{:10} : {}".format(p.Id, Element.Name.GetValue(p)))
+			
+pipe = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).FirstElement()
+parts_id = [pipe.Id]
+visited_parts = []
+to_visit = [pipe.Id]
+
+get_connected_parts()
+print_parts()
+

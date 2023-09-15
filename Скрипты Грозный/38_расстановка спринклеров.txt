@@ -1,0 +1,81 @@
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sel0 = uidoc.Selection.GetElementIds()
+print(sel0)
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+
+
+
+
+app = dm.dmApp(doc)
+
+vn = app.views['Потолки'] 
+
+
+ls = app.detail_linestyles['ADSK_Сплошная_Синяя_4']
+
+sps = app.spaces
+
+
+
+sel = [doc.GetElement(eid) for eid in sel0]
+
+sel1 = [e for e in sel if type(e) == Mechanical.Space]
+
+sps = [dm.dm_Space(e) for e in sel1]
+
+
+
+for sp in sps :
+	print(1)
+
+	spr_pos =[]
+	spr_pos = sp.CalculateSprinklerPositions(rot=-22.5)
+	
+	with dm.trans(doc) :	
+		for p in spr_pos :
+			arc = Arc.Create(p, 1, 0, pi2, XYZ.BasisX, XYZ.BasisY) 
+			dl = doc.Create.NewDetailCurve(vn, arc)
+			dl.LineStyle = ls
+			
+			arc2 = Arc.Create(p, 3000*dut * 2**0.5 / 2, 0, pi2, XYZ.BasisX, XYZ.BasisY) 
+			dl2 = doc.Create.NewDetailCurve(vn, arc2)
+			dl2.LineStyle = ls
+		
+		
+
+
+
+
+    
+    
+
+
+
+
+
+
+

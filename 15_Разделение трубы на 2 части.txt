@@ -1,0 +1,74 @@
+import clr
+
+from Autodesk.Revit import DB, UI
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+
+sel = uidoc.Selection.GetElementIds()
+
+sel_dict = {}
+for elid in sel :
+	el = doc.GetElement(elid)
+	cat = el.Category.Name
+	try :
+		sel_dict[cat] += 1
+	except :
+		sel_dict[cat] = 1
+		
+for k in sel_dict.keys() :
+	print(k)
+	print(sel_dict[k])
+
+print('------')
+fcoll = FilteredElementCollector(doc, uidoc.Selection.GetElementIds())
+fcoll.OfCategory(BuiltInCategory.OST_PipeCurves)
+
+sel = fcoll.ToElementIds()
+
+pipe = fcoll.FirstElement()
+
+trans_matr = Transform.CreateTranslation(XYZ(500 * dut, 250 * dut, 0))
+
+loc_curve = pipe.Location.Curve.CreateTransformed(trans_matr)
+p11 = loc_curve.GetEndPoint(0)
+p12 = loc_curve.Evaluate(0.49, True)
+p21 = loc_curve.Evaluate(0.51, True)
+p22 = loc_curve.GetEndPoint(1)
+
+pipe_d = pipe.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].AsDouble()
+
+print(loc_curve)
+
+tr = Transaction(doc)
+
+tr.Start("Create new pipe")
+
+pipe1 =  Plumbing.Pipe.Create(doc, 
+			pipe.MEPSystem.GetTypeId(), 
+			pipe.GetTypeId(), 
+			pipe.ReferenceLevel.Id,
+			p11, 
+			p12)
+			
+
+			
+			
+
+pipe2 = Plumbing.Pipe.Create(doc, 
+			pipe.MEPSystem.GetTypeId(), 
+			pipe.GetTypeId(), 
+			pipe.ReferenceLevel.Id,
+			p21, p22)
+			
+#pipe2.Diameter = pipe.Diameter
+pipe1.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(pipe_d)
+pipe2.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(pipe_d)
+			
+tr.Commit()
+
+	
+
+

@@ -1,0 +1,53 @@
+import Autodesk.Revit.UI as UI
+import itertools
+fc = FilteredElementCollector(doc).OfClass(Grid).ToElements()
+
+grid_dict = {g.Name : g for g in fc}
+
+
+
+for g in grid_dict :
+	print(g)
+	
+names1 = ["А", "Б", "В","Г","Д","Е","Ж","И","К","Л","М","Н","П","Р","С","Т","У","Ф","Ш","Э","Ю", "Я"]
+names2 = ["", "А", "Б", "В","Г","Д","Е","Ж","","И","К","Л","М","Н","П","Р","С","Т","У","Ф","Ш","Э","Ю", "Я"]
+names = []
+for n in itertools.product(names2, names1) :
+	print("{}{}".format(n[0],n[1]))
+	names.append("{}{}".format(n[0],n[1]))
+	
+print(20*"-")			
+
+num = 0
+	
+while True :
+	try :
+		
+		axis_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+		axis = doc.GetElement(axis_id)
+		tr = Transaction(doc)
+		tr.Start("rename axis")
+		lname = names[num]
+		new_name = "{}".format(lname)
+		if new_name in grid_dict :
+			axis2 = grid_dict[new_name]
+			num2 = 0
+			while True :
+				num2 += 1
+				
+				new_name2 = new_name + "_{}".format(num2)
+				if new_name2 in grid_dict :
+					continue
+				break
+			
+			
+			axis2.Name = new_name2
+		axis.Name = new_name
+		num += 1
+		tr.Commit()
+	
+	
+	except Exception as ex:
+		print(ex)
+		break
+	

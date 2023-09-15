@@ -1,0 +1,28 @@
+import clr
+clr.AddReferenceByPartialName("System.Windows")
+clr.AddReferenceByPartialName("System.Drawing")
+clr.AddReferenceToFileAndPath(r"C:\Windows\WinSxS\amd64_presentationcore_31bf3856ad364e35_10.0.19200.250_none_d7b20b14583ffbf2\PresentationCore.dll")
+from System.Windows import Media
+import System.Drawing
+
+
+width = 400
+height = 800
+dpi_x = (250/25.4)
+dpi_y = (250/25.4)
+
+pixel_format = System.Drawing.Imaging.PixelFormat.Format32bppPArgb
+pallete = None 
+im_source = [12, 23, 4,5,6]
+
+bitmap = System.Drawing.Bitmap(width, height, pixel_format)
+
+for x in range(width) :
+	for y in range(height) :
+		c1 = System.Drawing.Color.FromArgb(255, 0, (255./height * y), (255. / width * x))
+		bitmap.SetPixel(x, y, c1)
+		
+bitmap.Save(r"d:\1.png")
+
+
+

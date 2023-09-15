@@ -1,0 +1,44 @@
+from Autodesk.Revit import UI as UI
+
+sys.path.append(r"D:\18_проектирование\RevitCode")
+#import dm_lib
+#reload(dm_lib)
+
+dist = 150 * dut
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+dut = 0.0032808398950131233
+
+#spr = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element).ElementId)
+
+ceil_l = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+
+def create_direct_shape(solid) :
+	tr = Transaction(doc)
+	category_id = ElementId(BuiltInCategory.OST_GenericModel)
+	tr.Start("1")
+	ds = DirectShape.CreateElement(doc, category_id)
+	ds.SetShape([solid])
+	tr.Commit()
+
+ceil_el = doc.GetElement(ceil_l.ElementId)
+transf1 = ceil_el.GetTotalTransform()
+link_doc = ceil_el.GetLinkDocument()
+ceil_el1 = link_doc.GetElement(ceil_l.LinkedElementId)
+
+if type(ceil_el1) == FamilyInstance :
+	geom = list(list(ceil_el1.Geometry[Options()])[0].GetInstanceGeometry().GetTransformed(transf1))
+	#geom = list(list(ceil_el1.Geometry[Options()])[0].GetInstanceGeometry())
+else :
+	geom = list([ceil_el1.Geometry[Options()]][0].GetTransformed(transf1))
+	
+res_solid = geom[0]
+if len(geom) > 1 : 
+	for i in range(1, len(geom)) :
+		res_solid = BooleanOperationsUtils.ExecuteBooleanOperation(res_solid, geom[i], BooleanOperationsType.Union)
+	
+create_direct_shape(res_solid)	
+		
+
+

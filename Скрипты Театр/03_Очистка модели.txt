@@ -1,0 +1,5 @@
+fc = FilteredElementCollector(doc).OfClass(ViewPlan).ToElements()
+
+
+for e in fc :
+	print(e.Name)

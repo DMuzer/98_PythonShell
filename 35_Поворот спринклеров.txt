@@ -1,0 +1,60 @@
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+
+
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+
+@contextmanager
+def trans(doc, a='транзакция') :
+	tr = Transaction(doc)
+	tr.Start(a)
+	try :		
+		yield tr
+	finally :
+		tr.Commit()
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+def show_var_(v) :
+	flds = dir(v)
+	print("Доступные поля")
+	for f in flds :
+		if not f.startswith("__") :
+			try :
+				print("{:15} : {}".format(f, getattr(v, f)))
+			except Exception as ex:
+				pass
+				
+"""
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+reload(dm)	
+reload(dm1)
+"""
+
+sprinklers = [doc.GetElement(eid) for eid in uidoc.Selection.GetElementIds()]
+
+sprinklers_s = filter(lambda x : x.Category.Id.IntegerValue == int(bic.OST_Sprinklers), sprinklers)
+angle = math.pi / 2
+
+with trans(doc) :
+	for s in sprinklers_s :
+		l = Line.CreateBound(s.Location.Point, s.Location.Point + XYZ.BasisZ)
+		ElementTransformUtils.RotateElement(doc, s.Id, l, angle)

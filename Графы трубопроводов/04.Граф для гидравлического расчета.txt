@@ -1,0 +1,843 @@
+"""
+Создание расчетного графа для трубопровода и 
+гидравлический расчет
+D:\18_проектирование\98_PythonShell\Графы трубопроводов\04.Граф для гидравлического расчета.txt
+"""
+import System
+bic = BuiltInCategory
+import itertools
+import heapq
+dut = 0.0032808398950131233
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+import pdb
+
+pipeK = {
+	15 * dut : 0.18, 
+	20 * dut : 0.926,
+	25 * dut : 3.65,
+	32 * dut : 16.5,
+	40 * dut : 34.5,
+	50 * dut : 135,
+	65 * dut : 572,
+	80 * dut : 1429,
+	100 * dut : 4231,
+	125 * dut : 13530,
+	150 * dut : 36920,
+	200 * dut : 209900,
+	}
+	
+elbowLengths = {
+	15 * dut 	: 0.47 		* 1000 * dut, 
+	20 * dut 	: 0.67		* 1000 * dut,
+	25 * dut 	: 0.85		* 1000 * dut,
+	32 * dut 	: 1.13		* 1000 * dut,
+	40 * dut 	: 1.34		* 1000 * dut,
+	50 * dut 	: 1.61		* 1000 * dut,
+	65 * dut 	: 1.95		* 1000 * dut,
+	80 * dut 	: 2.50		* 1000 * dut,
+	100 * dut 	: 3.36		* 1000 * dut,
+	125 * dut 	: 4.27		* 1000 * dut,
+	150 * dut 	: 5.18		* 1000 * dut,
+	200 * dut 	: 6.41		* 1000 * dut,
+	}
+teeLengths = {
+	15 * dut 	: 0.24 		* 1000 * dut, 
+	20 * dut 	: 0.30		* 1000 * dut,
+	25 * dut 	: 0.40		* 1000 * dut,
+	32 * dut 	: 0.52		* 1000 * dut,
+	40 * dut 	: 0.61		* 1000 * dut,
+	50 * dut 	: 0.76		* 1000 * dut,
+	65 * dut 	: 0.91		* 1000 * dut,
+	80 * dut 	: 1.16		* 1000 * dut,
+	100 * dut 	: 1.52		* 1000 * dut,
+	125 * dut 	: 1.89		* 1000 * dut,
+	150 * dut 	: 2.29		* 1000 * dut,
+	200 * dut 	: 3.05		* 1000 * dut,
+	}
+valveLengths =  {
+	15 * dut 	: 0.11 		* 1000 * dut, 
+	20 * dut 	: 0.14		* 1000 * dut,
+	25 * dut 	: 0.18		* 1000 * dut,
+	32 * dut 	: 0.24		* 1000 * dut,
+	40 * dut 	: 0.28		* 1000 * dut,
+	50 * dut 	: 0.37		* 1000 * dut,
+	65 * dut 	: 0.43		* 1000 * dut,
+	80 * dut 	: 0.52		* 1000 * dut,
+	100 * dut 	: 0.70		* 1000 * dut,
+	125 * dut 	: 0.85		* 1000 * dut,
+	150 * dut 	: 1.07		* 1000 * dut,
+	200 * dut 	: 1.40		* 1000 * dut,
+	}
+checkValveLengths =  {
+	15 * dut 	: 5.18 		* 1000 * dut, 
+	20 * dut 	: 6.71		* 1000 * dut,
+	25 * dut 	: 8.23		* 1000 * dut,
+	32 * dut 	: 11.28		* 1000 * dut,
+	40 * dut 	: 13.10		* 1000 * dut,
+	50 * dut 	: 17.37		* 1000 * dut,
+	65 * dut 	: 19.81		* 1000 * dut,
+	80 * dut 	: 25.30		* 1000 * dut,
+	100 * dut 	: 34.20		* 1000 * dut,
+	125 * dut 	: 42.67		* 1000 * dut,
+	150 * dut 	: 50.30		* 1000 * dut,
+	200 * dut 	: 68.50		* 1000 * dut,
+	}
+transitionLengths =  {
+	15 * dut 	: 0.18 		* 1000 * dut, 
+	20 * dut 	: 0.24		* 1000 * dut,
+	25 * dut 	: 0.30		* 1000 * dut,
+	32 * dut 	: 0.40		* 1000 * dut,
+	40 * dut 	: 0.46		* 1000 * dut,
+	50 * dut 	: 0.55		* 1000 * dut,
+	65 * dut 	: 0.70		* 1000 * dut,
+	80 * dut 	: 0.88		* 1000 * dut,
+	100 * dut 	: 1.16		* 1000 * dut,
+	125 * dut 	: 1.46		* 1000 * dut,
+	150 * dut 	: 1.71		* 1000 * dut,
+	200 * dut 	: 2.29		* 1000 * dut,
+	}
+
+eqLengths = {
+	"Тройник" 	: teeLengths,
+	"Отвод" 	: elbowLengths,
+	"Задвижка"	: valveLengths,
+	"Клапан" 	: checkValveLengths,
+	"Переход"	: transitionLengths
+	
+}
+
+class AdjacencySetGraph:
+	def __init__(self, V = (), E= ()) :
+		self._V = set()
+		self._nbrs = {}
+		self.id_dict = {}
+		self.sprinklers = set()
+		self.data = {}
+		self.connectors = {}
+		for v in V : self.addvertex(v)
+		for e in E : self.addedge(*e)
+	def vertices(self) :
+		return iter(self._V)
+	def edges(self) :
+		for u in self._V :
+			for v in self.nbrs(u) :
+				yield (u,v)
+	def addvertex(self, v) :
+		self._V.add(v)
+		self._nbrs[v] = set()
+		if not v in self.data :
+			self.data[v] = {}
+		if v[0] in self.id_dict :
+			self.id_dict[v[0]].add(v)
+		else :
+			self.id_dict[v[0]] = set([v])
+	def addedge(self, u, v) :
+		if not u in self._V :
+			self.addvertex(u)
+		if not v in self._V :
+			self.addvertex(v)
+		if not (u, v) in self.data :
+			self.data[(u,v)] = {}
+		self._nbrs[u].add(v)
+	def removeedge(self, u, v) :
+		self._nbrs[u].remove(v)
+	def __contains__(self, v) :
+		return v in self._nbrs
+	def nbrs(self, v) :
+		return iter(self._nbrs[v])
+	def __len__(self) :
+		return len(self._nbrs)
+		
+	def precalc(self) :
+		#Устанавливаем предварительные параметры на спринклеры
+		startPressure = 0.1
+		K = 0.47
+		startQ = 10 * K * (startPressure) ** 0.5
+		for sprinkler in self.sprinklers :
+			sprinklerVertices = self.id_dict[sprinkler]
+			p = startPressure
+			q = 10 * K * (p) ** 0.5
+			for v in self.id_dict[sprinkler] :
+				self.data[v]['p0'] = p
+				self.data[v]['q0'] = q
+				self.data[v]['K'] = K
+				self.data[v]['type'] = 'Спринклер'
+				
+		#Устанавливаем параметры на ребра
+		for u, v in self.edges() :
+			print(u,v)
+			#если елементы разные - то это вершина которая соединяет компоненты, там потерь нет.
+			if v[0] != u[0] :
+				self.data[(u,v)]['dh'] = 0
+				self.data[(u,v)]['el'] = 0
+				self.data[(u,v)]['DN'] = self.connectors[u[0]][u[1]].Radius * 2
+				self.data[(u,v)]['q'] = startQ
+				self.data[(u,v)]['dp'] = 0
+				self.data[(u,v)]['type'] = 'Соединение'
+				#self.data[(v,u)]
+			else :
+				# внутри элемента
+				element = doc.GetElement(ElementId(u[0]))
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeCurves) :
+				#это труба
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = (self.connectors[u[0]][u[1]].Origin\
+												- self.connectors[v[0]][v[1]].Origin).GetLength()
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height'] 
+					self.data[(u,v)]['type'] = 'Труба'
+					
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeFitting)\
+						and element.MEPModel.PartType == PartType.Elbow:
+				#это соединительный элемент
+				
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = eqLengths["Отвод"][DN]
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height']
+					self.data[(u,v)]['type'] = 'Отвод'
+					
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeFitting)\
+						and element.MEPModel.PartType == PartType.Tee:
+				#это соединительный элемент
+				
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = eqLengths["Тройник"][DN]
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height'] 
+					self.data[(u,v)]['type'] = 'Тройник'
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeFitting)\
+						and element.MEPModel.PartType == PartType.Elbow:
+				#это соединительный элемент
+				
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = eqLengths["Отвод"][DN]
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height']
+					self.data[(u,v)]['type'] = 'Отвод'
+					
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeAccessory)\
+						or (element.Category.Id.IntegerValue) == int(bic.OST_MechanicalEquipment):
+				#клапан
+				
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = eqLengths["Клапан"][DN]
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height'] 
+					self.data[(u,v)]['type'] = 'Клапан'
+					
+				if (element.Category.Id.IntegerValue) == int(bic.OST_PipeFitting)\
+						and element.MEPModel.PartType == PartType.Transition:
+				#это соединительный элемент
+				
+					DN = self.connectors[u[0]][u[1]].Radius * 2
+					self.data[(u,v)]['DN'] = DN
+					self.data[(u,v)]['eq_length'] = eqLengths["Переход"][DN]
+					self.data[(u,v)]['dh'] = self.connectors[v[0]][v[1]].Origin.Z\
+												- self.connectors[u[0]][u[1]].Origin.Z 
+					self.data[(u,v)]['dp_height'] = self.data[(u,v)]['dh'] / dut / 1000 / 100				
+					#потеря по длине
+					self.data[(u,v)]['dp_length'] = startQ**2 * self.data[(u,v)]['eq_length'] / dut / 1000\
+														/100/pipeK[DN]
+														
+												
+											
+					self.data[(u,v)]['q'] = startQ
+					self.data[(u,v)]['dp'] = self.data[(u,v)]['dp_length'] + self.data[(u,v)]['dp_height'] 
+					self.data[(u,v)]['type'] = 'Переход'
+					
+			# делаем алгоритм Дейкстры, чтобы определить наиболее удаленный ороситель
+			
+	def dijkstra(self, start) :
+		tree 	= {}
+		D		= {start : 0}
+		toVisit	= []
+		heapq.heappush(toVisit, (0, None, start))
+		i = 0
+		while toVisit :
+			i += 1
+			if i > 10000 : return
+			
+			pressureLoss, prevVertex, current = heapq.heappop(toVisit)
+		
+			if current not in tree :
+				tree[current] = prevVertex
+				if prevVertex :
+					D[current] = D[prevVertex] + self.data[(prevVertex, current)]['dp']
+				for nextVertex in self.nbrs(current) :
+					newPressureLoss = self.data[(current, nextVertex)]['dp']
+					heapq.heappush(toVisit, (newPressureLoss, current, nextVertex))
+					
+		self.tree = tree
+		self.D = D
+					
+		return tree, D
+			
+			
+					
+				
+		
+	def printSprinklersData(self) :
+		for sprinkler in self.sprinklers :
+			print("Спринклер Id = {}".format(sprinkler))
+			print("вершины")
+			for v in self.id_dict[sprinkler] :
+				print(v)
+				for attribute in self.data[v] :
+					value = self.data[v][attribute] 
+					print("\t{}\t= {}".format(attribute, value))
+	def printEdgesData(self) :
+		for e in self.edges() :
+			for attribute in self.data[e] :
+				value = self.data[e][attribute]
+				print("\t\t{}\t= {}".format(attribute, value))
+		print("Неинициализированные ребра")
+		for e in self.edges() :
+			if "type" not in self.data[e] :
+				print(e)
+
+		
+					
+				
+			
+		
+		
+	def create(self) :
+		multiClassFilter = ElementMulticategoryFilter( System.Array[bic]([bic.OST_PipeCurves,
+				bic.OST_PipeFitting,
+				bic.OST_PipeAccessory, 
+				bic.OST_MechanicalEquipment, bic.OST_Sprinklers]))
+	
+		pipeworkComponentsFC = FilteredElementCollector(doc, uidoc.ActiveView.Id)\
+								.WherePasses(multiClassFilter).ToElements()
+								
+		for component in pipeworkComponentsFC :
+			print(component.Category.Name)
+			if component.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
+				print("!sprinkler")
+				self.sprinklers.add(component.Id.IntegerValue)
+			if hasattr(component, "MEPModel") :
+				if not component.MEPModel.ConnectorManager : continue
+				componentConnectors = [ conn for conn in 
+						component.MEPModel.ConnectorManager.Connectors
+						if conn.ConnectorType & ConnectorType.Physical and 
+							conn.Domain == Domain.DomainPiping]
+			elif hasattr(component, "ConnectorManager") :
+				componentConnectors = list(component.ConnectorManager.Connectors)
+			
+			self.connectors[component.Id.IntegerValue] = {c.Id : c for c in componentConnectors}
+			
+				
+			componentVertices = [(component.Id.IntegerValue, connector.Id) 
+										for connector in componentConnectors]
+			componentEdges = []
+			for v1, v2 in itertools.combinations(componentVertices, 2) :
+				componentEdges.append((v1, v2))
+				componentEdges.append((v2, v1))
+				self.addedge(v1, v2)
+				self.addedge(v2, v1)
+			externalEdges = []
+			for connector in componentConnectors :
+				if connector.IsConnected :
+					for otherConnector in connector.AllRefs :
+						if otherConnector.ConnectorType & ConnectorType.Physical and\
+							otherConnector.Owner.Id != connector.Owner.Id :
+								v1 = (connector.Owner.Id.IntegerValue, connector.Id)
+								v2 = (otherConnector.Owner.Id.IntegerValue, otherConnector.Id)
+								self.addedge(v1,v2)
+								self.addedge(v2,v1)
+								externalEdges.append((v1, v2))
+								externalEdges.append((v2, v1))
+								
+								
+			"""		
+			print(20*'-')
+			print(component.Id)
+			for v in componentVertices :
+				print(v)
+			print(20*'*')
+			for e in componentEdges :
+				print(e)
+			print(20*"*")
+			for e in externalEdges :
+				print(e)
+			"""
+	def findSprinklerPaths(self) :
+		"""
+		вычисляем ответвления на расчетном графе
+		"""
+		#построили словарь с вершинами и путями теперь надо заполнить атрибуты 
+		#calcPrevVerticeMain 	- 	вершина предшествующая по основному пути расчета
+		#calcPrevVerticeBranch	- 	вершина предшествующая по пути, который нужно отбалансировать
+		#							этот атрибут для обычных вершин будет равен None и будет равен
+		#							ключу вершины на ветке которую надо отбалансировать.
+		#calcBalanceVerticе		-	вершина с которой начинается расчет для уравновешивания веток
+		#calcNextVertice		-	следующая вершина в расчете
+		print(1)
+		self.sprinklerLoss = {sprinkler : d[sprinkler] for sprinkler 
+														in d if sprinkler[0] 
+														in g.sprinklers}
+		print(2)
+		self.sprinklerTarget = max(self.sprinklerLoss, key = lambda x : self.sprinklerLoss[x])
+		print(3)
+		self.commonVerticesPaths = {}
+		
+		for sprinkler in self.sprinklerLoss :
+			print(4)
+			current = sprinkler
+			i = 0
+			while current :
+				i += 1
+				print(current)
+				if i > 10000 : 
+					print("Зациклено при вычислени общих путей")
+					return 
+				if current in self.commonVerticesPaths :
+					self.commonVerticesPaths[current].add(sprinkler)
+				else :
+					self.commonVerticesPaths[current] = set([sprinkler])
+				current = self.tree[current]
+		i = 0
+		print(50*"*")
+		print("формируем дерево расчета")
+		current = g.sprinklerTarget
+		prevVertex = None
+		visitedSprinklers = set()
+		while current :
+			i += 1
+			if i > 10000 :
+				print("Зациклено при установке дерева рассчета в графе")
+				return
+			#если вершина спринклер
+			print(f"вершина {current}")
+			
+			if "type" in self.data[current]\
+					and self.data[current]['type'] == "Спринклер" :
+				self.data[current]['calcPrevVerticeMain'] = prevVertex
+				self.data[current]['calcPrevVerticeBranch'] = None
+				self.data[current]['calcBalanceVerticе'] = None
+				self.data[current]['calcNextVertice'] = self.tree[current]
+				visitedSprinklers.add(current)
+				prevVertex = current 
+				current = self.tree[current]
+				continue
+			#если вершина является путем для спринклеров кроме тех которые посетили - 
+			#значит, это точка ветвления и надо пройти по ответвлениям
+			additionalVertexes = self.commonVerticesPaths[current].difference(visitedSprinklers)
+			print(f"additionalVertexes = {additionalVertexes}")
+			if  additionalVertexes:
+				print("проходим на обход ветки")
+				#это значит, что в текущей вершине сходятся потоки
+				#если в словаре присуствует calcPrevVerticeMain - это значит что эта вершина
+				#уже посещалась ранее и это посещение повторное при обходе ответвлени
+				if not 'calcPrevVerticeMain' in self.data[current] :
+					#  это в случае если не посещалась вершина
+					self.data[current]['calcPrevVerticeMain'] = prevVertex
+					self.data[current]['calcPrevVerticeBranch'] = None
+					#Надо выбрать самую удаленную вершину	
+					balanceVertex = max(additionalVertexes, key = lambda x : self.D[x])
+					self.data[current]['calcBalanceVerticе'] = balanceVertex
+					self.data[current]['calcNextVertice'] = self.tree[current]
+					
+					prevVertex = None
+					current = balanceVertex
+					print(f"Самый дальний спринклер {balanceVertex}")
+					#Делаем обход ветки
+					continue	
+				else :
+					#Завершен обход ветки и двигаемся дале по дереву
+					self.data[current]['calcPrevVerticeBranch'] = prevVertex
+					prevVertex = current
+					current = self.tree[current]	
+					continue
+			else :
+				#случай когда нет ответвлений
+				
+				if not 'calcBalanceVerticе' in self.data[current] :
+					self.data[current]['calcPrevVerticeBranch'] = None
+					self.data[current]['calcBalanceVerticе'] = None
+					self.data[current]['calcPrevVerticeMain'] = prevVertex
+				else :
+					self.data[current]['calcPrevVerticeBranch'] = prevVertex
+					
+				self.data[current]['calcNextVertice'] = self.tree[current]
+				
+				prevVertex = current
+				current = self.tree[current]
+				#Двигаемся дальше
+				continue
+		print("Построение расчетного дерева закончено")
+				
+				
+				
+			
+				
+			
+			
+			
+					
+		
+		
+		
+		
+				
+		
+	def calc(self) :
+		"""
+		выполнение расчета
+		для расчета
+		#calcPrevVerticeMain 	- 	вершина предшествующая по основному пути расчета
+		#calcPrevVerticeBranch	- 	вершина предшествующая по пути, который нужно отбалансировать
+		#							этот атрибут для обычных вершин будет равен None и будет равен
+		#							ключу вершины на ветке которую надо отбалансировать.
+		#calcBalanceVerticе		-	вершина с которой начинается расчет для уравновешивания веток
+		#calcNextVertice		-	следующая вершина в расчете
+		"""
+		print(50*"*")
+		print("Начало обхода")
+		deltaMax = 0.00001
+		current = self.sprinklerTarget
+		prev = None
+		i = 0 
+		while current :
+			i += 1
+			if i > 10000 :
+				print("зацикливание при расчете")
+				return
+						
+			#если ветка - спринклер
+			d = self.data[current]
+			
+			print(d)
+			if "type" in d and d['type'] == "Спринклер" :
+				print(f"спринклер {current}")
+				print(f"рассчитываем спринклер\nисходные данные: {d}")
+				
+				#расчет на спринклере
+				if d['p0'] > 0 :
+					d["q0"] = 10 * d['K'] * d['p0']**0.5
+				else :
+					print("Давление меньше нуля")
+					return
+					d["q0"] = 0 
+					
+				#расчитываем ребро для
+				nextVertice = d["calcNextVertice"]
+				#расчет на ребре
+				u = (nextVertice,current)
+				ud = self.data[u]
+				print(f"ud = {ud}")
+				#if  "type" in ud and ud['type'] == "Соединение" :
+				ud['q0'] =  d['q0']
+				ud['dp'] = 0
+				ud['p0'] = d['p0']
+				ud['p1'] = d['p0']
+				prev = current
+				current = nextVertice
+				print(f"Обновленные данные\nd={self.data[prev]}")
+				print(f"Обновленные данные\nud={self.data[u]}")
+				
+				continue
+			
+			elif not d['calcBalanceVerticе'] :
+				#вершина не является узловой
+				print(f"вершина не узловая {current}") 
+				print("Расчет вершины")
+				nextVertice = d["calcNextVertice"]
+				prevVertice = d["calcPrevVerticeMain"]
+				if not prevVertice : break
+				if not nextVertice : break
+				outcomeEdge = (current, prevVertice)
+				ud  = self.data[outcomeEdge]
+				incomeEdge = (nextVertice, current)
+				udNext = self.data[incomeEdge]
+				
+				print(f"Исходные данные вершины\nd= {d}")
+				print(f"Исходные данные ребра\nud= {ud}")
+				print(f"Исходные данные ребра\nudNext= {udNext}")
+				#Расчеты в вершине
+				d["q0"] = ud['q0'] 
+				d["p0"] = ud['p0']
+				#Расчеты на входящем ребре
+				udNext['p1'] = d['p0']
+				udNext['q0'] = d['q0']
+				if  "eq_length" in udNext :			
+					K = pipeK[udNext['DN']]
+					udNext['dp_length'] = udNext['q0']**2 * udNext["eq_length"]/dut /1000/ 100/ K 
+					udNext['dp'] = udNext['dp_length'] + udNext['dp_height']
+					udNext['p0'] = udNext['p1'] + udNext['dp']
+				else :
+					udNext['dp_length'] = 0
+					udNext['dp'] = 0
+					udNext['p0'] = udNext['p1'] + udNext['dp']
+					
+				print(f"Обновленные данные вершины\nd= {d}")
+				print(f"Обновленные данные ребра\nud= {ud}")
+				print(f"Обновленные данные ребра\nudNext= {udNext}")
+				prev = current
+				current = nextVertice
+				#return
+				continue
+			elif d['calcBalanceVerticе']:
+				#узловая вершина
+				#проверку был ли обход, проверяем prev
+				print(f"Узловая вершина {current}")
+				print(prev)
+				
+						
+				if prev == d["calcPrevVerticeMain"] :
+					print("Вычисляем по первой ветке") 
+					# попадание на развилку по главному пути, вычисляем
+					# данные основного прохода
+									#вершина не является узловой
+					print(f"вершина узловая {current}") 
+					print("Расчет вершины")
+					prevVertice = d["calcPrevVerticeMain"]
+					outcomeEdge = (current, prevVertice)
+					ud  = self.data[outcomeEdge]
+					d['q0'] = ud['q0']
+					d['p0'] = ud['p0']
+					
+					
+					d['p1'] = 0
+					d['q1'] = 0
+					
+					#обходим ответвление
+					print("переходим на обход ветки")
+					prev = None
+					current = d['calcBalanceVerticе']
+					balanceSprinklerData = self.data[current]
+					balanceSprinklerData["p0"] = 0.1
+					continue
+				else :		
+					print("ответвление обошли, проверяем увязку")
+					nextVertice = d["calcNextVertice"]
+					prevVertice = d["calcPrevVerticeMain"]
+					nextVerticeBranch = d["calcPrevVerticeBranch"]
+					outcomeBalanceEdge = (current, nextVerticeBranch)
+					outcomeBalanceEdgeData = self.data[outcomeBalanceEdge]
+					print('-')
+					d['p1'] = outcomeBalanceEdgeData['p0']
+					d['q1'] = outcomeBalanceEdgeData['q0']
+					print('-')
+					print(f"Величина  невязки {d['p1']} - {d['p0']} = {d['p1'] - d['p0']:.06f}")
+					print('-')
+					inaccuracy = d['p1']-d['p0']
+					
+					if abs(inaccuracy) > 0.0001 :
+						#пересчитываем
+						print("Пересчитываем ветку")
+						balanceVertice = d['calcBalanceVerticе']
+						balanceSprinklerData = self.data[balanceVertice]
+						
+						balanceSprinklerData["p0"] =\
+								balanceSprinklerData["p0"] - inaccuracy * 0.8 \
+								if balanceSprinklerData["p0"] > (inaccuracy * 0.8) \
+								else 0.5
+						print("Обновленное давление ")
+						print(f'обновленное давление {balanceSprinklerData["p0"]}')
+						current = balanceVertice
+						prev = None
+						
+						continue
+					print("Ребра уравновешены")
+					
+					d['q0'] = d['q0'] + d['q1']
+					nextVertice = d["calcNextVertice"]
+					incomeEdge = (nextVertice, current)
+					udNext = self.data[incomeEdge]
+					
+					#Расчеты на входящем ребре
+					udNext['p1'] = d['p0']
+					udNext['q0'] = d['q0']
+					if  "eq_length" in udNext :			
+						K = pipeK[udNext['DN']]
+						udNext['dp_length'] = udNext['q0']**2 * udNext["eq_length"]/dut/1000/ 100/ K 
+						udNext['dp'] = udNext['dp_length'] + udNext["dp_height"]
+						udNext['p0'] = udNext['p1'] + udNext['dp']
+					else :
+						udNext['dp_length'] = 0
+						udNext['dp'] = 0
+						udNext['p0'] = udNext['p1'] + udNext['dp']
+					prev = current
+					current = nextVertice
+					
+					continue
+					
+					
+					
+					
+					prev = current
+					current = nextVertice
+					
+					continue
+		print("Обход закончен")
+		print(50*"*")
+			
+			
+			
+			
+	
+		
+
+	
+	def resultOutput(self) :
+		"""
+		"""
+		
+		tr = Transaction(doc, "set sprinkler data parameters")
+		tr.Start()
+		
+		for sprinkler in self.sprinklerLoss :
+			sprinklerId = sprinkler[0]
+			print(sprinklerId)
+			sprinklerElement = doc.GetElement(ElementId(sprinklerId))
+			elid = sprinklerElement.LookupParameter("DM_ElementId")
+			elid.Set(str(sprinklerId))
+			sprinklerElement.LookupParameter("DM_Расчет_Давление").Set(self.data[sprinkler]["p0"])
+			sprinklerElement.LookupParameter("DM_Расчет_расход").Set(g.data[sprinkler]["q0"])
+	
+		
+		
+		currentVertex = self.sprinklerTarget
+		currentSprinkler = self.sprinklerTarget
+		i = 0
+		while currentVertex :
+			if currentVertex in self.commonVerticesPaths :
+				self.commonVerticesPaths[currentVertex].add(currentSprinkler)
+			i += 1
+			if i > 10000 : break
+			
+			prevVertex = self.tree[currentVertex]
+			#print(currentVertex)
+			u = (prevVertex, currentVertex)
+			if u in g.data :
+				edgeData = g.data[u]
+				if 'type' in edgeData and edgeData['type'] == "Труба" :
+					print(edgeData)
+					pipeElement = doc.GetElement(ElementId(prevVertex[0]))
+					pipeElement.LookupParameter("DM_ElementId").Set(str(pipeElement.Id))
+					pipeElement.LookupParameter("DM_Расчет_потеря_давления").Set(edgeData["dp"])
+					try :
+						pipeElement.LookupParameter("DM_Расчет_расход").Set(edgeData["q0"])
+					except : 
+						pass
+					pipeElement.LookupParameter("DM_Расчет_потеря по длине").Set(edgeData["dp_length"])
+					pipeElement.LookupParameter("DM_Расчет потеря по высоте").Set(edgeData["dp_height"])
+				
+			currentVertex = prevVertex
+			
+		tr.Commit()
+		print("данные вывели")
+		
+		
+				
+	
+g = AdjacencySetGraph()
+g.create()
+print(50 * "*")
+print(50 * "-")
+print(g.id_dict[1228174])
+id1 = 1228174
+componentVertices = list(g.id_dict[id1])[0]
+
+g.precalc()
+tree, d = g.dijkstra(componentVertices)
+print('findSprinklerPaths')
+g.findSprinklerPaths()
+print('calc')
+g.calc()
+print('resultOutput')
+g.resultOutput()
+#g.printSprinklersData()
+#g.printEdgesData()
+
+raise
+for sprinkler in g.sprinklerLoss :
+	print("Спринклер {}\n\t\tdp = {}".format(sprinkler, sprinklerLoss[sprinkler]))
+	
+sprinklerTarget = max(sprinklerLoss, key = lambda x : sprinklerLoss[x])
+print("Диктующий ороситель {}\n\t\tdp={}".format(sprinklerTarget, sprinklerLoss[sprinklerTarget]))
+
+sprinklersPaths = {}
+
+i = 0
+
+
+sprinklerPaths = {}
+for currentSprinkler in sprinklerLoss :
+	print(currentSprinkler)
+	currentVertex = currentSprinkler
+	i = 0
+	while currentVertex :
+		i += 1
+		if i > 10000 :
+			print("зацикливание")
+			break
+		if currentVertex in sprinklerPaths :
+			sprinklerPaths[currentVertex].add(currentSprinkler)
+		else :
+			sprinklerPaths[currentVertex] = set([currentSprinkler])
+		
+		currentVertex = tree[currentVertex]
+		
+for currentVertex in sprinklerPaths :
+	print(sprinklerPaths[currentVertex])
+		
+
+
+	
+

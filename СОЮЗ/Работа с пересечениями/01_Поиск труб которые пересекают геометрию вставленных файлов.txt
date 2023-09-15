@@ -1,0 +1,119 @@
+"""
+***************************************************************
+*** Поиск труб, которые пересекают геометрию вставленных файлов
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\01_Поиск труб которые пересекают геометрию вставленных файлов.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+dut = 0.0032808398950131233
+
+view_name = 'DM_ОТМЕТКИ'
+margin_rel = False
+margin = 200 * dut
+
+
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as nts_geom
+from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+import dm_connect_2 as dm
+import dm_nearest_geometry as dm1
+
+
+reload(dm)	
+reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+mapp = dm.dmApp(doc)
+
+for lf in mapp.linked_files :
+	print(lf.Name)
+	if lf.Name.Contains("OW") and lf.Name.Contains("АР") and lf.Name.Contains("Перегородки"):
+		print("Перегородки")
+		linked_instance = lf
+		
+	
+#lf_flt = ElementIntersectsElementFilter(linked_instance)
+ldoc = linked_instance.GetLinkDocument()
+transf = linked_instance.GetTotalTransform()
+linked_els = FilteredElementCollector(ldoc).WhereElementIsNotElementType().ToElements()
+
+
+
+
+
+
+
+pipes1 = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+#pipes2 = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).WherePasses(lf_flt).ToElements()
+
+view_id = ElementId(7591754)
+pipe = doc.GetElement(ElementId(7175736))
+bb = pipe.get_BoundingBox(None)
+bb.Max += XYZ(1,1,1)
+bb.Min += XYZ(-1, -1, -1)
+center = (bb.Max + bb.Min) * 0.5
+eye_pos = XYZ(bb.Min.X - 10, bb.Min.Y - 10, bb.Max.Z + 10)
+
+fp = (center - eye_pos).Normalize()
+u_ax = Line.CreateUnbound(XYZ.Zero, XYZ(0,0,1))
+tr1 = Transform.CreateRotation(XYZ.BasisZ, math.pi/2)
+up = tr1.OfVector(fp)
+#u_ax = Line.CreateUnbound(XYZ.Zero,XYZ(up.X, up.Y, 0))
+tr2 = Transform.CreateRotation(XYZ.BasisX, math.pi/2)
+up = tr2.OfVector(fp)
+
+
+print("Общее количество труб {}".format(len(pipes1)))
+#print("Количество пересекающих труб {}".format(len(pipes2)))
+tr = Transaction(doc)
+tr.Start("Create 3d view")
+new_view = View3D.CreateIsometric(doc, view_id)
+#eye_pos = XYZ(0, 0, 0)
+#fp = XYZ(1,0,0)
+#up = XYZ(0,0,-1)
+view_orientation = ViewOrientation3D(eye_pos, fp, up)
+new_view.SetOrientation(view_orientation)
+new_view.IsSectionBoxActive = True
+new_view.SetSectionBox(bb)
+
+tr.Commit()
+
+uidoc.ActiveView = new_view
+
+
+	
+
+	
+	
+
+
+

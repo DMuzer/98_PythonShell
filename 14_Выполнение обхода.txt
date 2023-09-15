@@ -1,0 +1,28 @@
+import clr
+
+from Autodesk.Revit import DB, UI
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+view = uidoc.ActiveView
+sp = view.SketchPlane
+n1 = sp.GetPlane().Normal
+
+#p1 = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+
+pnt1 = uidoc.Selection.PickPoint()
+print(pnt1.Z)
+vd = view.ViewDirection
+ud = view.UpDirection
+pnt2 = pnt1 - vd * 100
+
+pl = Plane.CreateByNormalAndOrigin(ud, pnt1)
+tr = DB.Transaction(doc)
+tr.Start('Обработка обхода')
+
+skplane = SketchPlane.Create(doc, pl)
+l = Line.CreateBound(pnt1, pnt2)
+mline = doc.Create.NewModelCurve(l, skplane)
+
+tr.Commit()
+

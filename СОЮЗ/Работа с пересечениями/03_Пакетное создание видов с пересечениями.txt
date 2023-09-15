@@ -1,0 +1,134 @@
+st_cmt = """
+***************************************************************
+*** Работа с файлами отчета на пересечения
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\03_Пакетное создание видов с пересечениями.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+#from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import time
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+from pathlib import Path
+from imp import reload
+print(2)
+import dmClashFile as dm
+try :
+	reload(dm)	
+except :
+	print("перезагрузка модуля не удалась")
+	raise
+	
+baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-08-07")
+baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-08")
+baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-15")
+v1 = None
+tt1 = time.time()
+for fld in baseFolder.glob("*") :
+	if fld.is_dir :
+		if fld.suffix.upper() == ".RAR" :
+			continue
+		print(50*"-")
+		print(f"Имя папки {fld.name}")
+		
+		pref1 = fld.name.split('х')
+		if len(pref1) == 1 :
+			pref1 = fld.name.split('x')[0].strip()
+		else :
+			pref1 = pref1[0].strip()
+		print(f"префикс = {pref1}")
+		
+		
+		for fn in fld.glob("*.xml") :
+			#print(fn)
+			pref2 = fn.stem.split("x")
+			if len(pref2) == 1 :
+				pref2 = fn.stem.split("х")
+			pref2 = pref2[1].strip()
+			#print(f"pref2 {pref2}")
+			pref3 = "-".join([pref1, pref2])
+			print(f"pref3 = {pref3}")
+			
+			
+			cf = dm.dmClashFile(str(fn), pref3)
+			print(cf)
+			
+			for c in cf.clashes[:] :
+				#print(c.name)
+				#print(c.pos)
+				
+				p1 = c.pos_xyz
+				p2 = c.pos_transformed
+				
+			
+				
+				#print("Создаем точку")
+				c.create_point()
+				#print("Создаем 3Д")
+				v1 = None
+				v1 = c.create_view3d_copy()
+				if not v1 :
+					print("3Д вид не создался")
+				
+				print("Создаем план")
+				try :
+					v = c.create_planview_copy()
+				except Exception as ex:
+					print(ex)
+					print("План не удалось создать")
+					
+				print("Создаем сечение по трубе")
+				try :
+					newSection = c.createPipeSection()
+				except Exception as ex:
+					print(ex)
+					print("Не удалось создать сечение")
+				
+				print(20*"-")
+				#break
+			#break
+		#break
+				
+				
+		print("Все создали")
+				
+			
+if v1 :
+	uidoc.ActiveView = v1
+			
+		
+				
+tt2 = time.time()
+
+
+print("Время выполнения {}".format(tt2-tt1))
+#uidoc.ActiveView= new_view
+
+print("{}\nЗавершено...".format(st_cmt))
+
+def _getElementType1(self) :
+	for oa in self.clash.find_all('clashobject')[0].find_all("smarttags") :
+		print(oa.find("name").get_text())
+		if oa.find("name").get_text() == "Элемент Имя" :
+				return oa.find("value").get_text()
+def _getElementType2(self) :
+	for oa in self.clash.find_all('clashobject')[1].find_all("smarttags") :
+		print(oa.find("name").get_text())
+		if oa.find("name").get_text() == "Элемент Имя" :
+				return oa.find("value").get_text()
+	         
+dm.dmClash._getElementType1 = _getElementType1
+dm.dmClash._getElementType2 = _getElementType2	
+			
+			
+			
+

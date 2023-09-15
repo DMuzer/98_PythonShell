@@ -1,0 +1,63 @@
+import Autodesk.Revit
+import Autodesk.Revit.UI as UI
+dut = 0.0032808398950131233
+#panel_id = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+#panel = doc.GetElement(panel_id)
+
+level = uidoc.ActiveView.GenLevel
+
+lname = level.Name
+
+if lname == "Подвал" :
+	stnum = "ТК 0"
+else :
+	stnum = lname[-2:]
+	if stnum[0] == '0' :
+		stnum = stnum[1:]
+	stnum = "ТК " + stnum 
+	
+cams = FilteredElementCollector(doc, uidoc.ActiveView.Id).OfClass(FamilyInstance).ToElements()
+cams = sorted(cams, key = lambda x : x.Location.Point.X)
+
+print(len(cams))
+cnum = 1
+tr = Transaction(doc)
+
+for _,cam in enumerate(cams,1) :
+	if Element.Name.GetValue(cam).Contains("амера") :
+		print("1")
+		c_num = "{}.{}".format(stnum, cnum)
+		cnum += 1
+		
+		tr.Start("set cam num")
+			
+		cam.LookupParameter("Марка").Set(c_num)
+		tr.Commit()
+		
+
+	
+
+
+
+
+cnum = 1
+while False :
+	try :
+		cam = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+	except :
+		break
+		
+	c_num = "{}.{}".format(stnum, cnum)
+	cnum += 1
+	
+	tr.Start("set cam num")
+		
+	cam.LookupParameter("Марка").Set(c_num)
+	tr.Commit()
+		
+
+		
+	
+		
+
+	

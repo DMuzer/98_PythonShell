@@ -1,0 +1,65 @@
+st_cmt = """
+***************************************************************
+*** Работа с файлами отчета на пересечения
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\03_Пакетное создание видов с пересечениями.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+#from contextlib import contextmanager
+import math, sys
+import clr
+import System
+import time
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+from pathlib import Path
+from imp import reload
+print(2)
+
+
+libPath2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if not libPath2 in sys.path :
+	sys.path.append(libPath2)
+	
+try : 
+	reload(dm2)
+except :
+	import dmRevitClasses as dm2
+
+def getCoordinate(e) :
+	s = e.Value("DM_Пересечение_координаты").split(",")
+	return XYZ(*[float(v) for v in s])
+bic = BuiltInCategory
+instTypes = {e.Name : e for e in
+					FilteredElementCollector(doc)\
+					.OfClass(FamilySymbol)\
+					.OfCategory(bic.OST_GenericModel).ToElements()}
+clashSymbol = instTypes["DM_Конфликт"]
+
+for it in instTypes :
+	print(it)
+clash = dm2.pickElement()
+pos = getCoordinate(clash)
+
+
+with dm2.trans() :
+	newClash = dm2.dmElement(doc.Create.NewFamilyInstance(pos, 
+					clashSymbol,
+					Structure.StructuralType.NonStructural))
+	#doc.Regenerate()
+					
+	for param in newClash.e.Parameters :
+		pname = param.Definition.Name
+		value = clash.Value(pname)
+		if value :
+			newClash.Set(pname, value)
+	
+					
+	
+

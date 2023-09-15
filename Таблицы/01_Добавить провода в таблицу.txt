@@ -1,0 +1,89 @@
+import clr
+clr.AddReferenceByPartialName("Microsoft.Office.Interop.Excel")
+import Microsoft.Office.Interop.Excel as excel
+fn = r"D:\18_проектирование\26_Кабели\Кабели1.xlsx"
+
+
+import itertools
+
+
+def get_table(name = "В_СС_КТ_Электрические цепи_Справочник кабеля") :
+	views = FilteredElementCollector(doc).OfClass(ViewSchedule).ToElements()
+
+	for v in views :
+		if v.Name == name : return v
+		
+		
+ex_app = excel.ApplicationClass()
+ex_wb = ex_app.Workbooks.Open(fn)
+ws = ex_wb.WorkSheets(1)
+row_num = 1
+col_num = 1
+
+def load_data() :
+	# Загружаем заголовки
+	col_names = []
+	column_num = 0
+	while True :
+		v = ws.Cells(1, column_num + 1).value2
+		if v is None : break
+		column_num += 1
+		col_names.append(v)
+		
+	# Загружаем данные
+	res = []
+	row_num = 2
+	Done = False
+
+	
+	while True :
+		d1 = {}
+		v = ws.Cells(row_num, 1).value2
+		if v is None : break
+	
+		for c_num in range(len(col_names)) :
+			v = ws.Cells(row_num, c_num + 1).value2 
+			if v is None : continue
+			d1[col_names[c_num]] = v
+		row_num +=  1
+		res.append(d1)
+		
+		
+			
+	return res
+		
+		
+
+data = load_data()
+
+for c in data :
+	print(50* "-")
+	for k in c :
+		print("{} : {}".format(k, c[k]))
+	
+	
+if True :
+		
+	v = get_table()
+	print(v)
+	elems = FilteredElementCollector(doc, v.Id)
+	el = next(iter(elems))
+	
+	tr  = Transaction(doc)
+	tr.Start("Insert Cable")
+	#t_sect = v.GetTableData().GetSectionData(1)
+	#new_row = t_sect.InsertRow(0)
+	
+	for d_row in data :
+	
+		new_row_id = ElementTransformUtils.CopyElement(doc, el.Id, XYZ.Zero)[0]
+		new_row = doc.GetElement(new_row_id)
+		
+		for pname in d_row :
+			new_row.LookupParameter(pname).Set(d_row[pname])
+		
+	
+	tr.Commit()
+
+
+

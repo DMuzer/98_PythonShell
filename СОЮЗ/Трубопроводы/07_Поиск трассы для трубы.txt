@@ -1,0 +1,30 @@
+st = """
+****************************************************
+Поиск трассы для трубы
+"D:\18_проектирование\98_PythonShell\СОЮЗ\Трубопроводы\07_Поиск трассы для трубы.txt"
+******************************************************
+"""
+print(st)
+dut = 0.0032808398950131233
+copyOffset = -200
+import itertools
+from Autodesk.Revit import *
+import math, sys
+import clr
+import System
+from System.Collections.Generic import IList, List
+from collections import deque
+bic = BuiltInCategory
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+	
+try :
+	print("перезагрузка модуля")
+	reload(dm)
+except :
+	print("загрузка модуля")
+	import d79_find_trace
+	
+	

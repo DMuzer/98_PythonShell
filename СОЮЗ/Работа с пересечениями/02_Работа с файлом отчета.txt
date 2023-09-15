@@ -1,0 +1,123 @@
+st_cmt = """
+***************************************************************
+*** Работа с файлами отчета на пересечения
+*** "D:\18_проектирование\98_PythonShell\СОЮЗ\Работа с пересечениями\02_Работа с файлом отчета.txt"
+***************************************************************
+*  
+***************************************************************
+"""
+print("Начинаем работу. \n {}".format(st_cmt))
+
+print(1)
+import sys
+
+from bs4 import BeautifulSoup as bs
+
+from Autodesk.Revit import *
+from Autodesk.Revit.DB import *
+#from contextlib import contextmanager
+import math, sys
+import clr
+import System
+
+#clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+#clr.AddReferenceToFileAndPath(r"C:\Program Files\Autodesk\Revit 2021\RevitAPIIFC.dll")
+#import NetTopologySuite as nts
+#import NetTopologySuite.Geometries as nts_geom
+#from Autodesk.Revit.DB import IFC as ifc
+
+lib_path = r"D:\18_проектирование\98_PythonShell"
+if not lib_path in sys.path :
+	sys.path.append(lib_path)
+
+print(2)
+import dmClashFile as dm
+
+#import dm_nearest_geometry as dm1
+
+from importlib import reload
+reload(dm)	
+#reload(dm1)
+
+
+pi2 = math.pi * 2
+
+dut = 0.0032808398950131233
+	
+bic = BuiltInCategory
+bip = DB.Structure.StructuralType
+nonstr = bip.NonStructural
+OT = UI.Selection.ObjectType
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+
+dut = 0.0032808398950131233
+
+import time
+
+tt1 = time.time()
+fn = r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-06-29\СОЮЗ А1 ПТ\747   ПТ  х  АР Металлоконструкции ( все элементы ).xml"
+
+files = [
+
+	(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-08-07\СОЮЗ А2 х Стилобат_Ж ПТ\721   ПТ  x  ОВ ВК ЭОМ СС основная  ( трассы ).html",
+	"СОЮЗ А2 ОВ ВК ЭОМ СС основная  ( трассы )"
+	),
+
+
+]
+print(3)
+
+#with open(files[0][0], encoding = 'utf') as f :
+#	soup = bs(f.read())
+
+cf = dm.dmClashFile(*files[0])
+
+#print(cf)
+#raise
+
+tt = doc.ActiveProjectLocation.GetTotalTransform()
+ 
+
+for c in cf.clashes[25:26] :
+	print(c.name)
+	print(c.pos)
+	
+	p1 = c.pos_xyz
+	p2 = c.pos_transformed
+	
+
+	
+	print("Создаем точку")
+	c.create_point()
+	print("Создаем 3Д")
+	v1 = None
+	v1 = c.create_view3d_copy()
+	if not v1 :
+		print("3Д вид не создался")
+	
+	print("Создаем план")
+	try :
+		v = c.create_planview_copy()
+	except :
+		print("План не удалось создать")
+	
+	print(20*"-")
+	
+	
+print("Все создали")
+	
+
+if v1 :
+	uidoc.ActiveView = v1
+	
+tt2 = time.time()
+
+print(cf)
+print("Время выполнения {}".format(tt2-tt1))
+#uidoc.ActiveView= new_view
+
+print("{}\nЗавершено...".format(st_cmt))
+

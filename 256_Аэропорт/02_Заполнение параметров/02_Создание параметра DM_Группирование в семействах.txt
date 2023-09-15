@@ -1,0 +1,65 @@
+class LoadOpts(IFamilyLoadOptions) :
+	def OnFamilyFound(self, familyInUse, overwriterParamterValues) :
+		overwriterParamterValues = True
+		return True
+		
+	def OnSharedFamilyFound(self, sharedFamily, familyInUse, source, overwriteParameterValues) :
+		source = Familysource.Family
+		overwriteParameterValues = True
+		return True
+
+def hasFamilyParameter(element, paramShared) :
+	family = element.Symbol.Family
+	familyDoc = doc.EditFamily(family)
+	familyManager = familyDoc.FamilyManager
+	for param in familyManager.Parameters :
+		try :
+			if param.GUID == paramShared.GUID : 
+				return True
+		except :
+			pass
+	return False
+	
+def addInstanceParameter(element, paramShared, value) :
+	pass
+	familyDoc 		= doc.EditFamily(element.Symbol.Family)
+	familyManager 	= familyDoc.FamilyManager
+	
+	tr = Transaction(familyDoc, f"Add Parameter {paramShared.Name}")
+	tr.Start()
+	newParam = familyManager.AddParameter(paramShared,BuiltInParameterGroup.PG_GENERAL, True)
+	familyManager.Set(newParam, value)
+	tr.Commit()
+	
+	loadOpts = LoadOpts()
+	familyUpd = familyDoc.LoadFamily(doc, loadOpts)
+	
+	
+sharedParameters = {parameter.Name : parameter 
+							for g in doc.Application.OpenSharedParameterFile().Groups 
+							for parameter in g.Definitions}
+dmGroupParamDef = sharedParameters['DM_Группирование']
+bic = BuiltInCategory
+groupParamValues = {
+	int(bic.OST_PipeAccessory) : "18_Арматура фланцевая",
+	int(bic.OST_MechanicalEquipment) : "10_Оборудование",
+	int(bic.OST_PipeFitting) : "52_Детали трубопровода",
+	int(bic.OST_Sprinklers) : "13_Спринклеры"
+	}
+
+for elementRef in uidoc.Selection.GetElementIds() :
+	element = doc.GetElement(elementRef)
+	
+	print(f"Есть параметр Группирование {hasFamilyParameter(element, dmGroupParamDef)}")
+	groupParamValue = groupParamValues[element.Category.Id.IntegerValue] 
+	print(groupParamValue)
+	
+	
+	if not hasFamilyParameter(element, dmGroupParamDef) :
+		addInstanceParameter(element, dmGroupParamDef, groupParamValue) 
+	
+
+
+
+
+

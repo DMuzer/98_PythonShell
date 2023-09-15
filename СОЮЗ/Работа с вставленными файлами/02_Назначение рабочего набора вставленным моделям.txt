@@ -1,0 +1,14 @@
+worksets ={ws.Name : ws for ws in FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset).ToWorksets()}
+pt_ws = worksets["Связи ПТ"]
+instances = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
+tr = Transaction(doc, 'change workset for ff instances')
+tr.Start()
+for instance in instances :
+	if not instance.Name.Contains("СОЮЗ_ПТ") : continue
+	print(instance.Name)
+	instance.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(pt_ws.Id.IntegerValue)
+	typeId = instance.GetTypeId()
+	linkType = doc.GetElement(typeId)
+	linkType.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(pt_ws.Id.IntegerValue)
+tr.Commit()
+	
