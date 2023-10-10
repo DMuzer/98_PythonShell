@@ -1,0 +1,31 @@
+import sys
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+	
+import dmRevitClasses as dm
+
+#e = dm.firstSelected()
+#fam = doc.GetElement(e.e.GetTypeId())
+#fam_doc = doc.EditFamily(fam.Family)
+
+fam_mng = fam_doc.FamilyManager
+
+fc2 = FilteredElementCollector(fam_doc).WhereElementIsNotElementType().ToElements()
+defFile = doc.Application.OpenSharedParameterFile()
+params = {}
+for gr in defFile.Groups :
+	print(50*"-")
+	print(gr.Name)
+	for param in gr.Definitions :
+		print(param.Name)
+		params[param.Name] = param
+		
+p1 = params["DM_Позиция_Комплект"]
+p2 = params["DM_Позиция_в_Комплекте"]
+p3 = params["DM_Позиция_Сортировка"]
+print(p1)
+print(p2)
+print(p3)
+
+

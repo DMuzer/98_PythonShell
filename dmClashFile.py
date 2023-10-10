@@ -71,6 +71,25 @@ def trans(doc, a="труба") :
     finally :
         
         tr.Commit()
+def setValue(e, paramName, paramValue) :
+    param = e.LookupParameter(paramName)
+    if not param : return 
+    try :
+        param.Set(paramValue)
+    except :
+        pass 
+
+def getValue(self, paramName) :
+    param = self.LookupParameter(paramName)
+    if param :
+        if param.StorageType == StorageType.String :
+            return param.AsString()
+        elif param.StorageType == StorageType.Double :
+            return param.AsDouble()	
+        elif param.StorageType == StorageType.ElementId :
+            return param.AsElementId()	
+        elif param.StorageType == StorageType.Integer :
+            return param.AsInteger()	
 
 def create_ds(l, category = None) :
 
@@ -326,11 +345,14 @@ class dmClash(object) :
     ElementTypeName2 = property(_getElementTypeName2)
 
     def findDs(self) :
-        fc = FilteredElementCollector(doc).OfClass(DirectShape).ToElements()
+        fc = FilteredElementCollector(doc).OfCategory(bic.OST_GenericModel).ToElements()
         guid = self.clash['guid']
         for ds in fc :
-            if ds.LookupParameter("Марка").AsString() == guid :
-                return ds
+            try :
+                if ds.LookupParameter("DM_Пересечение_guid").AsString() == guid :
+                    return ds
+            except :
+                pass
             
     def updateStatus(self) :
         ds = self.findDs()
@@ -363,13 +385,15 @@ class dmClash(object) :
             p8.Set(posStr)
             print("{} обновлена".format(self.name))
             if tr : tr.Commit()
+    
 
 
-    def create_point(self, dist = 100 * dut) :
+    def create_point(self, clashSymbol=None, symbolToCopy = None, dist = 100 * dut) :
         from System.Collections.Generic import List
         solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)        
 
         pnt = self.pos_transformed
+        """
         p1 = pnt - XYZ(dist, dist, dist)
         p2 = p1 + XYZ(2*dist,0,0)
         p3 = p2 + XYZ(0, 2*dist, 0)
@@ -383,44 +407,85 @@ class dmClash(object) :
         ]))
 
         box = GeometryCreationUtilities.CreateExtrusionGeometry(List[CurveLoop]([lines]),
-                                                              XYZ.BasisZ,
-                                                              2 * dist,
-                                                              solid_opt)
+                                                            XYZ.BasisZ,
+                                                            2 * dist,
+                                                            solid_opt)
         
         ds = create_ds(box)
+        """
+
+
 
         with trans(doc, "set collision point parameters") as tr :
+            if symbolToCopy :
+                dvec = pnt - symbolToCopy.Location.Point 
+                ds = doc.GetElement(ElementTransformUtils.CopyElement(doc, symbolToCopy.Id, dvec)[0])
+            else :
+                ds = doc.Create.NewFamilyInstance(pnt, clashSymbol, nonstr)
 
-            p1 = ds.LookupParameter("Марка")
-            if p1 :
-                p1.Set(self.clash["guid"])
-            p2 = ds.LookupParameter("Наименование")
-            if p2 :
-                p2.Set(self.name)
-            p3 = ds.LookupParameter("Комментарии")
-            if p3 :
-                p3.Set(self.pref)
-            p4 = ds.LookupParameter("DM_Пересечение_id1")
-            if p4 :
-                p4.Set(self._get_id1())
-            p5 = ds.LookupParameter("DM_Пересечение_id2")
-            if p5 :
-                p5.Set(self._get_id2())
+            try :
+                setValue(ds, "Марка", self.clash["guid"])
+            except :
+                pass 
 
-            p6 = ds.LookupParameter("DM_Пересечение_Тип_объекта_1")
-            if p6 :
-                p6.Set(self.ElementTypeName1)
-            p7 = ds.LookupParameter("DM_Пересечение_Тип_объекта_2")
-            if p7 :
-                p7.Set(self.ElementTypeName2)
-            p8 = ds.LookupParameter("О_Примечание")
-            if p8 :
-                p8.Set(self.clash['status'])
-            p9 = ds.LookupParameter("DM_Пересечение_Уровень")
-            if p9 :
-                p9.Set(self._getLevel().Name)
+            try :
+                setValue(ds, "DM_Пересечение_guid", self.clash["guid"])
+            except :
+                pass 
+            
+            try :
+                setValue(ds, "Наименование", self.name)
+            except :
+                pass 
 
+            try :
+                setValue(ds, "Комментарии", self.pref)
+            except :
+                pass 
+
+        
+            try :
+                setValue(ds, "DM_Пересечение_id1", self._get_id1())
+            except :
+                pass 
+
+            try :
+                setValue(ds, "DM_Пересечение_id2", self._get_id2())
+            except :
+                pass 
+
+            try :
+                setValue(ds, "DM_Пересечение_Тип_объекта_1", self.ElementTypeName1)
+            except :
+                pass
+
+            try :
+                setValue(ds, "DM_Пересечение_Тип_объекта_2", self.ElementTypeName2)
+            except :
+                pass
+
+            try :
+                setValue(ds, "О_Примечание", self.clash['status'])
+            except :
+                pass
+
+            try :
+                setValue(ds, "DM_Пересечение_Уровень", self._getLevel().Name)
+            except :
+                pass
+
+            try :
+                setValue(ds, "DM_Пересечение_Уровень", self._getLevel().Name)
+            except :
+                pass
+            
+            coords = "{},{},{}".format(pnt.X, pnt.Y, pnt.Z)
+            try :
+                setValue(ds, "DM_Пересечение_координаты", coords)
+            except :
+                pass
             print(pnt)
+            return ds 
 
 
     def create_view3d(self, dist = 1500*dut, viewtype_name = None) :
@@ -507,22 +572,37 @@ class dmClash(object) :
                     if num > 1000 : break
 
             try :
-                nparam = new_view.LookupParameter("Вид_Примечание")
-                nparam.Set("{}_{}".format(self.pref,self.name))
+                try :
+                    setValue(new_view, "DM_Пересечение_guid", self.clash["guid"])
+                except :
+                    pass
 
-                p4 = new_view.LookupParameter("DM_Пересечение_id1")
-                if p4 :
-                    p4.Set(self._get_id1())
-                p5 = new_view.LookupParameter("DM_Пересечение_id2")
-                if p5 :
-                    p5.Set(self._get_id2())
+                try :
+                    setValue(new_view, "Вид_Примечание", "{}_{}".format(self.pref,self.name))
+                except :
+                    pass  
 
-                p6 = new_view.LookupParameter("DM_Пересечение_Тип_объекта_1")
-                if p6 :
-                    p6.Set(self.ElementTypeName1)
-                p7 = new_view.LookupParameter("DM_Пересечение_Тип_объекта_2")
-                if p7 :
-                    p7.Set(self.ElementTypeName2)
+
+                try :
+                    setValue(new_view, "DM_Пересечение_id1", self._get_id1())
+                except :
+                    pass 
+
+                try :
+                    setValue(new_view, "DM_Пересечение_id2", self._get_id2())
+                except :
+                    pass 
+
+                try :
+                    setValue(new_view, "DM_Пересечение_Тип_объекта_1", self.ElementTypeName1)
+                except :
+                    pass
+
+                try :
+                    setValue(new_view, "DM_Пересечение_Тип_объекта_2", self.ElementTypeName2)
+                except :
+                    pass
+                
 
                 p8 = new_view.LookupParameter("Вид_Подзаголовок")
                 if p8 :
@@ -691,6 +771,10 @@ class dmClash(object) :
             planViewRange.SetOffset(PlanViewPlane.TopClipPlane, topElevation)
             view.SetViewRange(planViewRange)
             try :
+                try :
+                    setValue(view, "DM_Пересечение_guid", self.clash["guid"])
+                except :
+                    pass
                 nparam = view.LookupParameter("Вид_Примечание")
                 nparam.Set("{}_{}".format(self.pref,self.name))
                 p4 = view.LookupParameter("DM_Пересечение_id1")
@@ -734,10 +818,15 @@ class dmClash(object) :
                 if num > 1000 : break
 
         try :
+            try :
+                setValue(newSection, "DM_Пересечение_guid", self.clash["guid"])
+            except :
+                pass
             nparam = newSection.LookupParameter("Вид_Примечание")
             nparam.Set("{}_{}".format(self.pref,self.name))
             nparam = newSection.LookupParameter("Вид_Сортировка")
             nparam.Set("Увязка")
+
 
             p4 = newSection.LookupParameter("DM_Пересечение_id1")
             if p4 :

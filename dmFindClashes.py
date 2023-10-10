@@ -265,7 +265,7 @@ class dmElement :
             directShape = create_ds(g)
 
         set_workset(directShape, self.doc.auxWorkset)       
-        pass
+        return directShape
 
     def findIntersectionBbElements(self) :
         for linkedModel in self.doc.linkedInstances :
@@ -296,11 +296,13 @@ class dmMain :
         print(self.dmDoc)
         print(list(self.dmDoc.linkedInstances))
         print("создаем элемент")
-        self.pipe = dmElement(doc.GetElement(ElementId(6602929)), self.dmDoc)
-        self.pipe = dmElement(doc.GetElement(ElementId(6248806)), self.dmDoc)
+        #self.pipe = dmElement(doc.GetElement(ElementId(6602929)), self.dmDoc)
+        self.pipe = dmElement(doc.GetElement(ElementId(6588424)), self.dmDoc)
+        self.newDS = []
         for eref in uidoc.Selection.GetElementIds() :
             self.pipe = dmElement(doc.GetElement(eref), self.dmDoc)
-            self.pipe.createDs()
+            self.pipeDs = self.pipe.createDs()
             for e in self.pipe.findIntersectionElements() :
                     print(e)
-                    e.createDs()
+                    ds = e.createDs()
+                    self.newDS.append(ds)

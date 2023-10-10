@@ -3,7 +3,9 @@
 """
 import Autodesk.Revit.UI as UI
 av = uidoc.ActiveView
-dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+#dut = UnitUtils.ConvertToInternalUnits(1, DisplayUnitType.DUT_MILLIMETERS)
+dut = 0.0032808398950131233
+
 sdt = {Element.Name.GetValue(e) : e for e in FilteredElementCollector(doc).OfClass(SpotDimensionType).ToElements()}
 #dt = sdt['ADSK_Схема_Проектная_Отметка снизу_Вниз']
 dt = sdt['ADSK_Схема_Проектная_Отметка сверху_Вверх']
