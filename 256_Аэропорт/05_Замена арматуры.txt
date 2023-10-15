@@ -1,0 +1,75 @@
+from Autodesk.Revit import *
+import math
+
+symbols = {e.Name : e for e in FilteredElementCollector(doc).OfClass(FamilySymbol).ToElements()}
+bvtype = symbols['Machaon BFW-01/W DN25-300 PN16 М-Ф']
+
+def changeType(e) :
+	
+	conns = {c.Id : c for c in e.MEPModel.ConnectorManager.Connectors}
+	
+	conns = []
+	for c1 in e.MEPModel.ConnectorManager.Connectors :
+		for c2 in c1.AllRefs :
+			if c2.ConnectorType & ConnectorType.Physical :
+				conns.append((c1, c2))
+	
+	
+	tr = Transaction(doc, "Замена типа")
+	tr.Start()
+	for c1, c2 in conns :
+		pass
+		c1.DisconnectFrom(c2)
+	
+	newBV = doc.Create.NewFamilyInstance(
+					conns[0][0].Origin, 
+					bvtype, 
+					DB.Structure.StructuralType.NonStructural)
+	newConns = {cn1.Id : cn1 for cn1 in newBV.MEPModel.ConnectorManager.Connectors}
+	newConns = list(newBV.MEPModel.ConnectorManager.Connectors)
+	dp = conns[0][0].Origin - newConns[0].Origin
+	
+	newBV.LookupParameter("DN").Set(conns[0][0].Radius * 2)
+	
+	
+	
+	#newBV.Location.
+	newBV.Location.Move(dp)
+	
+	rotV = conns[0][0].CoordinateSystem.BasisZ.CrossProduct(newConns[0].CoordinateSystem.BasisZ)
+	if rotV.GetLength() > 0 :
+		rotA = math.asin(rotV.GetLength())
+		axLine= Line.CreateUnbound(newConns[0].Origin, -rotV)
+		newBV.Location.Rotate(axLine,rotA)
+	elif conns[0][0].CoordinateSystem.BasisZ\
+				.DotProduct(newConns[0].CoordinateSystem.BasisZ) < 0:
+		rotA = math.pi
+		axLine= Line.CreateUnbound(newConns[0].Origin, XYZ.BasisZ)
+		newBV.Location.Rotate(axLine,rotA)
+		
+	rotVX = conns[0][0].CoordinateSystem.BasisX.CrossProduct(newConns[0].CoordinateSystem.BasisX)
+	if rotVX.GetLength() > 0 :
+		rotAX = math.asin(min(rotVX.GetLength(),1))
+		axLine= Line.CreateUnbound(newConns[0].Origin, newConns[0].CoordinateSystem.BasisZ)
+		newBV.Location.Rotate(axLine,rotA)
+	elif conns[0][0].CoordinateSystem.BasisX\
+				.DotProduct(newConns[0].CoordinateSystem.BasisX) < 0:
+		rotAX = math.pi
+		axLine= Line.CreateUnbound(newConns[0].Origin, newConns[0].CoordinateSystem.BasisZ)
+		newBV.Location.Rotate(axLine,rotAX)
+		
+	
+	e.Location.Move(XYZ.BasisZ)
+	
+	for c1,cc in zip(newConns, conns) :
+		c1.ConnectTo(cc[1])
+	#newBV.Location.Move(XYZ.BasisX)
+	#newBV.Location.Move(-XYZ.BasisX)
+	doc.Delete(e.Id)
+	
+	tr.Commit()
+
+##eref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+for eref in uidoc.Selection.GetElementIds() :
+	e = doc.GetElement(eref)
+	changeType(e)

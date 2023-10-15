@@ -1,0 +1,75 @@
+from Autodesk.Revit import *
+bic = BuiltInCategory
+class dmElement :
+	def __init__(self, e) :
+		self.e = e
+		
+	def _mepSystem(self) :
+		return self.e.MEPSystem
+	MEPSystem = property(_mepSystem)
+	def _getConnectors(self) :
+		if hasattr(self.e, "ConnectorManager") :
+			return self.e.ConnectorManager.Connectors
+		elif hasattr(self.e, "MEPModel") :
+			return self.e.MEPModel.ConnectorManager.Connectors
+	Connectors = property(_getConnectors)
+	def _getSystems(self) :
+		for c1 in self.Connectors :
+			for c2 in c1.AllRefs :
+				yield c2.Owner
+	Systems = property(_getSystems)
+	def _checkIsPipe(self) :
+		return self.e.Category.Id.IntegerValue == int(bic.OST_PipeCurves)
+	IsPipe = property(_checkIsPipe)
+	
+	def _getNeighbors(self) :
+		for c in self.Connectors :
+			for c1 in c.AllRefs :
+				if c1.Owner.Id != self.e.Id and c1.ConnectorType & ConnectorType.Physical :
+					yield (c, c1, dmElement(c1.Owner))
+	Neighbors = property(_getNeighbors)
+	def __hash__(self) :
+		return self.e.Id.IntegerValue
+	def __eq__(self, other) :
+		return self.Id == other.Id
+	def _getId(self) :
+		return self.e.Id
+	Id = property(_getId)
+	
+	def reconnect(self) :	
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "reconnect pipe")
+			tr.Start()
+			
+		for n in self.Neighbors :
+			n[0].DisconnectFrom(n[1])
+			n[0].ConnectTo(n[1])
+			break
+		
+		if tr : tr.Commit()
+			
+			
+					
+				
+fc = FilteredElementCollector(doc).OfClass(Plumbing.Pipe).ToElements()
+pipes = [dmElement(e) for e in fc]
+pipesNotConnected = [pipe for pipe in pipes if not pipe.MEPSystem]
+i = 0
+for pipe in pipesNotConnected :
+	i += 1
+	if i > 1000 : break
+	s1 = pipe.MEPSystem
+	try :
+		pipe.reconnect()
+	except :
+		print("ошибка")
+	s1 = pipe.MEPSystem
+	if s1 :
+		print(s1.Name)
+		break
+		
+
+
+
+	

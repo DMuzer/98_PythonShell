@@ -1,0 +1,23 @@
+import re
+shParamFile = doc.Application.OpenSharedParameterFile()
+
+groups = {g.Name : g for g in shParamFile.Groups}
+g = groups["09 Заполнение штампа"]
+pDefs = {pDef.Name : pDef for pDef in g.Definitions if re.match("ADSK_Штамп_.", pDef.Name)}
+for param in pDefs.Values : 
+	print(doc.ParameterBindings[param])
+	if doc.ParameterBindings[param] :
+		print(param.Name)
+		continue
+	print("создаем {}".format(param.Name))
+	catSet = CategorySet()
+	catSet.Insert(Category.GetCategory(doc, BuiltInCategory.OST_Sheets))
+	bind = doc.Application.Create.NewInstanceBinding(catSet)
+	tr = Transaction(doc, "+ {}".format(param.Name))
+	tr.Start()
+	doc.ParameterBindings.Insert(param, bind)
+	tr.Commit()
+	
+	
+	
+		
