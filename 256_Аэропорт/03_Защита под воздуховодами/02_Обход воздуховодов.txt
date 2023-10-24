@@ -1,0 +1,301 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+ductFltCategories = System.Array[bic]([bic.OST_DuctCurves, bic.OST_PipeCurves])
+import heapq
+
+class dmRefContext :
+	def __init__(self, refCntx) :
+		self.refCntx = refCntx
+		self.Proximity = refCntx.Proximity
+		self.ref = refCntx.GetReference()
+		self._element = self.ref.ElementId
+	def __repr__(self) :
+		return "Пересечение : {}\n".format(self.Proximity)
+	def __lt__(self, other) :
+		if isinstance(other, (int, float)) :
+			return self.Proximity < other
+		return self.Proximity < other.Proximity
+	def __gt__(self, other) :
+		if isinstance(other, (int, float)) :
+			return self.Proximity > other
+		return self.Proximity > other.Proximity
+	def __le__(self, other) :
+		if isinstance(other, (int, float)) :
+			return self.Proximity <= other
+		return self.Proximity <= other.Proximity
+	def __ge__(self, other) :
+		if isinstance(other, (int, float)) :
+			return self.Proximity >= other
+		return self.Proximity >= other.Proximity
+	def __hash__(self) :
+		return self.ref.ElementId.IntegerValue + self.ref.LinkedElementId.IntegerValue
+	def __eq__(self, other) :
+		if isinstance(other, (int, float)) :
+			return self.Proximity == other
+		return self.ref.ElementId == other.ref.ElementId and self.ref.LinkedElementId == other.ref.LinkedElementId
+	
+		
+		
+class dmObstacle :
+	def __init__(self, pipe, refCntx) :
+		self.pipe = pipe
+		self.refCntx  = refCntx
+		self.ref = refCntx.refCntx.GetReference()
+		self.intersections = [refCntx]
+		self.intersectionsIn = []
+		if refCntx.Proximity < pipe.Length :
+			self.intersectionsIn = [refCntx]
+		self._element = doc.GetElement(refCntx.ref)
+		self._lElement = None
+		self.Transform = Transform.Identity
+		if isinstance(self._element, RevitLinkInstance) :
+			self.ldoc = self._element.GetLinkDocument()
+			self.Transform = self._element.GetTotalTransform()
+			self._lElement = self.ldoc.GetElement(self.ref.LinkedElementId)
+	def __lt__(self, other) :
+		return self.intersections[0] < other.intersections[0]
+	def _getElement(self) :
+		if self._lElement : return self._lElement
+		else : return self._element
+	element = property(_getElement)
+	def _getId(self) :	
+		return self.element.Id
+	Id = property(_getId)
+	def __repr__(self) :
+		if self.IsPassedThrough :
+			return "Препятствие Id {}. количество точек {} сквозное".format(self.Id, len(self.intersections))
+		if self.IsEnd0Enters :
+			return "Препятствие Id {}. Труба входит концом 0".format(self.Id)
+		if self.IsEnd1Enters :
+			return "Препятствие Id {}. Труба входит концом 1".format(self.Id)
+		if self.IsOutsidePipe :
+			return "Препятствие Id {}. За пределами трубы".format(self.Id)
+			
+	def addIntersectionPoint(self, refCntx) :
+		heapq.heappush(self.intersections, refCntx)
+		if refCntx < self.pipe.Length :
+			heapq.heappush(self.intersectionsIn, refCntx)
+	def _IsPassedThrough(self) :
+		return len(self.intersectionsIn) % 2 == 0
+	IsPassedThrough = property(_IsPassedThrough)
+	def _IsEnd0Enters(self) :
+		return len(self.intersectionsIn) % 2 == 1 and len(self.intersections) % 2 == 1
+	IsEnd0Enters = property(_IsEnd0Enters)
+	def _IsEnd1Enters(self) :
+		return len(self.intersectionsIn) % 2 == 1 and len(self.intersections) % 2 == 0
+	IsEnd1Enters = property(_IsEnd1Enters)
+	def _IsOutsidePipe(self) :
+		return len(self.intersectionsIn) == 0 
+	IsOutsidePipe = property(_IsOutsidePipe)
+	
+	def getBypassVector(self) :
+		#вычисляет вектор, как надо сместить трубу, чтобы выполнить обход
+		if self.element.Category.Id.IntegerValue == int(bic.OST_DuctCurves) or \
+				self.element.Category.Id.IntegerValue == int(bic.OST_PipeCurves) :
+			print("воздуховод или труба")
+			lc = self.element.Location.Curve.CreateTransformed(self.Transform)
+			print(self.element.Height/dut)
+			d = lc.Direction
+			
+			t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+			try :
+				lc.ComputeClosestPoints(self.pipe.Location.Curve, True, False, False, t)
+				dv = (t.Item[0].XYZPointOnSecondCurve - t.Item[0].XYZPointOnFirstCurve)
+				dl = dv.GetLength()
+				dve = dv.Normalize()
+			except :
+				dve = XYZ.Zero
+				pass
+			if dve.GetLength() < 0.0000001 :
+				dl = self.element.Height / 2 + self.pipe.diameter
+				dve = pipe.Location.Curve.Direction.CrossProduct(lc.Direction).Normalize()
+				
+			return dve
+			#return self.pipe.Location.Curve.Direction.CrossProduct(d).Normalize()
+			pass
+			
+	
+class dmObstaclesStack :
+	def __init__(self, pipe, obstacle) :
+		self.pipe = pipe
+		self.obstacles = [obstacle]
+		if obstacle.IsEnd0Enters :
+			self.minProximity = float.NegativeInfinity
+		else :
+			self.minProximity = min(obstacle.intersections).Proximity
+		if obstacle.IsEnd1Enters :
+			self.maxProximity = float.PositiveInfinity
+		else :
+			self.maxProximity = max(obstacle.intersections).Proximity
+			
+	def IsIntersectsObstacle(self, obstacle, minGap = 0) :
+		return not(min(obstacle.intersections) > self.maxProximity + minGap or max(obstacle.intersections) < self.minProximity-minGap)
+	def addObstacle(self, obstacle) :
+		if self.minProximity > min(obstacle.intersections) :
+			self.minProximity = min(obstacle.intersections).Proximity
+			
+		if self.maxProximity < max(obstacle.intersections) :
+			self.maxProximity = max(obstacle.intersections).Proximity
+			if obstacle.IsEnd1Enters :
+				self.maxProximity = float.PositiveInfinity
+		self.obstacles.append(obstacle)
+	def _getMinPnt(self) :
+		return self.pipe.End0 + self.pipe.Direction * (self.minProximity - self.pipe.minGap)
+	minPnt = property(_getMinPnt)
+	def _getMaxPnt(self) :
+		return self.pipe.End0 + self.pipe.Direction * (self.maxProximity + self.pipe.minGap)
+	maxPnt = property(_getMaxPnt)
+		
+
+class dmPipe(dm.dmElement) :	
+	def __init__(self, pipe, view=None) :
+		
+		dm.dmElement.__init__(self, pipe)
+		self.minGap = self.diameter
+		self.End0 = self.Location.Curve.GetEndPoint(0)
+		self.Direction = self.Location.Curve.Direction
+		self.ri = None
+		if view :
+			ductFlt = ElementMulticategoryFilter(ductFltCategories)
+			self.ri = ReferenceIntersector(ductFlt, FindReferenceTarget.Face, view)
+			self.ri.FindReferencesInRevitLinks = True
+			
+	def findIntersections(self) :
+		p0 	= self.Location.Curve.GetEndPoint(0)
+		d0 	= self.Location.Curve.Direction
+		intersections = sorted([dmRefContext(r) for r in self.ri.Find(p0, d0)])
+		
+		obstacles = {}
+		for i1 in intersections :
+			if i1 in obstacles :
+				obstacles[i1].addIntersectionPoint(i1)
+			else :
+				obstacles[i1] = dmObstacle(self, i1)
+		self.obstacles = sorted([o for o in obstacles.values() if not o.IsOutsidePipe])
+		
+		#print(intersections)
+		#for obst in self.obstacles :
+			#print(obst)
+	def _length(self) :
+		return self.Location.Curve.Length
+	Length = property(_length)
+	
+	def _getEnd0Obstacles(self) :
+		return [o for o in self.obstacles if o.IsEnd0Enters]
+	end0Obstacles = property(_getEnd0Obstacles)
+	
+	def doBreak(self, pnt) :
+		with dm.trans() :
+			newPipe = dmPipe(Plumbing.PlumbingUtils.BreakCurve(self.doc, self.Id, pnt))
+		return newPipe
+	
+	def doBypass(self, p1, p2, dv) :
+		with dm.trans(a = "Байпас") :
+			pipe1 = self.doBreak(p1)
+			pipe2 = self.doBreak(p2)
+			pipe2.Location.Move(dv)
+			
+			stand1Location = Line.CreateBound(pipe1.Location.Curve.GetEndPoint(1), 
+									pipe2.Location.Curve.GetEndPoint(0))
+			stand2Location = Line.CreateBound(pipe2.Location.Curve.GetEndPoint(1), 
+									self.Location.Curve.GetEndPoint(0))
+			
+			standPipe1 = self.copy()
+			standPipe1.Location.Curve = stand1Location
+			standPipe2 = self.copy()
+			standPipe2.Location.Curve = stand2Location
+			self.doc.Create.NewElbowFitting(
+				pipe1.connectorsDict[1], standPipe1.connectorsDict[0])
+			self.doc.Create.NewElbowFitting(
+				standPipe1.connectorsDict[1], pipe2.connectorsDict[0])
+			self.doc.Create.NewElbowFitting(
+				pipe2.connectorsDict[1], standPipe2.connectorsDict[0])
+			self.doc.Create.NewElbowFitting(
+				standPipe2.connectorsDict[1], self.connectorsDict[0])
+			
+			
+		pass
+		
+	def doChangeLine(self, p, dv, end = 0) :
+		with dm.trans(a="Утка") :
+			newPipe = dmPipe(Plumbing.PlumbingUtils.BreakCurve(self.doc, self.Id, p))
+			if not end : newPipe.Location.Move(dv)
+			else : self.Location.Move(dv)
+			newLocation = Line.CreateBound(newPipe.Location.Curve.GetEndPoint(1), 
+											self.Location.Curve.GetEndPoint(0))
+			standPipe = self.copy()
+			standPipe.Location.Curve = newLocation
+			self.doc.Create.NewElbowFitting(newPipe.connectorsDict[1], standPipe.connectorsDict[0])
+			self.doc.Create.NewElbowFitting(standPipe.connectorsDict[1], self.connectorsDict[0])
+		return newPipe
+		
+		
+		
+	
+	def doIntersectionStacks(self) :
+	# Формируются стеки из пересекаемых объектов
+		minGap = self.diameter * 8
+		obstacles = self.obstacles[::-1]
+		self.oStacks = []
+		oStack = None
+		
+		while obstacles :
+			o = obstacles.pop()
+			if not oStack :
+				oStack = dmObstaclesStack(self, o)
+				continue
+			if oStack.IsIntersectsObstacle(o, minGap) :
+				oStack.addObstacle(o)
+			else :
+				self.oStacks.append(oStack)
+				oStack = dmObstaclesStack(self, o)
+		if oStack :
+			self.oStacks.append(oStack)
+	def doPassObstacles(self) :	
+		for stack in self.oStacks :
+			if stack.minProximity == float.NegativeInfinity :
+				self.doChangeLine(stack.maxPnt, -1.3 *XYZ.BasisZ, 0)
+			elif stack.maxProximity == float.PositiveInfinity :
+				self.doChangeLine(stack.minPnt, -1.3*XYZ.BasisZ, 1)
+			else :
+				self.doBypass(stack.minPnt, stack.maxPnt, -1.3*XYZ.BasisZ)
+			
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+		
+p1 = dm.pickElement()			
+#pipe = dmPipe(1128863, uidoc.ActiveView)
+#pipe = dmPipe(1130725, uidoc.ActiveView)
+pipe = dmPipe(p1.Id.IntegerValue, uidoc.ActiveView)
+print(1)
+pipe.findIntersections()
+print(2)
+pipe.doIntersectionStacks()
+print(3)
+pipe.doPassObstacles()
+print(4)
+
+#newPipe = pipe.doChangeLine(pipe.oStacks[0].maxPnt, -XYZ.BasisZ, 0)
+#newPipe = pipe.doBypass(pipe.oStacks[2].minPnt, pipe.oStacks[2].maxPnt,   -XYZ.BasisZ)
+#newPipe = pipe.doChangeLine(pipe.oStacks[3].minPnt, -XYZ.BasisZ, 1)
+
+for obstacle in pipe.obstacles :
+	print(obstacle)
+
+print("Количество стеков {}".format(len(pipe.oStacks)))

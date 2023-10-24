@@ -1,1 +1,149 @@
-# IronPython Pad. Write code snippets here and F5 to run.
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+import clr
+import System
+from System.Collections.Generic import IList, List
+
+dut = 0.0032808398950131233
+dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+
+
+copy_element_id = ElementId(9692643)
+#copy_element_id = ElementId(10066506)
+
+def get_origin(e) :
+	for c in e.MEPModel.ConnectorManager.Connectors :
+		if c.CoordinateSystem.BasisZ.Z > 0.99 :
+			return c
+
+def drain_hor_pipe(pipe) :
+	valve1 = doc.GetElement(copy_element_id)
+	lc = pipe.Location.Curve
+	
+	av = uidoc.ActiveView
+
+	tr = Transaction(doc)
+	tr.Start("and work plane")	
+	plane1 = Plane.CreateByNormalAndOrigin(av.Origin, av.ViewDirection)
+	sk_plane = SketchPlane.Create(doc, plane1)
+	av.SketchPlane = sk_plane
+	
+	tr.Commit()
+	
+	pnt = uidoc.Selection.PickPoint()
+	
+	lc2 = Line.CreateUnbound(pnt, av.ViewDirection)
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+	lc.ComputeClosestPoints(lc2, True, False, False, t)
+	pt1 = t.Item[0].XYZPointOnFirstCurve
+	print(pt1)
+	
+	p0 = pt1
+	p1 = p0 - XYZ.BasisZ * 0.3
+	
+	c = get_origin(valve1)
+	p00, d0 = c.Origin, c.Radius * 2
+	p01 = valve1.Location.Point
+	
+	dp01 = p1 - p01
+	l2 = Line.CreateBound(p0, p1)
+	
+	
+	with Transaction(doc, "copy drain valve") as tr:
+		tr.Start()
+		valve2 = doc.GetElement(ElementTransformUtils.CopyElement(doc, copy_element_id,dp01)[0])
+		pipe2 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+		pipe2.Location.Curve = l2
+		pipe2.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(d0)
+		
+		cns = {c_.Id : c_ for c_ in pipe2.ConnectorManager.Connectors}
+		c_p0 = min([c_ for c_ in pipe2.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))
+		c_p1 = min([c_ for c_ in pipe2.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p1))
+		c2 = [c_ for c_ in valve2.MEPModel.ConnectorManager.Connectors if c_.CoordinateSystem.BasisZ.Z >0.99][0]
+		c_p1.ConnectTo(c2)
+		doc.Create.NewTakeoffFitting(c_p0, pipe)
+		tr.Commit()
+		
+def drain_vert_pipe(pipe) :
+	pass
+
+	bvalve = doc.GetElement(copy_element_id)
+	bcon = [c for c in bvalve.MEPModel.ConnectorManager.Connectors if c.CoordinateSystem.BasisZ.Z > 0.95][0]
+	
+	av = uidoc.ActiveView
+
+	tr = Transaction(doc)
+	tr.Start("and work plane")	
+	plane1 = Plane.CreateByNormalAndOrigin(av.Origin, av.ViewDirection)
+	sk_plane = SketchPlane.Create(doc, plane1)
+	av.SketchPlane = sk_plane
+	
+	tr.Commit()
+	
+	
+	
+	pnt = uidoc.Selection.PickPoint()
+	print(pnt)
+	lc = pipe.Location.Curve
+	
+	lc2 = Line.CreateUnbound(pnt, av.ViewDirection)
+	
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]())
+    
+	lc.ComputeClosestPoints(lc2, True, False, False, t)
+	pt1 = t.Item[0].XYZPointOnFirstCurve
+	print(pt1)
+	
+
+	
+	
+	
+	
+	p0 = pt1
+	p1 = pt1 - XYZ.BasisY * 0.3
+	p2 = p1 - XYZ.BasisZ * 0.2
+	
+	dp01 = p2 - bcon.Origin
+	
+	
+	
+	
+	l1 = Line.CreateBound(p0, p1)
+	l2 = Line.CreateBound(p1, p2)
+	
+	tr = Transaction(doc)
+	tr.Start("Add drain valve")
+	valve2 = doc.GetElement(ElementTransformUtils.CopyElement(doc, copy_element_id,dp01)[0])
+	
+	pipe1 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+	pipe2 = doc.GetElement(ElementTransformUtils.CopyElement(doc, pipe.Id, XYZ.Zero)[0])
+	
+	pipe1.Location.Curve = l1
+	pipe1.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(15 * dut)
+	c11 = min([c for c in pipe1.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p0))
+	c12 = min([c for c in pipe1.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p1))
+	
+	pipe2.Location.Curve = l2
+	pipe2.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(15 * dut)
+	c21 = min([c for c in pipe2.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p1))
+	c22 = min([c for c in pipe2.ConnectorManager.Connectors], key = lambda x : x.Origin.DistanceTo(p2))
+	
+	doc.Create.NewTakeoffFitting(c11, pipe)
+	doc.Create.NewElbowFitting(c12, c21)
+	
+	c3 = [c_ for c_ in valve2.MEPModel.ConnectorManager.Connectors if c_.CoordinateSystem.BasisZ.Z >0.99][0]
+	
+	c22.ConnectTo(c3)
+	
+	tr.Commit()
+	
+while True :
+	pipe = doc.GetElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+	print(pipe)
+	d = pipe.Location.Curve.Direction
+	if abs(d.Z) < 0.6 :
+		drain_hor_pipe(pipe)
+	else :
+		drain_vert_pipe(pipe)

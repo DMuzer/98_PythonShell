@@ -1,0 +1,56 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+from collections import deque
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+fcabs = []
+#e = dm.pickElement()
+
+toNumerate = [
+	dm.dmElement(7098616), 
+	dm.dmElement(7098761), 
+	dm.dmElement(7098852), 
+	dm.dmElement(7051973), 
+	dm.dmElement(8664459), 
+	]
+
+for e in toNumerate :
+	toVisit = deque([e])
+	visited = set()
+	systemAbbreviation = e.pipeSystemType.Abbreviation
+	pipeSystem = e.pipeSystemType
+	cabinetNumber = 1
+	
+	while toVisit :
+		current = toVisit.pop()
+		visited.add(current)
+		if current.e.Name.Contains("ШПК") :
+			print(cabinetNumber)
+			current.Set("DM_ПК_Номер", str(cabinetNumber))
+			current.Set("DM_ПК_Номер_секции", pipeSystem.Abbreviation.Split("-")[-1])
+			cabinetNumber += 1
+		for next in current.connectedElements :
+			if next not in visited :
+				toVisit.append(next)
+		
+	
+	
+	
+
+
+
+
