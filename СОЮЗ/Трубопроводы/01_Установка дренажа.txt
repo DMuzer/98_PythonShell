@@ -49,7 +49,7 @@ def drain_hor_pipe(pipe) :
 	
 	lc2 = Line.CreateUnbound(pnt, av.ViewDirection)
 	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
-	lc.ComputeClosestPoints(lc2, True, False, False, t)
+	lc.ComputeClosestPoints(lc2, False, False, False, t)
 	pt1 = t.Item[0].XYZPointOnFirstCurve
 	print(pt1)
 	

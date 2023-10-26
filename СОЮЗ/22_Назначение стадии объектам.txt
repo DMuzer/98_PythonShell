@@ -1,0 +1,47 @@
+stage1Zone = doc.GetElement(ElementId(8717176))
+stageBoundary = stage1Zone.GetBoundaries()
+
+stage1Solid = GeometryCreationUtilities.CreateExtrusionGeometry(stageBoundary, XYZ.BasisZ, 1) 
+
+stage1Face = [f for f in stage1Solid.Faces if f.GetSurface().Normal.IsAlmostEqualTo( XYZ.BasisZ)][0]
+
+eref = uidoc.Selection.GetElementIds()[0]
+e = doc.GetElement(eref)
+
+phases = {ph.Name : ph.Id for ph in doc.Phases}
+phase1 = phases["Стадия 1"]
+phase3 = phases["Стадия 3"]
+
+tr = Transaction(doc, "SetPhase")
+tr.Start()
+projection0 = None
+projection1 = None
+if isinstance(e.Location, LocationCurve) :
+	projection0 = stage1Face.Project(e.Location.Curve.GetEndPoint(0))
+	projection1 = stage1Face.Project(e.Location.Curve.GetEndPoint(1))
+	
+	if any([projection0, projection1]) :
+		print("Стадия 1")
+		e.CreatedPhaseId = hase1
+	else : 
+		e.CreatedPhaseId = hase3
+		print("Стадия 3")
+
+elif isinstance(e.Location, LocationPoint) :
+	projection0 = stage1Face.Project(e.Location.Point)
+	if projection0 : 
+		print("Стадия 1")
+		e.CreatedPhaseId = phase1
+	else : 
+		print("Стадия 3")
+		e.CreatedPhaseId = phase3
+	
+	
+	
+
+		
+
+
+tr.Commit()
+
+

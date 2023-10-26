@@ -1,0 +1,61 @@
+
+import Autodesk.Revit
+from Autodesk.Revit import *
+dut = 0.0032808398950131233	
+v = {v1.Name : v1 for v1 in FilteredElementCollector(doc).OfClass(View3D).ToElements()}["DM_ОТМЕТКИ"]
+
+instFam = doc.GetElement(ElementId(1131603))
+r3 = instFam.GetReferences(FamilyInstanceReferenceType.CenterFrontBack)[0]
+r4 = instFam.GetReferences(FamilyInstanceReferenceType.CenterLeftRight)[0]
+
+
+w1 = doc.GetElement(ElementId(1130906))
+p2 = w1.Location.Curve.GetEndPoint(0) + XYZ.BasisX - XYZ.BasisY + XYZ.BasisZ
+#p = uidoc.Selection.PickPoint()
+p = XYZ(183.200379593, 770.431027667, -5)
+d = XYZ.BasisY
+
+wflt = ElementCategoryFilter(BuiltInCategory.OST_Walls )
+
+ri = ReferenceIntersector(wflt, DB.FindReferenceTarget.Face, v)
+
+refCntx = ri.FindNearest(p, d)
+ref = refCntx.GetReference()
+refCntx2 = ri.FindNearest(p, -d)
+ref2 = refCntx2.GetReference()
+
+wall1Found = doc.GetElement(ref)
+wall2Found = doc.GetElement(ref2)
+
+ra = ReferenceArray()
+ra.Append(ref)
+ra.Append(ref2)
+ra.Append(r3)
+ra.Append(r4)
+ra.Append(r4)
+
+l = Line.CreateUnbound(p, XYZ.BasisY)
+
+tr = Transaction(doc, "add dim")
+tr.Start()
+dim = doc.Create.NewDimension(uidoc.ActiveView, l, ra)
+tr.Commit()
+toDelete = []
+newRefs = ReferenceArray()
+oldRefs = list(dim.References)
+for rd, s in zip(oldRefs, dim.Segments) :
+	print(s.Value/dut)
+	if s.Value < 0.001 :
+		print("Мал")
+		toDelete.append(rd)
+	else :
+		newRefs.Append(rd)
+
+newRefs.Append(oldRefs[-1])
+		
+tr = Transaction(doc, "add dim")
+tr.Start()
+#doc.Delete(dim.Id)
+ndim = doc.Create.NewDimension(uidoc.ActiveView, l, newRefs)
+tr.Commit()
+		
