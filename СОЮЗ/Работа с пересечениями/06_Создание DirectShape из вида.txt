@@ -1,0 +1,53 @@
+import System, sys
+from imp import reload
+import time
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+
+
+tt1 = time.time()
+#sb = uidoc.ActiveView.GetSectionBox()
+dmDoc = dm.dmDocument(doc)
+viewSolid = dm.minMaxToSolid(sb.Transform.OfPoint(sb.Min), sb.Transform.OfPoint(sb.Max))
+solids = []
+
+
+for li in dmDoc.linkInstances :
+	solids.extend(li.getGeometryAsSolidInsideBoundingBox(sb))
+solids_ = []
+for solid in solids :
+	try :
+		solid2 = BooleanOperationsUtils\
+					.ExecuteBooleanOperation(
+						viewSolid, solid, 
+							BooleanOperationsType.Intersect)
+		solids_.append(solid2)
+	except :
+		pass
+	
+solids = solids_
+tr = Transaction(doc, "new ds")
+tr.Start()
+
+ds = dm.create_ds(solids[0], doc = doc)
+for solid in solids[1:10000] :
+	try :
+		ds.AppendShape([solid])
+	except :
+		pass
+tr.Commit()
+
+tt2 = time.time()
+print("Время исполнения {} с".format(tt2-tt1))
+
+	

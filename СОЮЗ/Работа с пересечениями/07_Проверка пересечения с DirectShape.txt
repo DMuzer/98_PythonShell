@@ -1,0 +1,40 @@
+import Autodesk.Revit
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+dut = 0.0032808398950131233
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+
+
+tt1 = time.time()
+
+p = XYZ(883.687851228, 369.351021338, -24.927487731)
+p2 = p + 125 * dut *XYZ.BasisY
+
+solid = dm.pointToSolid(p, 125 * dut)
+solid2 = dm.pointToSolid(p2, 125 * dut)
+
+ds = dm.create_ds(solid, doc = doc)
+ds2 = dm.create_ds(solid2, doc = doc)
+transform = Transfom.CreateTranslation(125 * dut *XYZ.BasisY)
+
+for i in range(20) :
+	solid = SolidUtils.CreateTransformed(solid, transform)
+	ds2 = dm.create_ds(solid2, doc = doc)
+	
+	
+tt2 = time.time()
+print("Время исполнения {} с".format(tt2-tt1))
+	

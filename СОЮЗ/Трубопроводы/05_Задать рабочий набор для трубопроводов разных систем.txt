@@ -23,13 +23,26 @@ for element in pipework :
 	if element.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
 		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(spr_ws.Id.IntegerValue)
 	abbreviation = element.LookupParameter("Сокращение для системы").AsString()
-	if not abbreviation : continue
+	if not abbreviation : 
+		if not isinstance(element, Plumbing.Pipe) : continue
+		for c1 in element.ConnectorManager.Connectors :
+			if c1.ConnectorType != ConnectorType.End : continue
+			for c2 in c1.AllRefs :
+				if c2.Owner.Id == element.Id : continue
+				c1.DisconnectFrom(c2)
+				c1.ConnectTo(c2)
+	if abbreviation.StartsWith("В21сух") :
+		pass
+		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(spr_ws.Id.IntegerValue)
 	if abbreviation.StartsWith("В21.") :
 		pass
 		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(spr_ws.Id.IntegerValue)
 		
 		continue
 	if abbreviation.StartsWith("ВПВ 2.") :
+		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(vpv_ws.Id.IntegerValue)
+		continue
+	if abbreviation.StartsWith("В2.") :
 		element.Parameter[BuiltInParameter.ELEM_PARTITION_PARAM].Set(vpv_ws.Id.IntegerValue)
 		continue
 		

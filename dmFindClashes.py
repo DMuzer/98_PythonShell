@@ -36,7 +36,22 @@ from pathlib import Path
 from imp import reload
 print(2)
 
+@contextmanager
+def trans(doc, a="труба") :
+    #print("новый тип транзакций  обработкой ошибки")
+    tr = None 
+    if not doc.IsModifiable :
+        tr = Transaction(doc)
+        tr.Start(a)
+    try :	
+        yield tr
+    except Exception as ex:
+        print("Ошибка транзакции\n{}".format(ex))
+        
+    finally :
+        if tr : tr.Commit()
 
+bic = BuiltInCategory
 def set_workset(e, ws, trans_ = None) :
     """
     ***************************************************************
