@@ -14,9 +14,10 @@ except Exception as ex :
 	import dmFindRoute2 as dm
 	print("импорт dmFindRoute2 ok")
 
-
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+workView = views["DM_трассировка"]
 tt1 = time.time()
-sb = uidoc.ActiveView.GetSectionBox()
+sb = workView.GetSectionBox()
 dmDoc = dm.dmDocument(doc)
 viewSolid = dm.minMaxToSolid(sb.Transform.OfPoint(sb.Min), sb.Transform.OfPoint(sb.Max))
 solids = []
