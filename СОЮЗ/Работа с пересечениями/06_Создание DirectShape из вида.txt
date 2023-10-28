@@ -16,14 +16,15 @@ except Exception as ex :
 
 
 tt1 = time.time()
-#sb = uidoc.ActiveView.GetSectionBox()
+sb = uidoc.ActiveView.GetSectionBox()
 dmDoc = dm.dmDocument(doc)
 viewSolid = dm.minMaxToSolid(sb.Transform.OfPoint(sb.Min), sb.Transform.OfPoint(sb.Max))
 solids = []
 
-
 for li in dmDoc.linkInstances :
+	print(li)
 	solids.extend(li.getGeometryAsSolidInsideBoundingBox(sb))
+	
 solids_ = []
 for solid in solids :
 	try :

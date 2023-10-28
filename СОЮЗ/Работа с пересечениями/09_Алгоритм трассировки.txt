@@ -1,0 +1,96 @@
+
+import System, sys
+from imp import reload
+import time
+dut = 0.0032808398950131233
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+workView = views["DM_трассировка"]
+tt1 = time.time()
+
+
+pipe1 = doc.GetElement(ElementId(1041409))
+pipe2 = doc.GetElement(ElementId(1041425))
+
+workDS = doc.GetElement(ElementId(1041792))
+
+p1 = {c.Id : c for c in pipe1.ConnectorManager.Connectors}[1].Origin
+p2 = {c.Id : c for c in pipe2.ConnectorManager.Connectors}[1].Origin
+step = 60 * dut
+
+graph = dm.dmGraph(start = p1, end = p2, 
+						step = step,
+						diameter = 100 * dut,
+						eId = workDS.Id, view = workView,
+						)
+
+import heapq
+
+print(1)
+d = pipe1.Location.Curve.Direction
+next = dm.dmNode(graph, None, p1, step )
+end = dm.dmNode(graph, None, p2, step )
+
+
+open_nodes = next._getNeighborsAlong(d)
+heapq.heapify(open_nodes)
+next = heapq.heappop(open_nodes)
+next.show(doc)
+
+for i in range(50) :
+	open_nodes += next._getNeighbors()
+	heapq.heapify(open_nodes)
+	next = heapq.heappop(open_nodes)
+	next.show(doc)
+	if next == end :
+		print("!")
+		break
+	else :
+		print(next.pnt.DistanceTo(end.pnt)/dut, next == end)
+
+
+
+
+
+
+
+visited = set()
+print(2)
+for i in range(0) :
+	current = heapq.heappop(open_nodes)
+	visited.add(current)
+	print(4)
+	neighbors = [n for n in next._getNeighbors()]
+	for neighbor in neighbors :
+		if neighbor in visited :
+			print("этот уже посещен")
+		else :
+			open_nodes.append(neighbor)
+	
+	heapq.heapify(open_nodes)
+	print(len(neighbors))
+	#open_nodes += neighbors
+	heapq.heapify(open_nodes)
+	current = heapq.heappop(open_nodes)
+	current.show(doc)
+
+
+for n in current._getNeighbors()[:0] :
+	n.show(doc)
+
+
+
+tt2 = time.time()
+print("Время исполнения {} с".format(tt2-tt1))

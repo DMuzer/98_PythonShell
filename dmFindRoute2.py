@@ -5,6 +5,7 @@ from Autodesk.Revit.DB import *
 from contextlib import contextmanager
 import System
 bic = BuiltInCategory
+dut = 0.0032808398950131233
 @contextmanager
 def trans(doc, a="труба") :
     #print("новый тип транзакций  обработкой ошибки")
@@ -100,6 +101,7 @@ class dmLinkInstance :
             return "Вставленная модель {}\n".format(self.linkInstance.Name)
         
     def getGeometryAsSolidInsideBoundingBox(self, bb) :
+        print(1)
         pmin_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Min))
         pmax_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Max))
 
@@ -115,7 +117,11 @@ class dmLinkInstance :
             opt = Options()
             res = []
             for element in elements :
-                for g in element.Geometry[opt].GetTransformed(self.Transform) :
+                print(element)
+                geometry = element.Geometry[opt]
+                if not geometry : continue
+                for g in geometry.GetTransformed(self.Transform) :
+                    print(g)
                     if isinstance(g, Solid) :  res.append(g)
             return res
         except Exception as ex: 
@@ -141,28 +147,65 @@ class dmNode:
         self.step = step 
         self.g = 0
         self.h = 0
-        self.f = 0
+        if parent :
+            self.parentDir = (pnt - parent.pnt).Normalize()
+        else :
+            self.parentDir = XYZ.Zero
+        d = graph.end - pnt
+        self.f = abs(d.X) + abs(d.Y) + abs(d.Z)
         self.parent =  parent
+
+    def __hash__(self) :
+        return int(self.f * 1000000)
+    
     def __lt__(self, other) :
             return self.f < other.f
     def __eq__(self, other) :
-        return self.pnt.DistanceTo(other.pnt) < self.step / 2
-    def _getNeighbors(self) :
-        directions = (XYZ.BasisX, -XYZ.BasisX, 
-                      XYZ.BasisY, -XYZ.BasisY,
-                      XYZ.BasisZ, -XYZ.BasisZ,)
+        print(self.pnt.DistanceTo(other.pnt)/dut, self.step/dut)
+        return self.pnt.DistanceTo(other.pnt) < self.step 
+    def _getNeighborsAlong(self, d) :
+        directions = (d,)
         r1 = [self.graph.ri1.FindNearest(self.pnt, d) for d in directions]
         res = []
-        #return r1 
         for ref, d in zip(r1, directions) :
-            proximity = math.floor(ref.Proximity - self.graph.diameter / self.step) * self.step
-            while proximity > self.step :
-                p = d * proximity
+            #proximity = math.floor(ref.Proximity - self.graph.diameter / self.step) * self.step
+            proximity = ref.Proximity - self.graph.diameter
+            while proximity > 3.5 * self.graph.diameter :
+                p = self.pnt + d * proximity
                 neighbor = dmNode(self.graph, self, p, self.step)
                 res.append(neighbor)
-                proximity -= step
+                proximity -= self.step
 
         return res
+    def _getNeighbors(self) :
+        if self.parent :
+            d = self.pnt - self.parent.pnt 
+
+        n1 = d.CrossProduct(XYZ.BasisZ).Normalize()
+
+        if n1.GetLength() == 0 :
+            n1 = d.CrossProduct(XYZ.BasisX).Normalize()
+        n2 = d.CrossProduct(n1).Normalize()
+
+    
+        directions = (n1, -n1, n2, -n2)
+
+        r1 = [self.graph.ri1.FindNearest(self.pnt, d) for d in directions]
+        res = []
+        #return res
+        for ref, d in zip(r1, directions) :
+            #proximity = math.floor(ref.Proximity - self.graph.diameter / self.step) * self.step
+            proximity = ref.Proximity - self.graph.diameter
+            while proximity > 3.5 * self.graph.diameter :
+                p = self.pnt + d * proximity
+                neighbor = dmNode(self.graph, self, p, self.step)
+                res.append(neighbor)
+                proximity -= self.step
+
+        return res
+    def show(self, doc) :
+        s = pointToSolid(self.pnt, 50 * dut)
+        create_ds(s, doc=doc)
     Neighbors = property(_getNeighbors) 
 
 class dmGraph :
