@@ -1,0 +1,35 @@
+fc = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements()
+marks = {}
+for e in fc :
+	p = e.LookupParameter("Марка")
+	if p  :
+		m = p.AsString()
+		if m in marks :
+			marks[m].append(e)
+		else :
+			marks[m] = [e]
+			
+for k,v in zip(marks.keys(), marks.values()) :
+	if len(v) > 1 :
+		print("марка : {}, количество {}".format(k, len(v)))
+
+		
+	
+i = 0
+anum = 1000000
+tr = Transaction(doc, "убираем дублирующие марки")
+tr.Start()
+for k,v in zip(marks.keys(), marks.values()) :
+	if len(v) > 1 :
+		i += 1
+		if i > 15000 : break
+		print("марка : {}, количество {}".format(k, len(v)))
+		for num, element in enumerate(v) :
+			param = element.LookupParameter("Марка")
+			if param :
+				anum += 1
+				param.Set("{} - {}".format(k, anum))
+		
+	
+tr.Commit()
+	

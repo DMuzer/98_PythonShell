@@ -1,0 +1,195 @@
+# Построение полигонов из объектов на виде для вычисления трасс
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+dut = 0.0032808398950131233
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	
+	
+def drawPolygonAsFilledRegion(pg) :
+	tr = None
+	if not tr :
+		tr = Transaction(doc, "create filled region")
+		tr.Start()
+		
+	cls = dm3.get_CurveLoopsFromPolygon(pg)
+	try :
+		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
+	except Exception as ex:
+		print(ex)
+		pg = pg.Buffer(5 * dut).Buffer(-5 * dut)
+		cls = dm3.get_CurveLoopsFromPolygon(pg)
+		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
+		pass
+		
+	
+	if tr : tr.Commit()
+	
+
+excludeIds = [8900694, 2613213, 2613847, 2613883, 2613919, 2613955, 2613991, 2614027,
+	2614063, 2614099, 2626423, 2630012, 2632819, 2638570, 2639485, 2640400, 2648760, 2711124, 2711469,
+	3101063, 3101385, 3101744,  3101806, 3101883, 3102562,  3102612, 3103138, 3865769 ]
+typeId = ElementId(6036810)
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
+workPlan = views["Р_ВПВ_Транзиты Этаж -1 со смежными В1 2900-3100"]
+targetView = views["План1"]
+viewRange 			= workPlan.GetViewRange()
+bb = workPlan.get_BoundingBox(None)
+
+bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
+							+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
+topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
+							+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
+
+bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
+minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
+maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
+
+viewSolid 			= dm.minMaxToSolid(minPnt, maxPnt)
+viewBB 				= BoundingBoxXYZ() 
+viewBB.Min 			= bbMin
+viewBB.Max			= bbMax
+
+dmDoc 				= dm.dmDocument(doc)
+
+tt1		= time.time()
+
+solids 		= []
+elements 	= []
+
+for li in dmDoc.linkInstances :
+	if not li.linkInstance.Name.Contains("ЭОМ") : continue
+	if not li.linkInstance.Name.Contains("B1") : continue
+	print(li)
+	elements.extend(li.getPipeDuctElements())
+	elements.extend(li.getArchElements())
+	
+opt = Options()
+opt.View = workPlan
+i1 	= 0 
+tr 	= Transaction(doc, "draw plan")
+tr.Start()
+plane 		= Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
+finalPg 	= geoms.Polygon.Empty 
+for element in elements :
+	if element.element.Id.IntegerValue in excludeIds : continue
+	#if element.element.Id.IntegerValue != 2613213 : continue
+	
+	solids = element.getSolidsSected(viewSolid, opt)
+	if i1 > 100000 : break
+	
+	for solid in solids[:] :
+		try :
+			ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
+			face = ea.GetExtrusionBase()
+			pg = dm3.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
+			pg2 = pg.Buffer(25 * dut)
+			cls = dm3.get_CurveLoopsFromPolygon(pg)
+			if pg.Area > 20000 :
+				print(element.element.Category.Name)
+				print(element.element.Id)
+			
+			#ds = dm.create_ds(face.GetEdgesAsCurveLoops(), doc = doc)
+			#param = ds.LookupParameter("Комментарии")
+			#if param : param.Set(str(element.element.Id.IntegerValue))
+			#ds = dm3.create_ds(pg)
+			#ds = dm3.create_ds(pg2)
+			finalPg = finalPg.Union(pg)
+			
+			#FilledRegion.Create(doc, typeId, targetView.Id, cls)
+			
+			
+			
+			if pg.Area > 1 :
+				i1 += 1
+		
+		except Exception as ex:
+			print(ex)
+			#raise
+			continue
+	
+dm3.create_ds(finalPg)
+tr.Commit()
+	
+tt2 	= time.time()
+print("Время исполнения {} c".format(tt2-tt1))
+	
+raise
+#solids_ = []
+for solid in solids[:] :
+	
+	try :
+		ds = dm.create_ds(solid[1], doc = doc)
+		solid2 = BooleanOperationsUtils\
+					.ExecuteBooleanOperation(
+						viewSolid, solid[1], 
+							BooleanOperationsType.Intersect)
+		if solid2.Volume > 0.0001 :
+			solids_.append((solid[0], solid2))
+	except Exception as ex:
+		print(ex)
+		
+		pass
+raise
+#solids = solids_
+
+plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
+
+tr = Transaction(doc, "view plan")
+tr.Start()
+
+for solid in solids[:] :
+	try :
+		ea = ExtrusionAnalyzer.Create(solid[1], plane, XYZ.BasisZ)
+		face = ea.GetExtrusionBase()
+	except Exception as ex:
+		print(ex)
+		raise
+		continue
+		
+	face = ea.GetExtrusionBase()
+	try :
+		FilledRegion.Create(doc, typeId, targetView.Id, face.GetEdgesAsCurveLoops())
+	except Exception as ex :
+		print(ex)
+	
+
+
+tr.Commit()

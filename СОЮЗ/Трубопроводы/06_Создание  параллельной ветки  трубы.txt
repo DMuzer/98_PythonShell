@@ -256,8 +256,8 @@ class dmCreateParallelPipeline :
 			
 		
 
-numLines = 2
-offset = 300
+numLines = 4
+offset = 125
 		
 
 cmd = dmCreateParallelPipeline()

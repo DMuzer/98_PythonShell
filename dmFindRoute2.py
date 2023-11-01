@@ -4,6 +4,7 @@ from Autodesk.Revit import  DB, UI
 from Autodesk.Revit.DB import *
 from contextlib import contextmanager
 import System
+import dm_connect_2 as dm2 
 bic = BuiltInCategory
 dut = 0.0032808398950131233
 @contextmanager
@@ -64,12 +65,12 @@ def create_ds(l, category = None, doc =  None) :
 
     return ds
 
-def minMaxToSolid(min, max) :
-    p1 = XYZ(min.X, min.Y, min.Z)
-    p2 = XYZ(min.X, max.Y, min.Z)
-    p3 = XYZ(max.X, max.Y, min.Z)
-    p4 = XYZ(max.X, min.Y, min.Z)
-    height = abs(max.Z - min.Z)
+def minMaxToSolid(minPnt, maxPnt) :
+    p1 = XYZ(minPnt.X, minPnt.Y, minPnt.Z)
+    p2 = XYZ(minPnt.X, maxPnt.Y, minPnt.Z)
+    p3 = XYZ(maxPnt.X, maxPnt.Y, minPnt.Z)
+    p4 = XYZ(maxPnt.X, minPnt.Y, minPnt.Z)
+    height = abs(maxPnt.Z - minPnt.Z)
 
     cl  = System.Array [CurveLoop]([CurveLoop.Create(System.Array[Curve](
             [Line.CreateBound(p1, p2),
@@ -86,6 +87,74 @@ def pointToSolid(pnt, size) :
     p1 = pnt - XYZ(size, size, size)
     p2 = pnt + XYZ(size, size, size)
     return minMaxToSolid(p1, p2)
+
+opt = Options()
+projectionPlane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
+
+class dmLinkedElement :
+    def __init__(self, link, element) :
+        self.link = link
+        self.element = element 
+    def getSolids(self) :
+        geometry = self.element.Geometry[opt]
+        if not geometry : return []
+        geoms = [geometry.GetTransformed(self.link.Transform)]
+        res = []
+        while geoms :
+            g = geoms.pop()
+            if isinstance(g, Solid) :
+                res.append(g)
+            elif isinstance(g, GeometryInstance) :
+                geoms.extend(list(g.GetInstanceGeometry()))
+            elif isinstance(g, GeometryElement) :
+                geoms.extend(list(g))
+
+        return res 
+    def getSolidsSected(self, sectSolid, viewOpts=None) :
+        if viewOpts :
+            vOpt = viewOpts
+        else :
+            vOpt = opt
+        geometry = self.element.Geometry[vOpt]
+        if not geometry : return []
+        geoms = [geometry.GetTransformed(self.link.Transform)]
+        res = []
+        while geoms :
+            g = geoms.pop()
+            if isinstance(g, Solid) :
+                res.append(g)
+            elif isinstance(g, GeometryInstance) :
+                geoms.extend(list(g.GetInstanceGeometry()))
+            elif isinstance(g, GeometryElement) :
+                geoms.extend(list(g))
+        solids2 = []
+        for solid in res :
+            try :
+                solid2 = BooleanOperationsUtils\
+                    .ExecuteBooleanOperation(
+                        sectSolid, solid, 
+                            BooleanOperationsType.Intersect)
+                if solid2.Volume > 0.0001 :
+                    solids2.append(solid2)
+            except :
+                pass 
+        return solids2
+    def getPolygon(self, viewSolid, viewOpts=None) :
+        resPg = geoms.Polygon.Empty
+        for solid in self.getSolidsSected(viewSolid, viewOpts) :
+            try :
+                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
+                face = ea.GetExtrusionBase()
+                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
+                resPg = resPg.Union(pg)
+            except Exception as ex:
+                print(ex)
+                pass
+        return resPg
+            
+
+
+        
     
 
 class dmLinkInstance :
@@ -100,8 +169,81 @@ class dmLinkInstance :
         except:
             return "Вставленная модель {}\n".format(self.linkInstance.Name)
         
+    def getElementsVisibleInView(self, view) :
+        elements = FilteredElementCollector(self.linkDoc, view.Id)\
+                .WhereElementsIsNotElementType().ToElements()
+        return elements
+    def getPipeDuctElements(self) :
+
+        mcatFlt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_DuctCurves, bic.OST_DuctFitting, bic.OST_DuctAccessory,
+                bic.OST_MechanicalEquipment, bic.OST_PipeCurves, bic.OST_PipeFitting,
+
+                bic.OST_PipeAccessory, bic.OST_PipeInsulations,
+                bic.OST_DuctInsulations
+        ]))
+        elements = [dmLinkedElement(self, e) 
+                        for e in FilteredElementCollector(self.linkDoc)\
+                            .WherePasses(mcatFlt)\
+                            .WhereElementIsNotElementType().ToElements()]
+        return elements
+    
+    def getArchElements(self) :
+
+        mcatFlt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_Walls, bic.OST_Columns,
+                bic.OST_Ceilings, bic.OST_Ceilings, bic.OST_StructuralColumns
+        ]))
+        elements = [dmLinkedElement(self, e) 
+                        for e in FilteredElementCollector(self.linkDoc)\
+                            .WherePasses(mcatFlt)\
+                            .WhereElementIsNotElementType().ToElements()]
+        return elements
+    
+
+
+    
+    def getElementsInsideBoundingBox(self, bb) :
+        #print(1)
+        pmin_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Min))
+        pmax_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Max))
+
+        pmin = XYZ(min(pmin_.X, pmax_.X), min(pmin_.Y, pmax_.Y), min(pmin_.Z, pmax_.Z))
+        pmax = XYZ(max(pmin_.X, pmax_.X), max(pmin_.Y, pmax_.Y), max(pmin_.Z, pmax_.Z))
+
+
+        try :
+            # print(pmin, pmax)
+            outline = Outline(pmin, pmax)
+            bbFlt = BoundingBoxIntersectsFilter (outline)
+            elements = [dmLinkedElement(self, e) 
+                            for e in FilteredElementCollector(self.linkDoc)\
+                                .WherePasses(bbFlt).ToElements()]
+            return elements
+
+        except Exception as ex: 
+            print(ex)
+            return []
+
+    def getElectricalElements(self) :
+
+        mcatFlt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_Walls, bic.OST_Columns,
+                bic.OST_Ceilings, bic.OST_Ceilings, bic.OST_StructuralColumns
+        ]))
+        elements = [dmLinkedElement(self, e) 
+                        for e in FilteredElementCollector(self.linkDoc)\
+                            .WherePasses(mcatFlt)\
+                            .WhereElementIsNotElementType().ToElements()]
+        return elements
+    
+
+    
+
+
+        
     def getGeometryAsSolidInsideBoundingBox(self, bb) :
-        print(1)
+        #print(1)
         pmin_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Min))
         pmax_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Max))
 
@@ -117,12 +259,12 @@ class dmLinkInstance :
             opt = Options()
             res = []
             for element in elements :
-                print(element)
+                #print(element)
                 geometry = element.Geometry[opt]
                 if not geometry : continue
                 for g in geometry.GetTransformed(self.Transform) :
-                    print(g)
-                    if isinstance(g, Solid) :  res.append(g)
+                    #print(g)
+                    if isinstance(g, Solid) :  res.append((element, g))
             return res
         except Exception as ex: 
             print(ex)
