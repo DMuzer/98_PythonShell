@@ -199,18 +199,57 @@ class dmLinkInstance :
         elements = FilteredElementCollector(self.linkDoc, view.Id)\
                 .WhereElementsIsNotElementType().ToElements()
         return elements
-    def getPipeDuctElements(self) :
+    def getDuctElements(self) :
+        
+        if not self.linkDoc : return []
+
+        pmin_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Min))
+        pmax_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Max))
+
+        pmin = XYZ(min(pmin_.X, pmax_.X), min(pmin_.Y, pmax_.Y), min(pmin_.Z, pmax_.Z))
+        pmax = XYZ(max(pmin_.X, pmax_.X), max(pmin_.Y, pmax_.Y), max(pmin_.Z, pmax_.Z))
+
+
+        outline = Outline(pmin, pmax)
+        bbFlt = BoundingBoxIntersectsFilter (outline)
 
         mcatFlt = ElementMulticategoryFilter(System.Array[bic]([
                 bic.OST_DuctCurves, bic.OST_DuctFitting, bic.OST_DuctAccessory,
-                bic.OST_MechanicalEquipment, bic.OST_PipeCurves, bic.OST_PipeFitting,
-
-                bic.OST_PipeAccessory, bic.OST_PipeInsulations,
+                bic.OST_MechanicalEquipment, 
                 bic.OST_DuctInsulations
         ]))
         elements = [dmLinkedElement(self, e) 
                         for e in FilteredElementCollector(self.linkDoc)\
                             .WherePasses(mcatFlt)\
+                            .WherePasses(bbFlt)\
+                            .WhereElementIsNotElementType().ToElements()]
+        return elements
+    
+    def getPipeElements(self) :
+        
+        if not self.linkDoc : return []
+
+        pmin_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Min))
+        pmax_= self.InvTransform.OfPoint(bb.Transform.OfPoint(bb.Max))
+
+        pmin = XYZ(min(pmin_.X, pmax_.X), min(pmin_.Y, pmax_.Y), min(pmin_.Z, pmax_.Z))
+        pmax = XYZ(max(pmin_.X, pmax_.X), max(pmin_.Y, pmax_.Y), max(pmin_.Z, pmax_.Z))
+
+
+        outline = Outline(pmin, pmax)
+        bbFlt = BoundingBoxIntersectsFilter (outline)
+
+        mcatFlt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_MechanicalEquipment, 
+                bic.OST_PipeCurves, 
+                bic.OST_PipeFitting,
+                bic.OST_PipeAccessory, 
+                bic.OST_PipeInsulations,
+        ]))
+        elements = [dmLinkedElement(self, e) 
+                        for e in FilteredElementCollector(self.linkDoc)\
+                            .WherePasses(mcatFlt)\
+                            .WherePasses(bbFlt)\
                             .WhereElementIsNotElementType().ToElements()]
         return elements
     
@@ -441,6 +480,7 @@ class dmEshelonLevelCreation :
     """
     def __init__(self, doc, centerElevation, height, view = None) :
         self.doc                = doc 
+        self.dmDoc              =  dmDocument(self.doc)
         self.centerElevation    = centerElevation
         self.height             = height
         self.view               = view
@@ -467,7 +507,14 @@ class dmEshelonLevelCreation :
         return "dmEshelonLevelCreation center = {}, height = {}".format(self.centerElevation/dut, self.height/dut)
 
     def calcDuctPolygon(self) :
-        pass
+        ducts = []
+        for li in self.dmDoc.linkInstances :
+            ducts.extend(li.getPipeDuctElements())
+
+        return ducts
+
+        
+
     def calcPipePolygon(self) :
         pass 
     def calcArchPolygon(self) :
