@@ -4,8 +4,8 @@ import System, sys
 from imp import reload
 import time
 dut = 0.0032808398950131233
-
-clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\NetTopologySuite.2.4.0\lib\netstandard2.0\NetTopologySuite.dll")
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll")
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll")
 import NetTopologySuite as nts
 from NetTopologySuite.Geometries import *
 import NetTopologySuite.Geometries as geoms
@@ -54,13 +54,14 @@ def drawPolygonAsFilledRegion(pg) :
 		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
 	except Exception as ex:
 		print(ex)
-		pg = pg.Buffer(5 * dut).Buffer(-5 * dut)
+		pg = pg.Buffer(-20 * dut).Buffer(20 * dut)
 		cls = dm3.get_CurveLoopsFromPolygon(pg)
 		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
 		pass
 		
 	
 	if tr : tr.Commit()
+	return fr
 	
 
 excludeIds = [8900694, 2613213, 2613847, 2613883, 2613919, 2613955, 2613991, 2614027,
@@ -69,18 +70,25 @@ excludeIds = [8900694, 2613213, 2613847, 2613883, 2613919, 2613955, 2613991, 261
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 workPlan = views["Р_ВПВ_Транзиты Этаж -1 со смежными В1 2900-3100"]
+workPlan = uidoc.ActiveView
 targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
-bb = workPlan.get_BoundingBox(None)
 
-bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
-							+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
-topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
-							+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
+def getViewBB(view, startElevation, ) :
+	bb = workPlan.get_BoundingBox(None)
+	
+	bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
+								+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
+	topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
+								+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
+	
+	bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
+	minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
+	maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
 
-bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
-minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
-maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
+
+
+
 
 viewSolid 			= dm.minMaxToSolid(minPnt, maxPnt)
 viewBB 				= BoundingBoxXYZ() 
@@ -95,8 +103,8 @@ solids 		= []
 elements 	= []
 
 for li in dmDoc.linkInstances :
-	if not li.linkInstance.Name.Contains("ЭОМ") : continue
-	if not li.linkInstance.Name.Contains("B1") : continue
+	if not li.linkInstance.Name.Contains("ВК") : continue
+	if not li.linkInstance.Name.Contains("E") : continue
 	print(li)
 	elements.extend(li.getPipeDuctElements())
 	elements.extend(li.getArchElements())
@@ -120,7 +128,7 @@ for element in elements :
 			ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
 			face = ea.GetExtrusionBase()
 			pg = dm3.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-			pg2 = pg.Buffer(25 * dut)
+			pg2 = pg.Buffer(25 * dut).Buffer(-50*dut).Buffer(25*dut)
 			cls = dm3.get_CurveLoopsFromPolygon(pg)
 			if pg.Area > 20000 :
 				print(element.element.Category.Name)
@@ -148,6 +156,7 @@ for element in elements :
 dm3.create_ds(finalPg)
 tr.Commit()
 	
+drawPolygonAsFilledRegion(finalPg.Buffer(20*dut))
 tt2 	= time.time()
 print("Время исполнения {} c".format(tt2-tt1))
 	
@@ -189,7 +198,14 @@ for solid in solids[:] :
 		FilledRegion.Create(doc, typeId, targetView.Id, face.GetEdgesAsCurveLoops())
 	except Exception as ex :
 		print(ex)
-	
-
-
 tr.Commit()
+
+fname = doc.PathName.split("\\")[-1]
+eshelon = {fname : {
+		"file_name" : fname, 
+		"eshelon" : finalPg.AsText()
+		}}
+
+with open(r"d:\eshelon.json","w", encoding = "utf") as f :
+	json.dump(eshelon, f, indent = 4)
+	

@@ -7,6 +7,15 @@ import System
 import dm_connect_2 as dm2 
 bic = BuiltInCategory
 dut = 0.0032808398950131233
+import clr
+
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll")
+clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll")
+import NetTopologySuite as nts
+from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+
 @contextmanager
 def trans(doc, a="труба") :
     #print("новый тип транзакций  обработкой ошибки")
@@ -23,14 +32,10 @@ def trans(doc, a="труба") :
         if tr : tr.Commit()
 
 dsid = ElementId(bic.OST_GenericModel)
-def create_ds(l, category = None, doc =  None) :
+def create_ds(l, doc =  None) :
     if not doc :  return 
     olist = []
-    if category is None :
-        catid = dsid
-    else :
-        catid = dsid
-
+    catid = dsid
     # print(type(l))
 
     if not hasattr(l, "__iter__") :
@@ -48,8 +53,8 @@ def create_ds(l, category = None, doc =  None) :
             shapes.append(Point.Create(e))
         elif hasattr(e, "__iter__") :
             olist.extend(list(e))
-        #elif type(e) == geoms.Polygon :
-        #    olist.extend(get_CurveLoopsFromPolygon(e))
+        elif type(e) == geoms.Polygon :
+            olist.extend(get_CurveLoopsFromPolygon(e))
         elif isinstance(e, GeometryObject) :
             shapes.append(e)
 
@@ -64,6 +69,27 @@ def create_ds(l, category = None, doc =  None) :
             ds.SetShape(shapes_a)
 
     return ds
+
+def drawPolygonAsFilledRegion(pg, doc, view, typeId = None) :
+    if not typeId :
+        typeId = FilteredElementCollector(doc).OfClass(FilledRegionType).FirstElementId()
+    tr = None
+    if not tr :
+        tr = Transaction(doc, "create filled region")
+        tr.Start()
+        
+    cls = dm2.get_CurveLoopsFromPolygon(pg)
+    try :
+        fr = FilledRegion.Create(doc, typeId, view.Id, cls)
+    except Exception as ex:
+        print(ex)
+        pg = pg.Buffer(-20 * dut).Buffer(20 * dut)
+        cls = dm2.get_CurveLoopsFromPolygon(pg)
+        fr = FilledRegion.Create(doc, typeId, view.Id, cls)
+        pass
+    if tr : tr.Commit()
+    return fr
+	
 
 def minMaxToSolid(minPnt, maxPnt) :
     p1 = XYZ(minPnt.X, minPnt.Y, minPnt.Z)
@@ -406,6 +432,63 @@ def astar(start, end, step) :
                 heapq.heappush(open, neighbor)
 
     return None 
+
+
+class dmEshelonLevelCreation :
+    """
+    класс для создания уровня эшелона,
+    вычисляет свободное пространство для прохода труб
+    """
+    def __init__(self, doc, centerElevation, height, view = None) :
+        self.doc                = doc 
+        self.centerElevation    = centerElevation
+        self.height             = height
+        self.view               = view
+        viewBB                  = self.view.get_BoundingBox(None)
+        pnt                     = viewBB.Transform.OfPoint(viewBB.Min)
+        self.minPnt             = XYZ(pnt.X, pnt.Y, centerElevation - height / 2)
+        pnt                     = viewBB.Transform.OfPoint(viewBB.Max)
+        self.maxPnt             = XYZ(pnt.X, pnt.Y, centerElevation + height / 2)
+        self.eshelonBB          = BoundingBoxXYZ()
+        self.eshelonBB.Min      = self.minPnt
+        self.eshelonBB.Max      = self.maxPnt
+        self.eshelonSolid       = minMaxToSolid(self.minPnt, self.maxPnt)
+        coords                  = System.Array[geoms.Coordinate]([
+                                        Coordinate(self.minPnt.X, self.minPnt.Y),
+                                        Coordinate(self.minPnt.X, self.maxPnt.Y),
+                                        Coordinate(self.maxPnt.X, self.maxPnt.Y),
+                                        Coordinate(self.maxPnt.X, self.minPnt.Y),
+                                        Coordinate(self.minPnt.X, self.minPnt.Y),
+                                    ])
+        eshelonRing             = geoms.LinearRing(coords)
+        self.eshelonPolygon     = geoms.Polygon(eshelonRing)
+
+    def __repr__(self) :
+        return "dmEshelonLevelCreation center = {}, height = {}".format(self.centerElevation/dut, self.height/dut)
+
+    def calcDuctPolygon(self) :
+        pass
+    def calcPipePolygon(self) :
+        pass 
+    def calcArchPolygon(self) :
+        pass
+
+    def showEshelonExtent(self) :
+        create_ds(self.eshelonSolid, self.doc)
+    def showEshelonExtentOnView(self, view = None)  :
+        if not view :
+            view = doc.ActiveView 
+        drawPolygonAsFilledRegion(self.eshelonPolygon,
+                                  self.doc, view)
+        
+
+        
+
+
+
+    
+    
+
 
 
 
