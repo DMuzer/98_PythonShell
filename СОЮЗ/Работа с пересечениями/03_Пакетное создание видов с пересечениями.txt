@@ -37,10 +37,14 @@ baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные 
 baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-08")
 baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-19")
 baseFolder = Path(r"D:\17_Проекты\234_СОЮЗ\02_Исходные данные\Коллизии\2023-10-19")
+baseFolder = Path(r"D:\17_Проекты\234_СОЮЗ\02_Исходные данные\Коллизии\2023-11-06")
 v1 = None
 tt1 = time.time()
 foundNum = 0
 clashToCopy = None
+ClashNum = 0
+startClash = 1000
+maxClashes = 1100
 for fld in baseFolder.glob("*") :
 	if fld.is_dir :
 		if fld.suffix.upper() == ".RAR" :
@@ -71,19 +75,19 @@ for fld in baseFolder.glob("*") :
 			print(cf)
 			
 			for c in cf.clashes[:] :
+				if ClashNum < startClash :
+					ClashNum += 1 
+					continue
 				print(c.name)
 				print(c.pos)
+				foundNum += 1
 				
 				try :
 					e = doc.GetElement(ElementId(c._get_id1()))
 				except :
 					print("Ошибка Id1")
 					#raise
-				if e :
-					foundNum += 1
-				else :
-					pass
-				
+
 				
 				
 				p1 = c.pos_xyz
@@ -119,9 +123,10 @@ for fld in baseFolder.glob("*") :
 					print("Не удалось создать сечение")
 				
 				print(20*"-")
-				#break
-			#break
-		#break
+				ClashNum += 1
+				if ClashNum > maxClashes : break
+			if ClashNum > maxClashes : break
+		if ClashNum > maxClashes : break
 				
 				
 		print("Все создали")
@@ -135,7 +140,7 @@ if v1 :
 				
 tt2 = time.time()
 
-print("Количество найденых элементов {}".format(foundNum))
+print("Количество созданных коллизий {}".format(foundNum))
 print("Время выполнения {}".format(tt2-tt1))
 #uidoc.ActiveView= new_view
 

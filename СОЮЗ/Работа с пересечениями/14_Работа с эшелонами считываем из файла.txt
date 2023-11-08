@@ -1,4 +1,4 @@
-# Построение эшелонов
+# Работа с эшелонами считываем из файла
 from Autodesk.Revit import DB, UI
 import System, sys
 from imp import reload
@@ -21,8 +21,7 @@ try :
 except Exception as ex :
 	print(ex)
 	import dmFindRoute2 as dm
-	print("импорт dmFindRoute2 ok")
-	#raise
+	print("импорт dmFindRoute2 ok")	
 	
 libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
 if libFolder2 not in sys.path :
@@ -43,7 +42,6 @@ except Exception as ex :
 	print(ex)
 	import dm_connect_2 as dm3
 	print("импорт dm_connect_2 ok")
-	#raise
 	
 	
 def drawPolygonAsFilledRegion(pg) :
@@ -73,8 +71,8 @@ excludeIds = [8900694, 2613213, 2613847, 2613883, 2613919, 2613955, 2613991, 261
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
-#workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
-workPlan = uidoc.ActiveView
+workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+#workPlan = uidoc.ActiveView
 targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
 
@@ -96,87 +94,91 @@ def getViewBB(view, startElevation, ) :
 	viewBB.Max			= bbMax
 
 dmDoc 				= dm.dmDocument(doc)
-
+eshelons = {}
 tt1		= time.time()
 
-solids 		= []
-elements 	= []
+models 	= dm.dmModels(doc)
+model 	= models[doc.PathName]
 
+plan 	= model[0]
+print("-")
+raise
+print("Дальше")
+mname = 'D:\\17_Проекты\\000_Примеры\\Тестирование трассировки.rvt'
+pname = 'В_Этаж 01_Водопровод_Противопожарный'
+with open(r"d:\eshelon.json", "r") as f :
+	data = json.load(f)
+
+if doc.PathName in models :
+	plans = models[doc.PathName]
+else :
+	print("Модель не найдена")
+	raise
 	
-opt = Options()
+if workPlan.Name in plans :
+	eDicts = plans[workPlan.Name]
 
-eshelons = {}
-eDicts = {}
-viewRange 			= workPlan.GetViewRange()
-bottomElevation 	= workPlan.GenLevel.Elevation 
-centerElevation = bottomElevation + 2650 * dut
-height = 50 * dut	
-print("цикл")
 
-tr = Transaction(doc, "1")
-tr.Start()
-for i in range(20,21 ) :
 
-	centerElevation = bottomElevation +  2300* dut + 25 * i	* dut
-	eshelon = dm.dmSectionLevelCreation(
+for k in eDicts :
+	elevation = float(k)
+	eshelons[elevation] = dm.dmSectionLevelCreation(
 		doc = doc,
-		centerElevation = centerElevation,
-		height = height,
-		view = workPlan
-		)
-	eshelons[centerElevation/dut] = eshelon
-		
-	pg 			= geoms.Polygon.Empty
-	#pgDuct 		= eshelon.calcDuctPolygon()
-	#pgPipe 		= eshelon.calcPipePolygon()
-	#pgElectrical = eshelon.calcElectricalPolygon()
-	pgArch 		= eshelon.calcArchPolygon()
-	#pg 			= pgDuct.Union(pgPipe).Union(pgElectrical).Union(pgArch).Buffer(1 * dut)
-	pg = pgArch
+		fromDict = eDicts[k]
+	)
 	
-	#print(i)
-	
-	ds = dm.create_ds_safe(pg, doc)
-	
-	#ds.Location.Move(XYZ(0,0, centerElevation))
-	
-	#ds2 = eshelon.showEshelonSolid()
-	
-		
-	
-		
-	#dm.drawPolygonAsFilledRegion(
-	#	eshelon.eshelonPolygon, 
-	#	doc, 
-	#	targetView
-	#	)
-		
-	#dm.create_ds(eshelon.eshelonSolid, doc)
-	eDicts[centerElevation] = eshelon.makeDict()
+raise
+elPg = geoms.Polygon.Empty
+pipePg = geoms.Polygon.Empty
+ductPg = geoms.Polygon.Empty
+archPg = geoms.Polygon.Empty
+wallsPg = geoms.Polygon.Empty
 
-tr.Commit()
+for elevation in sorted(eshelons.keys()) :
+	print(elevation)
+	try :
+		eshelon 	= eshelons[elevation]
+	except :
+		pass
+	try :
+		elPg 		= elPg.Union(eshelon.electricalPolygon)
+	except :
+		pass
+	try :
+		pipePg 		= pipePg.Union(eshelon.pipePolygon)
+	except :
+		pass
+	try :
+		ductPg 		= ductPg.Union(eshelon.ductPolygon)
+	except :
+		pass
+	try :
+		archPg 		= archPg.Union(eshelon.archPolygon)
+	except :
+		pass
+	try :
+		wallsPg 	= wallsPg.Union(eshelon.wallsPolygon)
+	except :
+		pass
+	
+dm.drawPolygonAsFilledRegion(elPg.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+dm.drawPolygonAsFilledRegion(ductPg.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+dm.drawPolygonAsFilledRegion(pipePg.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+#dm.drawPolygonAsFilledRegion(archPg.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+dm.drawPolygonAsFilledRegion(wallsPg.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+dm.drawPolygonAsFilledRegion(eshelon.eshelonPolygon.Buffer(1*dut).Buffer(-1*dut), doc, workPlan)
+
+	
+	
+
+
+
+
+
 tt2 = time.time()
 
-dm.drawPolygonAsFilledRegion(
-	pg, 
-	doc, 
-	uidoc.ActiveView
-	)
-
-
-plans = {workPlan.Name : 
-	{"name" : workPlan.Name,
-	"data" : eDicts}}
-
-models = {doc.PathName : plans}
-
 print("Время выполнения {}".format(tt2-tt1))
-fn = ".".join(doc.PathName.Split("\\")[-1].split(".")[:-1]) + '.json'
-fld = "\\".join(doc.PathName.Split("\\")[:-1])
-fname = fld + "\\" + fn
 
 
-with open(fn, "w") as f :
-	json.dump(models, f, indent = 4)
 
 	

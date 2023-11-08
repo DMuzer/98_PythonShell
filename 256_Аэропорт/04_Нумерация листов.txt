@@ -10,7 +10,7 @@ class dmSheet :
 	def set_number(self) :
 		try :
 			num = int(self.sheet.SheetNumber.split("-")[-1])
-			self.sheet.LookupParameter("ADSK_Штамп Сквозная нумерация").Set(int(num))
+			self.sheet.LookupParameter("Ш_Сквозной номер").Set(int(num))
 		except :
 			pass
 	def set_title_num(self) :
@@ -30,9 +30,12 @@ class dmSheet :
 		self.target_type = self.types["Форма 3 (произвольный номер)"]
 		flt = ElementCategoryFilter(BuiltInCategory.OST_TitleBlocks)
 		tr = Transaction(doc)
-		title_blocks = sorted(self.sheet.GetDependentElements(flt), key = lambda x : doc.GetElement(x).Location.Point.X)
+		title_blocks = sorted(self.sheet.GetDependentElements(flt), 
+							key = lambda x : doc.GetElement(x).Location.Point.X)
 		for n1, eid in enumerate(title_blocks) :
 			e = doc.GetElement(eid)
+			frm = e.LookupParameter("Формат А").AsString()
+			krt = e.LookupParameter("Кратность").AsString()
 			if e.GetTypeId() != self.target_type.Id :
 				try :
 					e.ChangeTypeId(self.target_type.Id)
@@ -40,6 +43,9 @@ class dmSheet :
 					tr.Start("change sheet type")
 					e.ChangeTypeId(self.target_type.Id)
 					tr.Commit()
+					
+			e.LookupParameter("Формат А").Set(frm )
+			e.LookupParameter("Кратность").Set(krt)
 			e.LookupParameter("Строка1_Дата").Set(1)
 			e.LookupParameter("Строка2_Дата").Set(0)
 			e.LookupParameter("Строка3_Дата").Set(0)
@@ -86,7 +92,7 @@ fc = FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()
 
 
 #1-ПТ
-sheets_dict = {s.Name : s for s in fc if s.LookupParameter("Раздел проекта").AsString() == "ПТ.2"}
+sheets_dict = {s.Name : s for s in fc if s.LookupParameter("Раздел проекта").AsString() == "АУПТ"}
 sheets = sorted(sheets_dict.values(), key = lambda x : x.SheetNumber)
 
 tr  = Transaction(doc)
