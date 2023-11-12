@@ -254,9 +254,15 @@ class dmCreateParallelPipeline :
 			
 			
 			
-		
-
-numLines = 4
+"""		
+sPlane = Plane.CreateByNormalAndOrigin(uidoc.ActiveView.ViewDirection, XYZ.Zero)	
+tr = Transaction(doc, "new sketch plane")
+tr.Start()
+sketchPlane = SketchPlane.Create(doc, sPlane)
+uidoc.ActiveView.SketchPlane = sketchPlane
+tr.Commit()
+"""
+numLines = 2
 offset = 125
 		
 

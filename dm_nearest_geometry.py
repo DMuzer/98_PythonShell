@@ -1,5 +1,5 @@
 #  coding: utf-8 
-#from imp import reload
+from imp import reload
 import dm_connect_pipe
 
 reload(dm_connect_pipe)

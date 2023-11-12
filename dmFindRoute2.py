@@ -9,12 +9,110 @@ bic = BuiltInCategory
 dut = 0.0032808398950131233
 import clr
 import json
+import sys 
+import os 
 
-clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll")
-clr.AddReferenceToFileAndPath(r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll")
+buffersPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+NTSPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+SQLPath = r"C:\Users\Дмитрий\AppData\Roaming\Autodesk\Revit\Addins\2023\RevitPythonShell\IronPython.SQLite.dll"
+currentReferences = [assembly.Location for assembly in clr.References]
+
+if buffersPath not in currentReferences :
+    clr.AddReferenceToFileAndPath(buffersPath)
+if NTSPath not in currentReferences :
+    clr.AddReferenceToFileAndPath(NTSPath)
+if SQLPath not in currentReferences :
+    clr.AddReferenceToFileAndPath(SQLPath)
 import NetTopologySuite as nts
 from NetTopologySuite.Geometries import *
 import NetTopologySuite.Geometries as geoms
+import sqlite3 as sql
+
+class dmNotFoundSectionInDataBaseError(Exception) :
+    pass 
+
+plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
+
+def printReferences() :
+    print(__revit__)
+    print(__revit__.ActiveUIDocument)
+    print(__revit__.ActiveUIDocument.Document.PathName)
+    print(50*"-")
+    print("sys.path")
+    for pos, fld in enumerate(sys.path, 1):
+        print("{} : {}".format(pos, fld))
+    print(50*'-')
+    print("clr.References")
+    print(50*"-")
+
+    for assembly in clr.References :
+        print(assembly.Location)
+    print(50*"-")
+
+dbConnection = None 
+def createDb(dbPath) :
+    conn = sql.connect(dbPath)
+
+    qt1 = """
+    CREATE TABLE PLANS (
+        Plan_code    INTEGER     PRIMARY KEY
+                                UNIQUE,
+        Plan_name TEXT (255),
+        Level_name   TEXT (1000) 
+    );
+    """
+
+    qt2 = """
+    CREATE TABLE Eshelons (
+        Elevation_code    INTEGER PRIMARY KEY,
+        centerElevation   NUMERIC,
+        levelElevation    INTEGER,
+        Height            NUMERIC,
+        Plan_code         INTEGER REFERENCES PLANS (Plan_code),
+        ductPolygon       TEXT,
+        pipePolygon       TEXT,
+        electricalPolygon TEXT,
+        archPolygon       TEXT,
+        wallsPolygon      TEXT
+);
+
+    """
+
+    conn.execute(qt1)
+    conn.execute(qt2)
+    conn.commit()
+    conn.row_factory = sql.Row
+    return conn
+
+def getSQLConnection() :
+    global dbConnection
+    
+    if dbConnection : 
+        #print("курсор определен")
+        try :
+            #print("проверяем, открыто ли соединение")
+            dbConnection.cursor()
+            #print("соединение открыто, возвращаем существующее")
+            return dbConnection
+        except :
+            #print("соединение закрыто, надо создать")
+            pass 
+    docPath = __revit__.ActiveUIDocument.Document.PathName
+    fld = "\\".join(docPath.split("\\")[:-1])
+    name = docPath.split("\\")[-1]
+    stem = ".".join(name.split(".")[:-1])
+
+    dbPath = fld + "\\" + stem + ".db"
+    
+    if not os.path.exists(dbPath) :
+        #print("базу данных надо создать")
+        dbConnection = createDb(dbPath)
+    else :
+        #print("создаем новое соединение с существующей базой")
+        dbConnection = sql.connect(dbPath)
+        conn.row_factory = sql.Row
+    return dbConnection
+
 
 
 @contextmanager
@@ -71,7 +169,7 @@ def create_ds(l, doc =  None) :
 
     return ds
 
-def create_ds_safe(l, doc =  None) :
+def create_ds_safe(l, doc =  None, dp = None) :
     if not doc :  return 
     olist = []
     catid = dsid
@@ -92,6 +190,10 @@ def create_ds_safe(l, doc =  None) :
             shapes.append(Point.Create(e))
         elif hasattr(e, "__iter__") :
             olist.extend(list(e))
+        elif isinstance(e, geoms.LineString) :
+            for p1, p2 in zip(e.Coordinates[:-1], e.Coordinates[1:]) :
+                p1_, p2_ = XYZ(p1.X, p1.Y,0), XYZ(p2.X, p2.Y, 0)
+                shapes.append(Line.CreateBound(p1_, p2_))
         elif type(e) == geoms.Polygon :
             olist.extend(dm2.get_CurveLoopsFromPolygon(e))
         elif isinstance(e, GeometryObject) :
@@ -104,6 +206,9 @@ def create_ds_safe(l, doc =  None) :
         for shape in shapes_a :
             try :
                 ds.AppendShape([shape])
+                if dp :
+                    ds.Location.Move(dp)
+
             except :
                 pass 
 
@@ -115,6 +220,8 @@ def create_ds_safe(l, doc =  None) :
                     ds.AppendShape([shape])
                 except :
                     pass 
+            if dp :
+                ds.Location.Move(dp)
 
     return ds
 
@@ -122,7 +229,8 @@ def drawPolygonAsFilledRegion(pg, doc, view, typeId = None) :
     if not typeId :
         typeId = FilteredElementCollector(doc).OfClass(FilledRegionType).FirstElementId()
     tr = None
-    if not tr :
+
+    if not doc.IsModifiable :
         tr = Transaction(doc, "create filled region")
         tr.Start()
         
@@ -140,19 +248,39 @@ def drawPolygonAsFilledRegion(pg, doc, view, typeId = None) :
 	
 
 def minMaxToSolid(minPnt, maxPnt) :
-    p1 = XYZ(minPnt.X, minPnt.Y, minPnt.Z)
-    p2 = XYZ(minPnt.X, maxPnt.Y, minPnt.Z)
-    p3 = XYZ(maxPnt.X, maxPnt.Y, minPnt.Z)
-    p4 = XYZ(maxPnt.X, minPnt.Y, minPnt.Z)
-    height = abs(maxPnt.Z - minPnt.Z)
+    try :
+        p1 = XYZ(minPnt.X, minPnt.Y, minPnt.Z)
+        p2 = XYZ(minPnt.X, maxPnt.Y, minPnt.Z)
+        p3 = XYZ(maxPnt.X, maxPnt.Y, minPnt.Z)
+        p4 = XYZ(maxPnt.X, minPnt.Y, minPnt.Z)
+        height = max(abs(maxPnt.Z - minPnt.Z), 0.01)
 
-    cl  = System.Array [CurveLoop]([CurveLoop.Create(System.Array[Curve](
-            [Line.CreateBound(p1, p2),
-            Line.CreateBound(p2, p3),
-            Line.CreateBound(p3, p4),
-            Line.CreateBound(p4,p1)]))])
+        cl  = System.Array [CurveLoop]([CurveLoop.Create(System.Array[Curve](
+                [Line.CreateBound(p1, p2),
+                Line.CreateBound(p2, p3),
+                Line.CreateBound(p3, p4),
+                Line.CreateBound(p4,p1)]))])
 
-    solid = GeometryCreationUtilities.CreateExtrusionGeometry(cl, XYZ.BasisZ,height)
+        solid = GeometryCreationUtilities.CreateExtrusionGeometry(cl, XYZ.BasisZ,height)
+    except :
+        p1 = XYZ(minPnt.X, minPnt.Y, minPnt.Z)
+        p2 = XYZ(minPnt.X, minPnt.Y+0.01, minPnt.Z)
+        p3 = XYZ(minPnt.X+0.010, minPnt.Y+0.01, minPnt.Z)
+        p4 = XYZ(minPnt.X+0.01, minPnt.Y, minPnt.Z)
+        height = max(abs(maxPnt.Z - minPnt.Z), 0.01)
+
+        cl  = System.Array [CurveLoop]([CurveLoop.Create(System.Array[Curve](
+                [Line.CreateBound(p1, p2),
+                Line.CreateBound(p2, p3),
+                Line.CreateBound(p3, p4),
+                Line.CreateBound(p4,p1)]))])
+
+        #print("ошибка при создании солида")
+        #raise
+        solid = GeometryCreationUtilities.CreateExtrusionGeometry(cl, XYZ.BasisZ,height)
+        
+
+
     
     return solid
 
@@ -171,56 +299,55 @@ class dmLinkedElement :
         self.element = element 
     def __repr__(self) :
         return "Id - {} {}".format(self.element.Id, self.element.Category.Name)
-    def getSolids(self) :
-        geometry = self.element.Geometry[opt]
+    def getSolids(self, viewOpts) :
+        if viewOpts :
+            vopt = viewOpts
+        else :
+            vopt = opt 
+        geometry = self.element.Geometry[vopt]
         if not geometry : return []
         geoms = [geometry.GetTransformed(self.link.Transform)]
-        res = []
-        while geoms :
-            g = geoms.pop()
-            if isinstance(g, Solid) :
-                res.append(g)
-            elif isinstance(g, GeometryInstance) :
-                geoms.extend(list(g.GetInstanceGeometry()))
-            elif isinstance(g, GeometryElement) :
-                geoms.extend(list(g))
-        return res 
-    def getSolidsSected(self, sectSolid, viewOpts=None) :
-        if viewOpts :
-            vOpt = viewOpts
+
+        if isinstance(self.element, FamilyInstance) and \
+                self.element.Category.Id.IntegerValue != int(bic.OST_StructuralFraming) :
+            geoms = geometry.GetTransformed(self.link.Transform)
+            bb = geoms.GetBoundingBox()
+            ptMin = bb.Transform.OfPoint(bb.Min)
+            ptMax = bb.Transform.OfPoint(bb.Max)
+            res = [minMaxToSolid(ptMin, ptMax)]
         else :
-            vOpt = opt
-        try :
-            geometry = self.element.Geometry[vOpt].GetTransformed(self.link.Transform)
-        except System.MissingMemberException:
-            return []
-        if not geometry : return []
-        geoms = [geometry]
-        res = []
-        while geoms :
-            g = geoms.pop()
-              
-            if isinstance(g, Solid) :
-                res.append(g)
-            elif isinstance(g, GeometryInstance) :
-                geoms.extend(list(g.GetSymbolGeometry()))
-                #geoms.extend(list(g))
-            elif isinstance(g, GeometryElement) :
-                geoms.extend(list(g))
-        solids2 = []
+            geoms = [geometry.GetTransformed(self.link.Transform)]
+            res = []
+            while geoms :
+                g = geoms.pop()
+                if isinstance(g, Solid) :
+                    res.append(g)
+                elif isinstance(g, GeometryInstance) :
+                    geoms.extend(list(g.GetInstanceGeometry()))
+                elif isinstance(g, GeometryElement) :
+                    geoms.extend(list(g))
+        return res 
+    
+    def getSolidsSected(self, sectSolid, viewOpts=None) :
+        """
+        Вычисление пересечения солида элемента с заданным солидом.
+        Например, может быть для вычисления части элемента который пересекается
+        с эшелоном.
+        """
         problem = 0
+        solids2 = []
+        res = self.getSolids(viewOpts)
+
         for solid in res :
             try :
+                solid2 = None
                 solid2 = BooleanOperationsUtils\
                     .ExecuteBooleanOperation(
                         sectSolid, solid, 
                             BooleanOperationsType.Intersect)
-                if solid2.Volume > 0.0001 :
-                    #print("маленьки объем")
-                    pass 
-                else :
-                    #print("нормальный объем")
-                    solids2.append(solid2)
+                solids2.append(solid2)
+
+                    
             except Autodesk.Revit.Exceptions.InvalidOperationException :
                 
                 problem += 1
@@ -233,6 +360,7 @@ class dmLinkedElement :
                                 self.link.linkInstance.Name))
                 raise
                 pass 
+        #print("Вычисленно пересеченных солидов {}".format(len(solids2)))
         if problem :
             """
             print("{}\n{}\n{}\n---------".format(self.element.Category.Name, 
@@ -252,17 +380,56 @@ class dmLinkedElement :
             pass
                
         return solids2
+    
     def getPolygon(self, viewSolid, viewOpts=None) :
+        #print("getPolygon")
+        """
+        #Учтасток для дальнейшей доработки чтобы напрямую формировать контуры
+        if self.element.Id.IntegerValue in [int(bic.OST_DuctCurves)] :
+            bb = viewSolid.BoundingBox()
+            pntMin = bb.Transform.OfPoint(bb.Min)
+            pntMan = bb.Transform.OfPoint(bb.Max)
+            lc = self.element.Location.Curve 
+            d = lc.Direction
+            if
+            dn = d.CrossProduct(XYZ.BasisZ)
+            if d.Z > = 0 :
+                sPoint = lc.GetEndPoint(0)
+                ePoint = lc.GetEndPoint(1)
+                coords = System.Array[geoms.Coordinate]([
+                    Coordinate(sPoint.X, sPoint.Y),
+                    Coordinate(ePoint.X, ePoint.Y)
+                ])
+                w = self.element.Width / 2 if hasattr(self.element, "Width") \
+                        else self.element.Radius
+                ls = geoms.LineSegment(sPoint.X, sPoint.Y, ePoint.X, ePoint.Y).Buffer(w)
+
+
+
+
+        else :
+        """
+        plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
         resPg = geoms.Polygon.Empty
         for solid in self.getSolidsSected(viewSolid, viewOpts) :
+            #print(solid.Volume)
+            if solid.Volume < 0.0001 : continue
+            #print("вычисляем полигон")
             try :
+                #print("getPolygon")
                 ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
                 face = ea.GetExtrusionBase()
                 pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
                 resPg = resPg.Union(pg)
+                if type(resPg) == geoms.GeometryCollection :
+                    resPg = resPg.Buffer(0)
             except Exception as ex:
+                print("исключение на элементе {}".format(self))
                 print(ex)
+                #raise
                 pass
+        #print("getPolygon return {}".format(resPg))
+        
         return resPg
             
 
@@ -577,7 +744,9 @@ class dmSectionLevelCreation :
         self.doc                = doc 
         self.dmDoc              =  dmDocument(self.doc)
         if not fromDict :
+            levelElevation          = view.GenLevel.Elevation
             self.centerElevation    = centerElevation
+            self.levelElevation     = int((centerElevation - levelElevation) / dut)
             self.height             = height
             self.view               = view
         else :
@@ -618,7 +787,7 @@ class dmSectionLevelCreation :
 
     def __repr__(self) :
         return "dmEshelonLevelCreation center = {}, height = {}".format(self.centerElevation/dut, self.height/dut)
-
+    
     def calcDuctPolygon(self) :
         ducts = []
         plane 		= Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
@@ -635,32 +804,27 @@ class dmSectionLevelCreation :
         for li in self.dmDoc.linkInstances :        
             #if not  li.linkInstance.Name.Contains("E") : print(li);continue
             ducts.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
+        pgs = []
+        #print("Количество найденых воздуховодов {}".format(len(ducts)))
+        for element in ducts :
+            pgs.append(element.getPolygon(self.eshelonSolid, opt))
 
-        solids = []
-        
-        for duct in ducts :
-            solids.extend(duct.getSolidsSected(self.eshelonSolid, opt))
-
-        for solid in solids :
-            print(solid)
+        for pg in pgs :
             try :
-                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
-                face = ea.GetExtrusionBase()
-                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-                pg2 = pg.Buffer(25 * dut).Buffer(-50*dut).Buffer(25*dut)
-              
-                if pg2.Area > maxArea :
-                    #print(element.element.Category.Name)
-                    #print(element.element.Id)
-                    continue
+                finalPg = finalPg.Union(pg)
+                if type(finalPg) == geoms.GeometryCollection :
+                    finalPg = finalPg.Buffer(0)
 
-                finalPg = finalPg.Union(pg2)  
             except Exception as ex:
+                print("Ошибка при объединении воздуховодов")
                 print(ex)
-                #raise
-                continue
+                pass
+
+        #print("Количество полигонов воздуховодов {}".format(len(pgs)))
+
         self._ductPolygon = finalPg
         return finalPg
+
     
     def calcDuctSolids(self) :
         ducts = []
@@ -700,7 +864,6 @@ class dmSectionLevelCreation :
         return dm2.create_ds(self.createEshelonSolid())
 
         
-
     def calcPipePolygon(self) :
         pipes = []
         plane 		= Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
@@ -718,29 +881,19 @@ class dmSectionLevelCreation :
             #if not  li.linkInstance.Name.Contains("E") : print(li);continue
             pipes.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
-        solids = []
-        
-        for pipe in pipes :
-            solids.extend(pipe.getSolidsSected(self.eshelonSolid, opt))
-
-        for solid in solids :
+        pgs = []
+        #print("Количество найденых труб {}".format(len(pipes)))
+        for element in pipes :
+            #solids.extend(pipe.getSolidsSected(self.eshelonSolid, opt))
+            pgs.append(element.getPolygon(self.eshelonSolid, opt))
+        for pg in pgs :
             try :
-                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
-                face = ea.GetExtrusionBase()
-                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-                pg2 = pg.Buffer(25 * dut).Buffer(-50*dut).Buffer(25*dut)
-              
-                if pg2.Area > maxArea :
-                    #print(element.element.Category.Name)
-                    #print(element.element.Id)
-                    continue
+                finalPg = finalPg.Union(pg)
+            except :
+                pass
 
-                finalPg = finalPg.Union(pg2)  
-            except Exception as ex:
-                print(ex)
-                #raise
-                continue
-        self._pipePolygon = finalPg
+        #print("Количество полигонов труб {}".format(len(pgs)))
+        self._pipePolygon = finalPg.Buffer(0) if type(finalPg) == geoms.GeometryCollection else finalPg
         return finalPg
     
     def calcPipeSolids(self) :
@@ -783,29 +936,17 @@ class dmSectionLevelCreation :
             #if not  li.linkInstance.Name.Contains("E") : print(li);continue
             arches.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
-        solids = []
+        pgs = []
         
         for arch in arches :
-            #print(arch)
-            solids.extend(arch.getSolidsSected(self.eshelonSolid, opt))
-
-        for solid in solids :
+            pgs.append(arch.getPolygon(self.eshelonSolid, opt))
+        
+        for pg in pgs :
             try :
-                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
-                face = ea.GetExtrusionBase()
-                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-                pg2 = pg.Buffer(25 * dut).Buffer(-50*dut).Buffer(25*dut)
-              
-                if pg2.Area > maxArea :
-                    #print(element.element.Category.Name)
-                    #print(element.element.Id)
-                    continue
+                finalPg = finalPg.Union(pg)
+            except :
+                pass
 
-                finalPg = finalPg.Union(pg2)  
-            except Exception as ex:
-                print(ex)
-                #raise
-                continue
         self._archPolygon = finalPg
         return finalPg
     def calcWallsPolygon(self) :
@@ -824,29 +965,21 @@ class dmSectionLevelCreation :
             #if not  li.linkInstance.Name.Contains("E") : print(li);continue
             walls.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
-        solids = []
+        pgs = []
         
         for wall in walls :
-            solids.extend(wall.getSolidsSected(self.eshelonSolid, opt))
-
-        for solid in solids :
+            pgs.append(wall.getPolygon(self.eshelonSolid, opt))
+        
+        for pg in pgs :
             try :
-                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
-                face = ea.GetExtrusionBase()
-                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-                pg2 = pg.Buffer(25 * dut).Buffer(-50*dut).Buffer(25*dut)
-              
-                if pg2.Area > maxArea :
-                    #print(element.element.Category.Name)
-                    #print(element.element.Id)
-                    continue
+                finalPg = finalPg.Union(pg)
+                if type(finalPg) == geoms.GeometryCollection :
+                    finalPg = finalPg.Buffer(0)
+            except :
+                pass
+        
 
-                finalPg = finalPg.Union(pg2)  
-            except Exception as ex:
-                print(ex)
-                #raise
-                continue
-        self._archPolygon = finalPg
+        self._wallsPolygon = finalPg
         return finalPg
     
     def calcArchSolids(self) :
@@ -889,27 +1022,17 @@ class dmSectionLevelCreation :
             els.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
         solids = []
-        
+        pgs = []
         for el in els :
-            solids.extend(el.getSolidsSected(self.eshelonSolid, opt))
+            pgs.append(el.getPolygon(self.eshelonSolid, opt))
 
-        for solid in solids :
+        for pg in pgs :
             try :
-                ea = ExtrusionAnalyzer.Create(solid, plane, XYZ.BasisZ)
-                face = ea.GetExtrusionBase()
-                pg = dm2.get_PolygonFromCurveLoops(face.GetEdgesAsCurveLoops())
-                pg2 = pg.Buffer(5 * dut).Buffer(-10*dut).Buffer(5*dut)
-              
-                if pg2.Area > maxArea :
-                    #print(element.element.Category.Name)
-                    #print(element.element.Id)
-                    continue
+                finalPg = finalPg.Union(pg)
+            except :
+                pass
 
-                finalPg = finalPg.Union(pg2)  
-            except Exception as ex:
-                print(ex)
-                #raise
-                continue
+        
         self._electricalPolygon = finalPg
         return finalPg
     def calcElectricalSolids(self) :
@@ -958,14 +1081,126 @@ class dmSectionLevelCreation :
     def _getWallsPolygon(self) :
         if hasattr(self, "_wallsPolygon") : return self._wallsPolygon 
         else : return self.calcWallsPolygon()
-        
-    
-        
+                
     archPolygon     = property(_getArchPolygon)
     ductPolygon     = property(_getDuctPolygon)
     pipePolygon     = property(_getPipePolygon)
     electricalPolygon = property(_getElectricalPolygon) 
     wallsPolygon    = property(_getWallsPolygon)
+
+
+    def getFreePolygon(self, pipeD=100*dut) :
+        return self.eshelonPolygon.Difference(self.ductPolygon)\
+            .Difference(self.pipePolygon)\
+            .Difference(self.electricalPolygon)\
+            .Difference(self.archPolygon).Buffer(pipeD)
+    
+    def loadFromDb(self) :
+        """
+        Считывание полигонов для эшелонов из БД
+        """
+        qs1 = """
+        SELECT Elevation_code,
+            centerElevation,
+            levelElevation,
+            Height,
+            Plan_code,
+            ductPolygon,
+            pipePolygon,
+            electricalPolygon,
+            archPolygon,
+            wallsPolygon
+        FROM Eshelons
+        WHERE levelElevation = ?;
+            """
+        conn = getSQLConnection()
+        res     = conn.execute(sq1, self.levelElevation).fetchone()
+        if not res :
+            raise dmNotFoundSectionInDataBaseError
+        
+        self._getArchPolygon        = geoms.IO.WKTReader().Read(conn['archPolygon'])
+        self._getDuctPolygon        = geoms.IO.WKTReader().Read(conn['ductPolygon'])
+        self._getPipePolygon        = geoms.IO.WKTReader().Read(conn['pipePolygon'])
+        self._getElectricalPolygon  = geoms.IO.WKTReader().Read(conn['electricalPolygon'])
+        self._getWallsPolygon       = geoms.IO.WKTReader().Read(conn['wallsPolygon'])
+     
+    def writeToDb(self) :
+        conn = getSQLConnection()
+        #conn.row_factory = sql.Row
+
+        qs1 = """
+            SELECT Plan_code,
+                Plan_name,
+                Level_name
+            FROM PLANS
+            WHERE Plan_name = '{}';
+        """.format(self.view.Name)
+
+        row = conn.execute(qs1).fetchone()
+        if not row :
+            qs2 = """
+                INSERT INTO PLANS (
+                      Plan_name
+                  )
+                  VALUES (
+                      '{}'
+                  );
+            """.format(self.view.Name)
+            conn.execute(qs2)
+            conn.commit()
+            row = conn.execute(qs1).fetchone()
+        Plan_code = row['Plan_code']
+
+        sq3 = """
+            INSERT INTO Eshelons (
+                         wallsPolygon,
+                         archPolygon,
+                         electricalPolygon,
+                         pipePolygon,
+                         ductPolygon,
+                         Plan_code,
+                         Height,
+                         centerElevation,
+                         levelElevation
+                     )
+                     VALUES (
+                         ?,
+                         ?,
+                         ?,
+                         ?,
+                         ?,
+                         ?,
+                         ?,
+                         ?,
+                         ?
+                     );
+        """
+
+        data = (self.wallsPolygon.ToText(), 
+                self.archPolygon.ToText(), 
+                self.electricalPolygon.ToText(),
+                self.pipePolygon.ToText(),
+                self.ductPolygon.ToText(),
+                Plan_code,
+                self.height,
+                self.centerElevation,  
+                self.levelElevation  
+                )
+
+        conn.execute(sq3, data)
+        conn.commit()
+
+
+
+        
+
+
+
+
+
+        
+
+            
 
     
     def makeDict(self) :
@@ -978,9 +1213,6 @@ class dmSectionLevelCreation :
             "pipePolygon" : self.pipePolygon.ToText(),
             "wallsPolygon" : self.wallsPolygon.ToText(),
             "viewName"    : self.view.Name
-            
-
-
         }
         
 
@@ -1057,6 +1289,26 @@ class dmModels :
                 if od.PathName == index :
                     doc = od 
             return dmModel(self, index, doc,  self.models[index])
+        
+class dmPipeSolver :
+    def __init__(self, pipe, eshelons) :
+        """
+        pipe = тип dmElement
+        eshelons  - список ? с эшелонами
+        """
+        self.pipe       = pipe 
+        self.eshelons   = eshelons
+
+    
+    def checkLocation(self) :
+        """
+        Возвращает возможно ли трубу проложить по существующему положению
+        """
+        pass
+
+
+
+
         
         
 

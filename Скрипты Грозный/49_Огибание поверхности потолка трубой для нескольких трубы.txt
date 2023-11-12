@@ -31,7 +31,8 @@ from Autodesk.Revit.DB import IFC as ifc
 lib_path = r"D:\18_проектирование\98_PythonShell"
 if not lib_path in sys.path :
 	sys.path.append(lib_path)
-	
+
+from imp import reload
 import dm_connect_2 as dm
 import dm_nearest_geometry as dm1
 
