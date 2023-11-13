@@ -30,6 +30,14 @@ import sqlite3 as sql
 
 class dmNotFoundSectionInDataBaseError(Exception) :
     pass 
+class dmNotFoundLevelInDataBaseError(Exception) :
+    pass 
+class dmNotFoundPlanInDataBaseError(Exception) :
+    pass
+class dmNoLevelsOfPlan(Exception) :
+    pass 
+class dmNotFoundLevelOfPlan(Exception) :
+    pass 
 
 plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
 
@@ -84,6 +92,36 @@ def createDb(dbPath) :
     conn.row_factory = sql.Row
     return conn
 
+def tryToJoinMultiLine(ml) :
+    normMl = ml.Normalized()
+    segments = list(normMl)
+    resMl = geoms.MultiLineString.Empty
+    i = 0 
+    while segments :
+        i += 1
+        if i > 100 : raise 
+        #print('итерация {}'.format(i))
+        #print("количество в segments {}".format(len(segments)))
+        s1 = segments.pop()
+        #print("количество в segments {}".format(len(segments)))
+        newLs = None 
+        for s2 in segments :
+            if s1.Touches(s2) :
+                #print("линии пересекаются")
+                segments.remove(s2)
+                p0 = s1.Intersection(s2)
+                p1 = s1.StartPoint if s1.EndPoint.CompareTo(p0) == 0 else s1.EndPoint
+                p2 = s2.StartPoint if s2.EndPoint.CompareTo(p0) == 0 else s2.EndPoint
+                newLs = geoms.LineString(
+                            System.Array[geoms.Coordinate](
+                                [p1.Coordinate, p2.Coordinate]))
+                segments.append(newLs)
+                break 
+        if not newLs :
+            resMl = resMl.Union(s1)
+    return resMl
+
+
 def getSQLConnection() :
     global dbConnection
     
@@ -110,7 +148,7 @@ def getSQLConnection() :
     else :
         #print("создаем новое соединение с существующей базой")
         dbConnection = sql.connect(dbPath)
-        conn.row_factory = sql.Row
+        dbConnection.row_factory = sql.Row
     return dbConnection
 
 
@@ -152,6 +190,8 @@ def create_ds(l, doc =  None) :
             shapes.append(Point.Create(e))
         elif hasattr(e, "__iter__") :
             olist.extend(list(e))
+        elif type(e) == geoms.LineString  :
+            pass 
         elif type(e) == geoms.Polygon :
             olist.extend(dm2.get_CurveLoopsFromPolygon(e))
         elif isinstance(e, GeometryObject) :
@@ -292,6 +332,305 @@ def pointToSolid(pnt, size) :
 
 opt = Options()
 projectionPlane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
+
+class dmSplitPoint :
+    def __init__(self, parameter) :
+        self.parameter    = parameter     #Значение параметра точк
+    def __repr__(self) :
+        return "Параметр : {}\n".format(self.parameter)
+
+class dmSegment :
+    def __init__(self, param1, param2, lineSegment, solver) :
+        self.lineSegment = lineSegment
+        self.lineLength = lineSegment.Length 
+        self.solver     = solver
+
+        self.minSegmentLength = 150 * 3.5 * dut / self.lineLength
+
+        self.startPoint = param1
+        self.endPoint   = param2
+        self.startParameter2    = None #применяются для вычисления позиции 
+                                        #начала отрезка в случае, если он не может совпадать с 
+                                        # точкой пересечения препятстстия
+        self.endParameter2      = None  #применяются для вычисления позиции 
+                                        #конца отрезка в случае, если он не может совпадать с 
+                                        # точкой пересечения препятстстия
+        self.prev       = None
+        self.next       = None 
+        self.status     = None #0 - это сегмент на исходной отметке, 1 - обходной сегмент
+
+        self.initialElevation = self.solver.workEshelon.centerElevation
+    def __repr__(self) :
+        return "Сегмент {}, {} статус = {}\n".format(self.startPoint, self.endPoint, self.status)
+    
+    def checkSegmentLength(self) :
+        print("Проверка : {}".format(self))
+        print()
+        if self.status == 0 :
+            # если это сегмент на исходной отметке
+            if self.endPoint.parameter - self.startPoint.parameter < self.minSegmentLength :
+                print("Короткий сегмент")
+                #если длина сегмента меньше чем минимальная
+                #то такой сегмент надо удалить и объединить два соседних сегмента
+                #если это крайний сегмент то удалять не надо, надо сделать его с нулевой 
+                #длиной
+
+                if self.startPoint.parameter == 0 :
+                    self.endPoint.parameter = 0
+                    return self.next
+                if self.endPoint.parameter == 1 :
+                    self.startPoint.parameter = 1                    
+                    return None 
+                #если это не крайний сегмент то надо удалить его
+                
+                nextSegment = self.next.next
+   
+
+                self.prev.next = self.next.next 
+                self.prev.endPoint = self.next.endPoint
+                if self.next.next :
+                    self.next.next.prev = self.prev 
+                self.prev = None
+                self.next = None
+                return nextSegment
+            else :
+                return self.next 
+        else :
+            if self.endPoint.parameter - self.startPoint.parameter < self.minSegmentLength :
+                return self.next
+            return self.next
+    def findElevation (self) :
+        initialElevation = self.solver.workEshelon.centerElevation
+        ls = self.getLineString()
+        found = False 
+        if not hasattr(self,"_elevation") :
+            print("отметки не найдено, ищем")
+            if self.status == 0 :
+                print("сегмент на свободной зоне возвращаем исходный уровень")
+                return self.solver.workEshelon.centerElevation
+            print("ищем уровень")
+            for eshelon in self.solver.plan.getEshelonsByDistance(initialElevation) :
+                print('проверяем эшелон {}'.format(eshelon))
+                if ls.Within(eshelon.getFreePolygon()) :
+                    print("найдено пространство")
+                    self._elevation = eshelon.centerElevation
+                    return self._elevation
+                print("идем дальше")
+        else :
+            print("Отметка раньше найдена, возвращаем ранее вычисленное значение")
+            return self._elevation 
+    def showSegment(self) :
+        elevation = self.findElevation()
+        dp = XYZ(0,0, elevation)
+        ls = self.getLineString()
+        ds = create_ds_safe(ls, self.solver.doc, dp)
+
+    def getLineString(self) :
+        if self.startParameter2 :
+            p1 = self.lineSegment.PointAlong(self.startParameter2)
+        else :
+            p1 = self.lineSegment.PointAlong(self.startPoint.parameter)
+        if self.endParameter2 :
+            p2 = self.lineSegment.PointAlong(self.endParameter2)
+        else :
+            p2 = self.lineSegment.PointAlong(self.endPoint.parameter)
+
+        coords = System.Array[geoms.Coordinate]([p1, p2])
+        ls = geoms.LineString(coords)
+        return ls
+    def getLine(self) :
+        """
+        вычисляет Line для сегмента
+        """
+
+        if self.startParameter2 :
+            _p1 = self.lineSegment.PointAlong(self.startParameter2)
+        else :
+            _p1 = self.lineSegment.PointAlong(self.startPoint.parameter)
+        if self.endParameter2 :
+            _p2 = self.lineSegment.PointAlong(self.endParameter2)
+        else :
+            _p2 = self.lineSegment.PointAlong(self.endPoint.parameter)
+
+
+        p1 = XYZ(_p1.X, _p1.Y, self.findElevation())
+        p2 = XYZ(_p2.X, _p2.Y, self.findElevation())
+        return Line.CreateBound(p1, p2)
+
+
+    def checkConnectionSegment(self) :
+        """
+        Проверяем, чтобы вертикальный сегменты был достаточной длины чтобы разместить 
+        фитинги
+        """
+        #Проверяем только для обходных сегментов
+        if self.status == 0 : return
+        thisLine = self.getLine()
+        if self.startPoint.parameter > 0 :
+            prevSegment = self.prev.getLine()
+        else :
+            prevSegment = None 
+        if self.endPoint.parameter < 1 :
+            nextSegment = self.next.getLine()
+        else :
+            nextSegment = None 
+
+        #Если исправляем предыдущий сегмент
+        if prevSegment :
+            p01 = prevSegment.GetEndPoint(1)
+            p10 = thisLine.GetEndPoint(0)
+            l0 = Line.CreateBound(p01, p10)
+
+            if l0.Length < self.minSegmentLength :
+                #Перемычка получается меньше, поэтому нужна корректировка
+                # положения предыдущего сегмента
+                
+
+
+
+
+
+    
+
+class dmPipeLineSegmentAnalyzer :
+    """
+    класс для анализа сегментов трубы и корректировки сегментов
+    """
+    def __init__(self, pipe, solver) :
+        """
+        Вычисляем расположение  сегментов для трубы
+        """
+        self.pipe               = pipe
+        self.solver             = solver
+        self.minSegmentLength   = self.pipe.diameter * 3.5
+
+    def doCalc(self) :
+        pipeLocation = self.pipe.Location.Curve
+        p1, p2 = pipeLocation.GetEndPoint(0), pipeLocation.GetEndPoint(1)
+        startCoordinate = geoms.Coordinate(p1.X, p1.Y)
+
+        pipeSegment = geoms.LineSegment(p1.X, p1.Y, p2.X, p2.Y)
+        coords = System.Array[geoms.Coordinate]([
+            geoms.Coordinate(p1.X, p1.Y),
+            geoms.Coordinate(p2.X, p2.Y)
+        ])
+
+        eshelon = self.solver.workEshelon       
+        freePg = eshelon.getFreePolygon(self.pipe.diameter)
+        pipeLineString = geoms.LineString(coords)
+
+        initialLevelSegments = pipeLineString.Intersection(freePg)
+        print(initialLevelSegments)
+
+        pipeLen = pipeSegment.Length
+        projections = sorted(
+            [pipeSegment.ProjectionFactor(_p0)   
+             for _p0 in initialLevelSegments.Coordinates])
+        
+        print(projections)
+
+        points = [dmSplitPoint(parameter) for parameter in projections]
+        #Создаем сегменты и связываем их между собой
+        if points[0].parameter != 0 :
+            print("начинается не со свободного конца")
+            #это случай, если начало трубы попадает внутрь препятствия и по сути
+            #он становится первым обходным сегментом
+            points = [dmSplitPoint(0)] + points
+            segments = [dmSegment(pnt1, pnt2, lineSegment=pipeSegment, solver= self.solver) 
+                        for pnt1, pnt2 
+                        in zip(points[:-1], points[1:])]
+            for status, segment in enumerate(segments,1) :
+                segment.status = status %2
+        else :
+            # это на случай, когда добавлять в начало не надо, если
+            # труба начинается на свободном пространстве
+
+            print("Начинается со свободного конца. ")
+            segments = [dmSegment(pnt1, pnt2, lineSegment=pipeSegment, solver= self.solver) 
+                        for pnt1, pnt2 
+                        in zip(points[:-1], points[1:])]
+            for status, segment in enumerate(segments) :
+                segment.status = status % 2
+
+        if points[-1].parameter != 1 :
+            # Это на тот случай, если конец трубы попадает в препятствие
+            # Добавляем конечную точку
+            points.append(dmSplitPoint(1))
+            segment = dmSegment(points[-2],points[-1], 
+                                lineSegment=pipeSegment, 
+                                solver= self.solver)
+            segment.status = 1
+            segments.append(segment)
+
+        prev = None 
+        for i in range(len(segments)) :
+            if i == len(segments)-1 :
+                next =  None 
+            else :
+                next = segments[i+1]
+            current = segments[i]
+            current.prev = prev 
+            current.next = next 
+            prev = current
+
+        i =  0
+        print("отрезки сформировали")
+
+        print("Делаем проверку сегментов")
+        segment = segments[0]
+        while segment :
+            i += 1
+            if i > 100 : raise 
+            print(20*"-")
+            print(segment)
+            print('предыдущий')
+            print(segment.prev)
+            print("следующий")
+            print(segment.next)
+            print(20*"-")
+            #segment = segment.next
+            segment = segment.checkSegmentLength()
+
+        print("Проверка сделана")
+
+        print(50*"*")
+        segment = segments[0]
+        resSegments= []
+        while segment :
+            i += 1
+            if i > 100 : raise 
+            resSegments.append(segment)
+            segment = segment.next 
+
+        for segment in resSegments :
+            print(segment)
+            
+        for segment in resSegments :
+            print(segment.getLineString())
+            elevation = segment.findElevation()
+            print(elevation)
+            create_ds_safe(segment.getLineString(), 
+                           doc = self.solver.doc,
+                           dp=XYZ(0,0, elevation)
+                           )
+        return resSegments
+        
+        
+
+
+
+
+
+
+
+
+    def _getSegments(self) :
+        return []
+    
+    segments = property(_getSegments)
+        
+
+        
 
 class dmLinkedElement :
     def __init__(self, link, element) :
@@ -740,7 +1079,11 @@ class dmSectionLevelCreation :
     класс для создания уровня эшелона,
     вычисляет свободное пространство для прохода труб
     """
-    def __init__(self, doc, centerElevation=None, height=None, view = None, fromDict= None) :
+    def __init__(self, doc, 
+                 centerElevation=None, 
+                 height=None, 
+                 view = None, 
+                 fromDict= None) :
         self.doc                = doc 
         self.dmDoc              =  dmDocument(self.doc)
         if not fromDict :
@@ -1089,12 +1432,23 @@ class dmSectionLevelCreation :
     wallsPolygon    = property(_getWallsPolygon)
 
 
+
+
     def getFreePolygon(self, pipeD=100*dut) :
-        return self.eshelonPolygon.Difference(self.ductPolygon)\
-            .Difference(self.pipePolygon)\
-            .Difference(self.electricalPolygon)\
-            .Difference(self.archPolygon).Buffer(pipeD)
+        if not hasattr(self, '_freePolygon') :
+            self._freePolygon = self.eshelonPolygon.Difference(self.ductPolygon)\
+                .Difference(self.pipePolygon)\
+                .Difference(self.electricalPolygon)\
+                .Difference(self.archPolygon).Buffer(-pipeD)
+        return self._freePolygon
     
+    def showFreePolygon(self, pipeD = 100*dut) :
+        
+        ds = create_ds_safe(
+            self.getFreePolygon(pipeD=pipeD),
+                self.doc, 
+                dp= XYZ(0,0,self.centerElevation))
+         
     def loadFromDb(self) :
         """
         Считывание полигонов для эшелонов из БД
@@ -1113,17 +1467,22 @@ class dmSectionLevelCreation :
         FROM Eshelons
         WHERE levelElevation = ?;
             """
+        #print(1)
         conn = getSQLConnection()
-        res     = conn.execute(sq1, self.levelElevation).fetchone()
+        #print(2)
+        res     = conn.execute(qs1, (self.levelElevation,)).fetchone()
+        #print(res)
         if not res :
             raise dmNotFoundSectionInDataBaseError
         
-        self._getArchPolygon        = geoms.IO.WKTReader().Read(conn['archPolygon'])
-        self._getDuctPolygon        = geoms.IO.WKTReader().Read(conn['ductPolygon'])
-        self._getPipePolygon        = geoms.IO.WKTReader().Read(conn['pipePolygon'])
-        self._getElectricalPolygon  = geoms.IO.WKTReader().Read(conn['electricalPolygon'])
-        self._getWallsPolygon       = geoms.IO.WKTReader().Read(conn['wallsPolygon'])
-     
+        #print(3)
+        
+        self._getArchPolygon        = nts.IO.WKTReader().Read(res['archPolygon'])
+        self._getDuctPolygon        = nts.IO.WKTReader().Read(res['ductPolygon'])
+        self._getPipePolygon        = nts.IO.WKTReader().Read(res['pipePolygon'])
+        self._getElectricalPolygon  = nts.IO.WKTReader().Read(res['electricalPolygon'])
+        self._getWallsPolygon       = nts.IO.WKTReader().Read(res['wallsPolygon'])
+        #print(4)
     def writeToDb(self) :
         conn = getSQLConnection()
         #conn.row_factory = sql.Row
@@ -1189,20 +1548,32 @@ class dmSectionLevelCreation :
 
         conn.execute(sq3, data)
         conn.commit()
+    def createEshelonContursDs(self) :
+        """
+        Создаем DirectShape с контурами эшелона
+        """
+        #pg = geoms.Polygon.Empty
 
+        pg 	= self.ductPolygon.Union(self.pipePolygon)\
+                    .Union(self.electricalPolygon)\
+                        .Union(self.archPolygon)\
+                            .Buffer(-2*dut).Buffer(4*dut).Buffer(-2*dut)
+        tr = None
+        if not self.doc.IsModifiable :
+            tr = Transaction(self.doc, "Создаем контуры эшелона")
+            tr.Start()
+        ds = create_ds_safe(pg, self.doc)
+        ds.Location.Move(XYZ(0,0, self.centerElevation))
 
-
+        if tr : tr.Commit()
         
 
 
 
 
 
-        
 
-            
 
-    
     def makeDict(self) :
         return {
             "centerElevation"     : self.centerElevation,
@@ -1219,117 +1590,157 @@ class dmSectionLevelCreation :
     
 
 class dmPlan :
-    def __init__(self, models, model, doc, name, data) :
-        self.models     = models
-        self.model      = model
-        self.doc        = doc 
-        self.name       = name
-        self.data       = data['data']
-        self.sections   = {}
-        # создаем сечения
-        for k in self.data :
-            elevation = float(k)
-            self.sections[elevation] = dmSectionLevelCreation(
-                    doc = self.doc,
-                    fromDict = self.data[k]
-                )
+    def __init__(self, view, height = 150 * dut, width = 150 * dut) :
+        self.view               = view
+        self.doc                = view.Document  
+        self.eshelons           = None
+        self.eshelonsLevels     = None
+        self.height             = height
+        self.width              = width 
+    def loadEshelonLevels (self) :
+        conn = getSQLConnection()
+        qs1     = """
+            SELECT Plan_code
+            FROM PLANS
+            WHERE Plan_name = ?;
 
+        """
+        row = conn.execute(qs1, (self.view.Name,)).fetchone()
+        if not row :
+            raise dmNotFoundPlanInDataBaseError
+        planNum = row['Plan_code']
+        #print("Номер плана {}".format(planNum))
 
+        qs2     = """
+            SELECT DISTINCT 
+                levelElevation,
+                Plan_code
+            FROM Eshelons
+            WHERE Plan_code = ?
+            ORDER BY levelElevation
+        """
+        rows = conn.execute(qs2, (planNum,)).fetchall()
+        if not rows :
+            raise dmNoLevelsOfPlan
+        return [row['levelElevation'] for row in rows]
+    def loadEshelonByElevation(self, levelElevation) :
+        conn = getSQLConnection()
+        qs1     = """
+            SELECT Plan_code
+            FROM PLANS
+            WHERE Plan_name = ?;
+
+        """
+        row = conn.execute(qs1, (self.view.Name,)).fetchone()
+        if not row :
+            raise dmNotFoundPlanInDataBaseError
+        planNum = row['Plan_code']
+        #print("Номер плана {}".format(planNum))
+
+        qs2     = """
+            SELECT 
+                Plan_code, levelElevation, centerElevation
+            FROM Eshelons
+            WHERE Plan_code = ? AND levelElevation = ?
+            ORDER BY levelElevation
+        """
+        row = conn.execute(qs2, (planNum, levelElevation)).fetchone()
+        if not row :
+            raise dmNotFoundLevelOfPlan
+        eshelon = dmSectionLevelCreation(
+            doc=self.doc,
+            centerElevation=row['centerElevation'],
+            height=self.height,
+            view = self.view
+            )
+        eshelon.loadFromDb()
         
-        self.eshelons   = None
-    def __repr__(self) :
-        return "План {}".format(self.name)
+        return eshelon
+    
+    def loadAllEshelons(self) :
+        self.eshelons = {}
+        for level in self.loadEshelonLevels() :
+            #print(level)
+            self.eshelons[level] = self.loadEshelonByElevation(level)
+    def getNearestEshelon(self, elevation) :
+        return min(self.eshelons.values(), key = lambda x : abs(x.centerElevation - elevation))
+    
+    def getEshelonsByDistance(self, elevation) :
+        eshelons = sorted(self.eshelons.values(), 
+                          key = lambda x : abs(x.centerElevation - elevation))
+        for eshelon in eshelons :
+            yield eshelon
 
-    
-
-class dmModel :
-    def __init__(self, models, doc, name, data) :
-        #print(data.keys())
-        self.models = models
-        self.data = data
-        self.doc = doc 
-        self.pathName = name
-        self.planNames = sorted(list(data.keys()))
-    
+    def showAllFreeEshelons(self, pipeD = 150 * dut) :
+        for eshelon in self.eshelons.values() :
+            eshelon.showFreePolygon(pipeD)
     def __repr__(self) :
-        s = "Модель {}\nПланы:".format(self.pathName)
-        for pn in self.data :
-            s += "\nПлан : {}".format(pn)
-        return s
+        return "План для работы с эшелонами :\nИмя: {}".format(self.view.Name)
     
-    def __getitem__(self, index) :
-        planName = self.planNames[index]
-        return dmPlan(models=self.models, 
-                      model=self,
-                      doc = self.doc,
-                      name=planName, 
-                      data=self.data[planName])
     
-
-class dmModels :
-    def __init__(self, doc) :
-        self.doc = doc
-        self.app = doc.Application
-        with open(r"d:\eshelon.json", "r") as f :
-            self.models = json.load(f)
-            self.modelsNames = sorted(list(self.models.keys()))
-    def __repr__(self) :
-        return "Доступ к моделям"
-    def __getitem__(self, index) :
-        doc = None 
-        if isinstance(index, int) :
-            mn = self.modelsNames[index]
-            
-            for od in self.app.Documents :
-                if od.PathName == mn : 
-                    doc = od 
-            return dmModel(self, doc, mn,  self.models[mn])
-        if isinstance(index, str) :
-            for od in self.app.Documents :
-                if od.PathName == index :
-                    doc = od 
-            return dmModel(self, index, doc,  self.models[index])
-        
+         
 class dmPipeSolver :
-    def __init__(self, pipe, eshelons) :
+    def __init__(self, pipe, plan) :
         """
         pipe = тип dmElement
-        eshelons  - список ? с эшелонами
+        plan  - тип dmPlan
         """
-        self.pipe       = pipe 
-        self.eshelons   = eshelons
+        self.pipe   = pipe 
+        self.plan   = plan
+        self.doc    = plan.doc 
 
-    
+    def _getNearestEshelon (self) :
+        if not hasattr(self, "_workEshelon") :
+            p = self.pipe.Location.Curve.GetEndPoint(0)
+            self._workEshelon = self.plan.getNearestEshelon(p.Z)
+        return self._workEshelon
+    workEshelon = property(_getNearestEshelon)
+
+    def pipeEnd0Free(self) :
+        """
+        Определяет, находится ли конец 0 трубы в свободном пространстве или 
+        в замкнутом.
+        """
+        p0 = self.pipe.Location.Curve.GetEndPoint(0)
+        pnt = geoms.Point(p0.X, p0.Y)
+        return pnt.Within(self.plan.getFreePolygon())
+
     def checkLocation(self) :
         """
         Возвращает возможно ли трубу проложить по существующему положению
+        """   
+        pipeLocation = self.pipe.Location.Curve
+        p1, p2 = pipeLocation.GetEndPoint(0), pipeLocation.GetEndPoint(1)
+        eshelon = self.workEshelon
+        print(eshelon)
+        pipeSegment = geoms.LineSegment(p1.X, p1.Y, p2.X, p2.Y)
+        coords = System.Array[geoms.Coordinate]([
+            geoms.Coordinate(p1.X, p1.Y),
+            geoms.Coordinate(p2.X, p2.Y)
+        ])
+        pipeSegment = geoms.LineString(coords)
+        freePg = eshelon.getFreePolygon(self.pipe.diameter)
+        return pipeSegment.Within(freePg)
+
+    def solvePipe(self) :
         """
-        pass
+        Нахождение трассы для трубы в одной вертикальной плоскости
+        """
 
-
-
-
+        #если нет пересечений, заканчиваем работу
+        if self.checkLocation() :
+            return 
         
+        minSegmentLength = self.pipe.diameter * 3.5
+
+        lineAnalyzer = dmPipeLineSegmentAnalyzer(
+            pipe=self.pipe, 
+            solver=self)
         
-
-
-
+        segment = lineAnalyzer.doCalc()
+        
+        return segment
     
-
-    
-
-
-
-    
-    
-
-
-
-
-
         
 
-
-    
-
-    
+        
