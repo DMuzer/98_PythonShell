@@ -23,6 +23,7 @@ if NTSPath not in currentReferences :
     clr.AddReferenceToFileAndPath(NTSPath)
 if SQLPath not in currentReferences :
     clr.AddReferenceToFileAndPath(SQLPath)
+clr.AddReferenceToFileAndPath(SQLPath)   
 import NetTopologySuite as nts
 from NetTopologySuite.Geometries import *
 import NetTopologySuite.Geometries as geoms
@@ -346,6 +347,7 @@ class dmSegment :
         self.solver     = solver
 
         self.minSegmentLength = 150 * 3.5 * dut / self.lineLength
+        self.minSegmentLengthStd = 150 * 3.5 * dut
 
         self.startPoint = param1
         self.endPoint   = param2
@@ -407,18 +409,22 @@ class dmSegment :
             print("отметки не найдено, ищем")
             if self.status == 0 :
                 print("сегмент на свободной зоне возвращаем исходный уровень")
-                return self.solver.workEshelon.centerElevation
+                found = True 
+                self._elevation = self.solver.workEshelon.centerElevation
+                return self._elevation
             print("ищем уровень")
             for eshelon in self.solver.plan.getEshelonsByDistance(initialElevation) :
                 print('проверяем эшелон {}'.format(eshelon))
                 if ls.Within(eshelon.getFreePolygon()) :
                     print("найдено пространство")
+                    found = True 
                     self._elevation = eshelon.centerElevation
                     return self._elevation
                 print("идем дальше")
         else :
             print("Отметка раньше найдена, возвращаем ранее вычисленное значение")
             return self._elevation 
+        return found
     def showSegment(self) :
         elevation = self.findElevation()
         dp = XYZ(0,0, elevation)
@@ -464,12 +470,17 @@ class dmSegment :
         фитинги
         """
         #Проверяем только для обходных сегментов
-        if self.status == 0 : return
+        if self.status == 0 : 
+            print('Сегмент не обходной ничего не делаем возвращаемся')
+            return
+        print("Сегмент обходной, пробуем проверить")
         thisLine = self.getLine()
+        print("Координаты концов сегмента {}, {}".format(thisLine.GetEndPoint(0), thisLine.GetEndPoint(1)))
         if self.startPoint.parameter > 0 :
             prevSegment = self.prev.getLine()
         else :
             prevSegment = None 
+        
         if self.endPoint.parameter < 1 :
             nextSegment = self.next.getLine()
         else :
@@ -477,14 +488,41 @@ class dmSegment :
 
         #Если исправляем предыдущий сегмент
         if prevSegment :
+            print("Исправляем предыдущий сегменты")
             p01 = prevSegment.GetEndPoint(1)
             p10 = thisLine.GetEndPoint(0)
+            print("Координаты конца предыдущего сегмента {}".format(p01))
             l0 = Line.CreateBound(p01, p10)
+            print("Длина соединяющего сегмента {} минимального {}".format(l0.Length/dut, self.minSegmentLengthStd/dut))
 
-            if l0.Length < self.minSegmentLength :
+            if l0.Length < self.minSegmentLengthStd :
                 #Перемычка получается меньше, поэтому нужна корректировка
                 # положения предыдущего сегмента
+                print('нужная корректировка')
+                #Длина смещения вычисл
+                dl = ((self.minSegmentLengthStd ** 2 - l0.Length ** 2) ** 0.5) / self.lineLength
+                print("величина смещения {}".format(dl))
+                self.prev.endParameter2 = self.prev.endPoint.parameter -  dl 
+
+        if nextSegment :
+
+            print("Исправляем следующий сегмент")
+            p20 = nextSegment.GetEndPoint(0)
+            p11 = thisLine.GetEndPoint(1)
+            l2 = Line.CreateBound(p11, p20)
+            print("Длина соединяющего сегмента {} минимального {}".format(l2.Length/dut, self.minSegmentLengthStd/dut))
+
+            if l2.Length < self.minSegmentLengthStd :
+                #Перемычка получается меньше, поэтому нужна корректировка
+                # положения предыдущего сегмента
+                print('нужная корректировка')
+                #Длина смещения вычисл
+                dl = ((self.minSegmentLengthStd ** 2 - l2.Length ** 2) ** 0.5) / self.lineLength
+                print("величина смещения {}".format(dl))
+                self.next.startParameter2 = self.next.startPoint.parameter +  dl 
+
                 
+
 
 
 
@@ -609,10 +647,46 @@ class dmPipeLineSegmentAnalyzer :
             print(segment.getLineString())
             elevation = segment.findElevation()
             print(elevation)
-            create_ds_safe(segment.getLineString(), 
+        print(20* "*") 
+        print('Проверяем на возможность минимальный вертикальный сегмента')
+        for segment in resSegments :
+            segment.checkConnectionSegment()
+
+        for segment in resSegments :
+            create_ds_safe(segment.getLine(), 
                            doc = self.solver.doc,
-                           dp=XYZ(0,0, elevation)
+                           #dp=XYZ(0,0, elevation)
                            )
+            
+        newPipes = []
+        tr = Transaction(self.solver.doc, "newPipes") 
+        tr.Start()
+
+        for segment in segments :
+            newLocation = segment.getLine()
+            newPipe = self.pipe.copy()
+            newPipe.Location.Curve = newLocation
+            newPipes.append(newPipe)
+
+        for pipe1, pipe2 in zip(newPipes[:-1], newPipes[1:]) :
+            p11 = pipe1.Location.Curve.GetEndPoint(1)
+            p20 = pipe2.Location.Curve.GetEndPoint(0)
+            newLocation = Line.CreateBound(p11, p20)
+            newPipe = self.pipe.copy()
+            newPipe.Location.Curve = newLocation
+            c11 = pipe1.connectorsDict[1]
+            c20 = pipe2.connectorsDict[0]
+            c30 = newPipe.connectorsDict[0]
+            c31 = newPipe.connectorsDict[1]
+            self.solver.doc.Create.NewElbowFitting(c11, c30)
+            self.solver.doc.Create.NewElbowFitting(c31, c20)
+
+
+
+
+        
+
+        tr.Commit()
         return resSegments
         
         
@@ -1738,6 +1812,9 @@ class dmPipeSolver :
             solver=self)
         
         segment = lineAnalyzer.doCalc()
+
+        
+
         
         return segment
     
