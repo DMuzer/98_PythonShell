@@ -1,0 +1,89 @@
+# Поиск проблемных объектов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+		
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+	
+linkId = 7921631
+linkEId = 3091655
+link = doc.GetElement(ElementId(linkId))
+tTrans = link.GetTotalTransform()
+ldoc = link.GetLinkDocument()
+le = ldoc.GetElement(ElementId(linkEId))
+opt = Options()
+
+geometry = le.Geometry[opt].GetTransformed(tTrans)
+dm.create_ds_safe(geometry, doc)
+bb = le.get_BoundingBox(None)
+#lc = le.Location.Curve.CreateTransformed(tTrans)
+#dm.create_ds_safe(lc, doc)
+
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
+workPlan = views["План увязка отм. 0.000"]
+plan = dm.dmPlan(workPlan)
+plan.loadAllEshelons()
+#eshelon = plan.eshelons[3425]
+plan.showAllFreeEshelons()
+
+
+#dm.create_ds_safe(eshelon.archPolygon, doc)
+dm.create_ds_safe(apg, doc)
+#dm.create_ds_safe(eshelon.ductPolygon, doc)
+
+#dm.create_ds_safe(eshelon.pipePolygon, doc)
+#dm.create_ds_safe(eshelon.electricalPolygon, doc)
+
+
+
+	
+	

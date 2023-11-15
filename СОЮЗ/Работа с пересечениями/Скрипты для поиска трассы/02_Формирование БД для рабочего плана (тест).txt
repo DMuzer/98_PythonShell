@@ -1,4 +1,4 @@
-# Загрузка эшелонов из БД выполнение обходов на тестовой базе
+# Построение эшелонов и запись в БД
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -23,6 +23,15 @@ import NetTopologySuite.Geometries as geoms
 libFolder = r"D:\18_проектирование\98_PythonShell"
 if libFolder not in sys.path :
 	sys.path.append(libFolder)
+	
+qs1 = """
+            SELECT rowid,
+            Plan_code,
+                Plan_name,
+                Level_name
+            FROM PLANS
+            WHERE Plan_name = 'Имя плана1';
+        """
 	
 try :
 	reload(dm)
@@ -54,6 +63,8 @@ except Exception as ex :
 	print("импорт dm_connect_2 ok")
 	#raise
 	
+	
+
 
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
@@ -63,23 +74,6 @@ workPlan = views["В_Этаж 01_Водопровод_Противопожарн
 targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
 
-def getViewBB(view, startElevation, ) :
-	bb = workPlan.get_BoundingBox(None)
-	
-	bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
-	topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
-	
-	bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
-	minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
-	maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
-
-	viewSolid 			= dm.minMaxToSolid(minPnt, maxPnt)
-	viewBB 				= BoundingBoxXYZ() 
-	viewBB.Min 			= bbMin
-	viewBB.Max			= bbMax
-
 dmDoc 				= dm.dmDocument(doc)
 
 tt1		= time.time()
@@ -87,46 +81,12 @@ tt1		= time.time()
 solids 		= []
 elements 	= []
 
-	
-opt = Options()
-
-eshelons = {}
-eDicts = {}
-viewRange 			= workPlan.GetViewRange()
-bottomElevation 	= workPlan.GenLevel.Elevation 
-centerElevation = bottomElevation + 2650 * dut
 height = 180 * dut	
-
 plan = dm.dmPlan(workPlan)
-
-plan.loadAllEshelons()
-#plan.eshelons[2975].showFreePolygon(150*dut)
-#plan.showAllFreeEshelons(150*dut)
-pipe = dm2.dmElement(1041409)
-solver = dm.dmPipeSolver(pipe, plan)
-chl=solver.checkLocation()
-print("Прямой проход: {}".format(solver.checkLocation()))
-segment = solver.solvePipe()
-
-
-
-#ds = dm.create_ds_safe(pg, doc)
-
-#ds.Location.Move(XYZ(0,0, centerElevation))
-
-#ds2 = eshelon.showEshelonSolid()
-
-	
-	
-		
-
+plan.createEshelons(500, 3950)
 
 tt2 = time.time()
 print("Время выполнения {}".format(tt2-tt1))
-#raise
-
-
-
 
 
 	

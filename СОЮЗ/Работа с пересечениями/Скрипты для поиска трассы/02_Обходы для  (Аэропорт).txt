@@ -1,4 +1,4 @@
-# Загрузка эшелонов из БД выполнение обходов на тестовой базе
+# Загрузка эшелонов из БД выполнение обходов на файле аэропорт
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -58,27 +58,11 @@ except Exception as ex :
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
-workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+#workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+workPlan = views["План увязка отм. 0.000"]
 #workPlan = uidoc.ActiveView
-targetView = views["План1"]
+#targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
-
-def getViewBB(view, startElevation, ) :
-	bb = workPlan.get_BoundingBox(None)
-	
-	bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
-	topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
-	
-	bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
-	minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
-	maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
-
-	viewSolid 			= dm.minMaxToSolid(minPnt, maxPnt)
-	viewBB 				= BoundingBoxXYZ() 
-	viewBB.Min 			= bbMin
-	viewBB.Max			= bbMax
 
 dmDoc 				= dm.dmDocument(doc)
 
@@ -102,11 +86,14 @@ plan = dm.dmPlan(workPlan)
 plan.loadAllEshelons()
 #plan.eshelons[2975].showFreePolygon(150*dut)
 #plan.showAllFreeEshelons(150*dut)
-pipe = dm2.dmElement(1041409)
+pipe = dm2.dmElement(9043777)
 solver = dm.dmPipeSolver(pipe, plan)
 chl=solver.checkLocation()
 print("Прямой проход: {}".format(solver.checkLocation()))
+print(100*"*")
+print("Делаем трассировку")
 segment = solver.solvePipe()
+print(100*"*")
 
 
 
@@ -115,6 +102,8 @@ segment = solver.solvePipe()
 #ds.Location.Move(XYZ(0,0, centerElevation))
 
 #ds2 = eshelon.showEshelonSolid()
+
+#dm.create_ds_safe(plan.eshelons[3425].pipePolygon, doc, XYZ(0,0, plan.eshelons[3425].centerElevation))
 
 	
 	

@@ -1,0 +1,109 @@
+# Поиск проблемных объектов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+		
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
+workPlan = views["План увязка отм. 0.000"]
+
+ids = [(664815 , 7921622),
+(664817 , 7921622),
+(664877 , 7921622), 
+(959606 , 7921628), 
+(959608 , 7921628), 
+(1668856 , 7921628), 
+( 1668872 , 7921628), 
+(1668891 , 7921628 )]
+centerElevation = 3400 * dut
+eshelon = dm.dmSectionLevelCreation(
+            doc=doc,
+            centerElevation=centerElevation,
+            height=100 * dut,
+            view = workPlan
+            )
+
+linkId = 7921631
+linkEId = 3091655
+
+for linkEId, linkId in ids :
+	
+	link = doc.GetElement(ElementId(linkId))
+	lnk = dm.dmLinkInstance(link)
+	
+	
+	
+	tTrans = link.GetTotalTransform()
+	ldoc = link.GetLinkDocument()
+	le = ldoc.GetElement(ElementId(linkEId))
+	opt = Options()
+	
+	lnkE = dm.dmLinkedElement(lnk, le)
+	print(lnkE)
+	
+	geometry = le.Geometry[opt].GetTransformed(tTrans)
+	pg = lnkE.getPolygon(eshelon.eshelonSolid)
+	print(lnkE)
+	print(pg.Area)
+	dm.create_ds_safe(pg, doc)
+	dm.create_ds_safe(geometry, doc)
+	
+	sld = lnkE.getSolids(opt)
+	dm.create_ds_safe(sld, doc)
+
+
+
+
+
+	
+	

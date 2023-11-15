@@ -1,4 +1,4 @@
-# Построение эшелонов
+# Построение эшелонов и запись в БД
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -64,30 +64,8 @@ except Exception as ex :
 	#raise
 	
 	
-def drawPolygonAsFilledRegion(pg) :
-	tr = None
-	if not tr :
-		tr = Transaction(doc, "create filled region")
-		tr.Start()
-		
-	cls = dm3.get_CurveLoopsFromPolygon(pg)
-	try :
-		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
-	except Exception as ex:
-		print(ex)
-		pg = pg.Buffer(-20 * dut).Buffer(20 * dut)
-		cls = dm3.get_CurveLoopsFromPolygon(pg)
-		fr = FilledRegion.Create(doc, typeId, uidoc.ActiveView.Id, cls)
-		pass
-		
-	
-	if tr : tr.Commit()
-	return fr
-	
 
-excludeIds = [8900694, 2613213, 2613847, 2613883, 2613919, 2613955, 2613991, 2614027,
-	2614063, 2614099, 2626423, 2630012, 2632819, 2638570, 2639485, 2640400, 2648760, 2711124, 2711469,
-	3101063, 3101385, 3101744,  3101806, 3101883, 3102562,  3102612, 3103138, 3865769 ]
+
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
@@ -95,23 +73,6 @@ workPlan = views["В_Этаж 01_Водопровод_Противопожарн
 #workPlan = uidoc.ActiveView
 targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
-
-def getViewBB(view, startElevation, ) :
-	bb = workPlan.get_BoundingBox(None)
-	
-	bottomElevation 	= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.BottomClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.BottomClipPlane)
-	topElevation 		= doc.GetElement(viewRange.GetLevelId(PlanViewPlane.TopClipPlane)).Elevation\
-								+ viewRange.GetOffset(PlanViewPlane.TopClipPlane)
-	
-	bbMin, bbMax = bb.Transform.OfPoint(bb.Min), bb.Transform.OfPoint(bb.Max)
-	minPnt = XYZ(bbMin.X, bbMin.Y, bottomElevation)	
-	maxPnt = XYZ(bbMax.X, bbMax.Y, topElevation)
-
-	viewSolid 			= dm.minMaxToSolid(minPnt, maxPnt)
-	viewBB 				= BoundingBoxXYZ() 
-	viewBB.Min 			= bbMin
-	viewBB.Max			= bbMax
 
 dmDoc 				= dm.dmDocument(doc)
 
@@ -133,9 +94,9 @@ print("цикл")
 
 tr = Transaction(doc, "1")
 tr.Start()
-for i in range(0,250) :
+for i in range(500,3990, 25) :
 
-	centerElevation = bottomElevation +  500* dut + 25 * i	* dut
+	centerElevation = bottomElevation +  i * dut
 	levelElevation = round((centerElevation - bottomElevation) / dut)
 	print(levelElevation)
 	#if centerElevation / dut > 4000 : break
@@ -145,7 +106,9 @@ for i in range(0,250) :
 		height = height,
 		view = workPlan
 		)
-	eshelons[centerElevation] = eshelon
+	#eshelons[centerElevation] = eshelon
+	
+	"""
 		
 	pg 			= geoms.Polygon.Empty
 	pgDuct 		= eshelon.calcDuctPolygon()
@@ -153,31 +116,18 @@ for i in range(0,250) :
 	pgPipe 		= eshelon.calcPipePolygon()
 	pgElectrical = eshelon.calcElectricalPolygon()
 	pgArch 		= eshelon.calcArchPolygon()
-	
-	#pg 			= pgDuct.Union(pgPipe).Union(pgElectrical).Union(pgArch)
-	#pg = pgArch
+
 	pg 			= pgDuct.Union(pgPipe).Union(pgElectrical).Union(pgArch).Buffer(-2*dut).Buffer(4*dut).Buffer(-2*dut)
 	pg 			= pg.Buffer(150 * dut)
 	
-	#print(i)
+
 	
 	ds = dm.create_ds_safe(pg, doc)
 	
 	ds.Location.Move(XYZ(0,0, centerElevation))
 	
-	#ds2 = eshelon.showEshelonSolid()
+	"""
 	
-		
-	
-		
-	#dm.drawPolygonAsFilledRegion(
-	#	eshelon.eshelonPolygon, 
-	#	doc, 
-	#	targetView
-	#	)
-		
-	#dm.create_ds(eshelon.eshelonSolid, doc)
-	#eDicts[centerElevation] = eshelon.makeDict()
 	
 	eshelon.writeToDb()
 

@@ -17,6 +17,9 @@ NTSPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\Ne
 SQLPath = r"C:\Users\Дмитрий\AppData\Roaming\Autodesk\Revit\Addins\2023\RevitPythonShell\IronPython.SQLite.dll"
 currentReferences = [assembly.Location for assembly in clr.References]
 
+stopModelNameStr = ["(ТХ)"]
+pipeGap = 12.5 * dut
+
 if buffersPath not in currentReferences :
     clr.AddReferenceToFileAndPath(buffersPath)
 if NTSPath not in currentReferences :
@@ -360,18 +363,20 @@ class dmSegment :
         self.prev       = None
         self.next       = None 
         self.status     = None #0 - это сегмент на исходной отметке, 1 - обходной сегмент
+        self.translateX = None #Компонента X вектора смещения сегмента в сторону 
+        self.translateY = None #Компонента Y вектора смещения сегмента в сторону
 
         self.initialElevation = self.solver.workEshelon.centerElevation
     def __repr__(self) :
         return "Сегмент {}, {} статус = {}\n".format(self.startPoint, self.endPoint, self.status)
     
     def checkSegmentLength(self) :
-        print("Проверка : {}".format(self))
-        print()
+        # print("Проверка : {}".format(self))
+        # print()
         if self.status == 0 :
             # если это сегмент на исходной отметке
             if self.endPoint.parameter - self.startPoint.parameter < self.minSegmentLength :
-                print("Короткий сегмент")
+                # print("Короткий сегмент")
                 #если длина сегмента меньше чем минимальная
                 #то такой сегмент надо удалить и объединить два соседних сегмента
                 #если это крайний сегмент то удалять не надо, надо сделать его с нулевой 
@@ -388,10 +393,14 @@ class dmSegment :
                 nextSegment = self.next.next
    
 
-                self.prev.next = self.next.next 
+                self.prev.next = self.next.next
                 self.prev.endPoint = self.next.endPoint
+                
                 if self.next.next :
                     self.next.next.prev = self.prev 
+
+                self.next.next = None
+                self.next.prev = None 
                 self.prev = None
                 self.next = None
                 return nextSegment
@@ -406,25 +415,80 @@ class dmSegment :
         ls = self.getLineString()
         found = False 
         if not hasattr(self,"_elevation") :
-            print("отметки не найдено, ищем")
+            #print("отметки не найдено, ищем")
             if self.status == 0 :
-                print("сегмент на свободной зоне возвращаем исходный уровень")
+                #print("сегмент на свободной зоне возвращаем исходный уровень")
                 found = True 
                 self._elevation = self.solver.workEshelon.centerElevation
                 return self._elevation
-            print("ищем уровень")
+            #print("ищем уровень")
             for eshelon in self.solver.plan.getEshelonsByDistance(initialElevation) :
-                print('проверяем эшелон {}'.format(eshelon))
+                #print('проверяем эшелон {}'.format(eshelon))
                 if ls.Within(eshelon.getFreePolygon()) :
-                    print("найдено пространство")
+                    #print("найдено пространство")
                     found = True 
                     self._elevation = eshelon.centerElevation
                     return self._elevation
-                print("идем дальше")
+                #print("идем дальше")
         else :
-            print("Отметка раньше найдена, возвращаем ранее вычисленное значение")
+            #print("Отметка раньше найдена, возвращаем ранее вычисленное значение")
             return self._elevation 
-        return found
+        return None
+    def findSideBypass(self) :
+        """
+        Нахождение варианта обхода в сторону на том же уровне
+        """
+        step        = 50 * dut # шаг в сторону
+        maxDist     = 3000 * dut # максимальная длина смещения
+
+        p1 = self.lineSegment.PointAlong(self.startPoint.parameter)
+        p2 = self.lineSegment.PointAlong(self.endPoint.parameter)
+
+        p1 = XYZ(p1.X, p1.Y, 0)
+        p2 = XYZ(p2.X, p2.Y, 0)
+        dVector = p2 - p1
+        dVectorE = dVector.Normalize()
+        dVectorN = XYZ(dVectorE.Y, - dVectorE.X, 0)
+
+        # Циклически проверяем возможность прокладки отрезка удаляясь от исходной 
+        # позиции
+        found = False 
+        dist    = 100 * dut 
+        
+        while dist <= maxDist :
+            p1_ = p1 + dVectorN * dist
+            p2_ = p2 + dVectorN * dist 
+            coords = System.Array[geoms.Coordinate]([
+                geoms.Coordinate(p1_.X, p1_.Y),
+                geoms.Coordinate(p2_.X, p2_.Y)
+            ])
+            newLs = geoms.LineString(coords)
+            if newLs.Within(self.solver.workEshelon.getFreePolygon(150*dut)) :
+                found = True 
+                self.translateX = (dVectorN * dist).X
+                self.translateY = (dVectorN * dist).Y
+                self._elevation = self.solver.workEshelon.centerElevation
+                break 
+            if dist > 0 :
+                dist = -dist 
+            else :
+                dist = -dist + step
+        if not found :
+            # print("Обход не найден")
+            return None 
+  
+        else : 
+            # print("Обход найден")
+            # print("dist = {}".format(dist))
+            # print(self.translateX, self.translateY)
+            return self._elevation
+
+
+
+        
+
+        
+
     def showSegment(self) :
         elevation = self.findElevation()
         dp = XYZ(0,0, elevation)
@@ -441,13 +505,22 @@ class dmSegment :
         else :
             p2 = self.lineSegment.PointAlong(self.endPoint.parameter)
 
+        if not self.translateX is None :
+            #Сюда вставляем код для смещения сегмента
+            p1 = geoms.Coordinate(p1.X + self.translateX, p1.Y + self.translateY)
+            p2 = geoms.Coordinate(p2.X + self.translateX, p2.Y + self.translateY)
+            pass
+
         coords = System.Array[geoms.Coordinate]([p1, p2])
         ls = geoms.LineString(coords)
         return ls
     def getLine(self) :
         """
         вычисляет Line для сегмента
+        если отметка не найдена, то возвращаем None
         """
+        if self.findElevation() is None :
+            return None 
 
         if self.startParameter2 :
             _p1 = self.lineSegment.PointAlong(self.startParameter2)
@@ -458,10 +531,24 @@ class dmSegment :
         else :
             _p2 = self.lineSegment.PointAlong(self.endPoint.parameter)
 
+        if self.translateX is not None :
+            # сюда вставляем код для смещения сегмента
+            # print("Делаем линию со смещением в сторону")
+            _p1 = geoms.Coordinate(_p1.X + self.translateX, _p1.Y + self.translateY)
+            _p2 = geoms.Coordinate(_p2.X + self.translateX, _p2.Y + self.translateY)
+        else :
+            # print("без смещения в сторону")
+            pass 
+
 
         p1 = XYZ(_p1.X, _p1.Y, self.findElevation())
         p2 = XYZ(_p2.X, _p2.Y, self.findElevation())
-        return Line.CreateBound(p1, p2)
+        try :
+            # print("формирование линии без ошибок")
+            return Line.CreateBound(p1, p2)
+        except :
+            # print("Ошибка при формировании линии")
+            pass
 
 
     def checkConnectionSegment(self) :
@@ -471,11 +558,14 @@ class dmSegment :
         """
         #Проверяем только для обходных сегментов
         if self.status == 0 : 
-            print('Сегмент не обходной ничего не делаем возвращаемся')
+            # print('Сегмент не обходной ничего не делаем возвращаемся')
             return
-        print("Сегмент обходной, пробуем проверить")
+        # print("Сегмент обходной, пробуем проверить")
         thisLine = self.getLine()
-        print("Координаты концов сегмента {}, {}".format(thisLine.GetEndPoint(0), thisLine.GetEndPoint(1)))
+        if not thisLine :
+            return 
+        # print("Координаты концов сегмента {}, {}".format(thisLine.GetEndPoint(0), thisLine.GetEndPoint(1)))
+
         if self.startPoint.parameter > 0 :
             prevSegment = self.prev.getLine()
         else :
@@ -488,38 +578,47 @@ class dmSegment :
 
         #Если исправляем предыдущий сегмент
         if prevSegment :
-            print("Исправляем предыдущий сегменты")
+            # print("Исправляем предыдущий сегменты")
             p01 = prevSegment.GetEndPoint(1)
             p10 = thisLine.GetEndPoint(0)
-            print("Координаты конца предыдущего сегмента {}".format(p01))
-            l0 = Line.CreateBound(p01, p10)
-            print("Длина соединяющего сегмента {} минимального {}".format(l0.Length/dut, self.minSegmentLengthStd/dut))
+            # print("Координаты конца предыдущего сегмента {}".format(p01))
+            try :
+                l0 = Line.CreateBound(p01, p10)
+                # print("Длина соединяющего сегмента {} минимального {}".format(l0.Length/dut, self.minSegmentLengthStd/dut))
 
-            if l0.Length < self.minSegmentLengthStd :
-                #Перемычка получается меньше, поэтому нужна корректировка
-                # положения предыдущего сегмента
-                print('нужная корректировка')
-                #Длина смещения вычисл
-                dl = ((self.minSegmentLengthStd ** 2 - l0.Length ** 2) ** 0.5) / self.lineLength
-                print("величина смещения {}".format(dl))
-                self.prev.endParameter2 = self.prev.endPoint.parameter -  dl 
+                if l0.Length < self.minSegmentLengthStd :
+                    #Перемычка получается меньше, поэтому нужна корректировка
+                    # положения предыдущего сегмента
+                    # print('нужна корректировка')
+                    #Длина смещения вычисл
+                    dl = ((self.minSegmentLengthStd ** 2 - l0.Length ** 2) ** 0.5) / self.lineLength
+                    # print("величина смещения {}".format(dl))
+                    self.prev.endParameter2 = self.prev.endPoint.parameter -  dl 
+            except :
+                print("Ошибка при корректировке предыдущего сегмента для того чтобы вставить фиттинг")
+                pass
 
         if nextSegment :
 
-            print("Исправляем следующий сегмент")
+            # print("Исправляем следующий сегмент")
             p20 = nextSegment.GetEndPoint(0)
             p11 = thisLine.GetEndPoint(1)
-            l2 = Line.CreateBound(p11, p20)
-            print("Длина соединяющего сегмента {} минимального {}".format(l2.Length/dut, self.minSegmentLengthStd/dut))
+            try :
+                l2 = Line.CreateBound(p11, p20)
+                # print("Длина соединяющего сегмента {} минимального {}".format(l2.Length/dut, self.minSegmentLengthStd/dut))
 
-            if l2.Length < self.minSegmentLengthStd :
-                #Перемычка получается меньше, поэтому нужна корректировка
-                # положения предыдущего сегмента
-                print('нужная корректировка')
-                #Длина смещения вычисл
-                dl = ((self.minSegmentLengthStd ** 2 - l2.Length ** 2) ** 0.5) / self.lineLength
-                print("величина смещения {}".format(dl))
-                self.next.startParameter2 = self.next.startPoint.parameter +  dl 
+                if l2.Length < self.minSegmentLengthStd :
+                    #Перемычка получается меньше, поэтому нужна корректировка
+                    # положения предыдущего сегмента
+                    # print('нужная корректировка')
+                    #Длина смещения вычисл
+                    dl = ((self.minSegmentLengthStd ** 2 - l2.Length ** 2) ** 0.5) / self.lineLength
+                    # print("величина смещения {}".format(dl))
+                    self.next.startParameter2 = self.next.startPoint.parameter +  dl 
+            except :
+
+                print("Ошибка при корректировке следующего сегмента для того чтобы вставить фиттинг")
+
 
                 
 
@@ -543,6 +642,8 @@ class dmPipeLineSegmentAnalyzer :
         self.minSegmentLength   = self.pipe.diameter * 3.5
 
     def doCalc(self) :
+        print(100*"-")
+        print("doCalc")
         pipeLocation = self.pipe.Location.Curve
         p1, p2 = pipeLocation.GetEndPoint(0), pipeLocation.GetEndPoint(1)
         startCoordinate = geoms.Coordinate(p1.X, p1.Y)
@@ -558,19 +659,19 @@ class dmPipeLineSegmentAnalyzer :
         pipeLineString = geoms.LineString(coords)
 
         initialLevelSegments = pipeLineString.Intersection(freePg)
-        print(initialLevelSegments)
+        #print(initialLevelSegments)
 
         pipeLen = pipeSegment.Length
         projections = sorted(
             [pipeSegment.ProjectionFactor(_p0)   
              for _p0 in initialLevelSegments.Coordinates])
         
-        print(projections)
+        #print(projections)
 
         points = [dmSplitPoint(parameter) for parameter in projections]
         #Создаем сегменты и связываем их между собой
         if points[0].parameter != 0 :
-            print("начинается не со свободного конца")
+            #print("начинается не со свободного конца")
             #это случай, если начало трубы попадает внутрь препятствия и по сути
             #он становится первым обходным сегментом
             points = [dmSplitPoint(0)] + points
@@ -583,7 +684,7 @@ class dmPipeLineSegmentAnalyzer :
             # это на случай, когда добавлять в начало не надо, если
             # труба начинается на свободном пространстве
 
-            print("Начинается со свободного конца. ")
+            #print("Начинается со свободного конца. ")
             segments = [dmSegment(pnt1, pnt2, lineSegment=pipeSegment, solver= self.solver) 
                         for pnt1, pnt2 
                         in zip(points[:-1], points[1:])]
@@ -612,26 +713,30 @@ class dmPipeLineSegmentAnalyzer :
             prev = current
 
         i =  0
-        print("отрезки сформировали")
+        # print("отрезки сформировали")
 
-        print("Делаем проверку сегментов")
+        # print("Делаем проверку сегментов")
         segment = segments[0]
+        newSegments = [segment]
         while segment :
             i += 1
             if i > 100 : raise 
-            print(20*"-")
-            print(segment)
-            print('предыдущий')
-            print(segment.prev)
-            print("следующий")
-            print(segment.next)
-            print(20*"-")
+            # print(20*"-")
+            # print(segment)
+            # print('предыдущий')
+            # print(segment.prev)
+            # print("следующий")
+            # print(segment.next)
+            # print(20*"-")
             #segment = segment.next
             segment = segment.checkSegmentLength()
+            newSegments.append(segment)
 
-        print("Проверка сделана")
+        # print("Проверка сделана")
+        # print("Количество сегментов в трассе {}".format(len(segments)))
+        # print("Количество сегментов в трассе {}".format(len(newSegments)))
 
-        print(50*"*")
+        # print(50*"*")
         segment = segments[0]
         resSegments= []
         while segment :
@@ -642,50 +747,83 @@ class dmPipeLineSegmentAnalyzer :
 
         for segment in resSegments :
             print(segment)
+
+        # print(100*"*")
+        # print("Нахождение отметки обхода или обходного пути")
             
         for segment in resSegments :
             print(segment.getLineString())
             elevation = segment.findElevation()
-            print(elevation)
-        print(20* "*") 
-        print('Проверяем на возможность минимальный вертикальный сегмента')
-        for segment in resSegments :
+            if elevation is None :
+                # print("Ищем обход в сторону")
+                elevation = segment.findSideBypass()
+
+
+            # print(elevation)
+        # print(20* "*") 
+
+        # print('Проверяем на наличие горизонтального смещения')
+        # for num, segment in enumerate(resSegments) :
+            # print("Проверяем сегмент {}".format(num))
+            # print("смещения {} {}".format(segment.translateX, segment.translateY))
+            
+
+        # print('Проверяем на возможность минимальный вертикальный сегмента')
+        for num, segment in enumerate(resSegments) :
+            # print("Проверяем сегмент {}".format(num))
             segment.checkConnectionSegment()
 
-        for segment in resSegments :
-            create_ds_safe(segment.getLine(), 
-                           doc = self.solver.doc,
-                           #dp=XYZ(0,0, elevation)
-                           )
+        # print("Проверка на соединяющие сегменты окончена")
+        # print(100* "*")
+
+        # for segment in resSegments :
+        #     create_ds_safe(segment.getLine(), 
+        #                    doc = self.solver.doc,
+        #                    dp=XYZ(0,0, elevation)
+        #                    )
             
         newPipes = []
         tr = Transaction(self.solver.doc, "newPipes") 
         tr.Start()
+        # print(100 * "-")
+        # print("создаем трубы")
 
-        for segment in segments :
+        for segment in resSegments :
             newLocation = segment.getLine()
+            if not newLocation :
+                newPipes.append(None)
+                continue 
             newPipe = self.pipe.copy()
             newPipe.Location.Curve = newLocation
             newPipes.append(newPipe)
 
-        for pipe1, pipe2 in zip(newPipes[:-1], newPipes[1:]) :
-            p11 = pipe1.Location.Curve.GetEndPoint(1)
-            p20 = pipe2.Location.Curve.GetEndPoint(0)
-            newLocation = Line.CreateBound(p11, p20)
-            newPipe = self.pipe.copy()
-            newPipe.Location.Curve = newLocation
-            c11 = pipe1.connectorsDict[1]
-            c20 = pipe2.connectorsDict[0]
-            c30 = newPipe.connectorsDict[0]
-            c31 = newPipe.connectorsDict[1]
-            self.solver.doc.Create.NewElbowFitting(c11, c30)
-            self.solver.doc.Create.NewElbowFitting(c31, c20)
-
-
-
-
+        print("трубы создали")    
+        print(100 * "-")
         
 
+        for pipe1, pipe2 in zip(newPipes[:-1], newPipes[1:]) :
+            if not pipe1 or not pipe2 :
+                continue
+            p11 = pipe1.Location.Curve.GetEndPoint(1)
+            p20 = pipe2.Location.Curve.GetEndPoint(0)
+            try :
+                newLocation = Line.CreateBound(p11, p20)
+                newPipe = self.pipe.copy()
+                newPipe.Location.Curve = newLocation
+                c11 = pipe1.connectorsDict[1]
+                c20 = pipe2.connectorsDict[0]
+                c30 = newPipe.connectorsDict[0]
+                c31 = newPipe.connectorsDict[1]
+                try :
+                    self.solver.doc.Create.NewElbowFitting(c11, c30)
+                except :
+                    pass
+                try :
+                    self.solver.doc.Create.NewElbowFitting(c31, c20)
+                except :
+                    pass
+            except :
+                pass
         tr.Commit()
         return resSegments
         
@@ -711,8 +849,8 @@ class dmLinkedElement :
         self.link = link
         self.element = element 
     def __repr__(self) :
-        return "Id - {} {}".format(self.element.Id, self.element.Category.Name)
-    def getSolids(self, viewOpts) :
+        return "Id - {} linkId {} категория {}".format(self.element.Id, self.link.linkInstance.Id, self.element.Category.Name)
+    def getSolids(self, viewOpts=None) :
         if viewOpts :
             vopt = viewOpts
         else :
@@ -722,7 +860,8 @@ class dmLinkedElement :
         geoms = [geometry.GetTransformed(self.link.Transform)]
 
         if isinstance(self.element, FamilyInstance) and \
-                self.element.Category.Id.IntegerValue != int(bic.OST_StructuralFraming) :
+                self.element.Category.Id.IntegerValue != int(bic.OST_StructuralFraming) \
+                    and self.element.Category.Id.IntegerValue != int(bic.OST_Floors):
             geoms = geometry.GetTransformed(self.link.Transform)
             bb = geoms.GetBoundingBox()
             ptMin = bb.Transform.OfPoint(bb.Min)
@@ -837,6 +976,9 @@ class dmLinkedElement :
                 if type(resPg) == geoms.GeometryCollection :
                     resPg = resPg.Buffer(0)
             except Exception as ex:
+                geometry = self.element.Geometry[opt].GetTransformed(self.link.Transform)
+                #create_ds_safe(geometry, self.link.linkInstance.Document)
+
                 print("исключение на элементе {}".format(self))
                 print(ex)
                 #raise
@@ -844,6 +986,24 @@ class dmLinkedElement :
         #print("getPolygon return {}".format(resPg))
         
         return resPg
+    
+    def showGeometry(self, viewOpts=None) :
+        if viewOpts :
+            vopt = viewOpts
+        else :
+            vopt = opt 
+        geometry = self.element.Geometry[vopt]
+        if not geometry : return []
+        geoms = [geometry.GetTransformed(self.link.Transform)]
+        create_ds_safe(geoms, self.link.linkInstance.Document)
+
+        
+    def showSolid(self) :
+        create_ds_safe(self.getSolids(), self.link.linkInstance.Document)
+    def showSolidSected(self) :
+        create_ds_safe(self.getSolids(), self.link.linkInstance.Document)
+    def showProjection(self) :
+        create_ds_safe(self.getPolygon(), self.link.linkInstance.Document)
             
 
 
@@ -1158,6 +1318,10 @@ class dmSectionLevelCreation :
                  height=None, 
                  view = None, 
                  fromDict= None) :
+        if height and height > 0.98425196850393704 : 
+            #Корректировка эшелона, максимальная высота 300 мм (пока)
+            # При большом эшелоне может сильно увеличиться время обработки
+            height = 0.98425196850393704
         self.doc                = doc 
         self.dmDoc              =  dmDocument(self.doc)
         if not fromDict :
@@ -1175,17 +1339,13 @@ class dmSectionLevelCreation :
             views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()} 
             self.view               = views[fromDict['viewName']]
 
-            self._wallsPolygon      = nts.IO.WKTReader().Read(fromDict['wallsPolygon'])
-            self._ductPolygon       = nts.IO.WKTReader().Read(fromDict['ductPolygon'])
-            self._pipePolygon       = nts.IO.WKTReader().Read(fromDict['pipePolygon'])
-            self._electricalPolygon = nts.IO.WKTReader().Read(fromDict['electricalPolygon'])
-            self._archPolygon       = nts.IO.WKTReader().Read(fromDict['archPolygon'])
+
             
         viewBB                  = self.view.get_BoundingBox(None)
         pnt                     = viewBB.Transform.OfPoint(viewBB.Min)
-        self.minPnt             = XYZ(pnt.X, pnt.Y, centerElevation - height / 2)
+        self.minPnt             = XYZ(pnt.X, pnt.Y, centerElevation - height )
         pnt                     = viewBB.Transform.OfPoint(viewBB.Max)
-        self.maxPnt             = XYZ(pnt.X, pnt.Y, centerElevation + height / 2)
+        self.maxPnt             = XYZ(pnt.X, pnt.Y, centerElevation + height )
         self.eshelonBB          = BoundingBoxXYZ()
         self.eshelonBB.Min      = self.minPnt
         self.eshelonBB.Max      = self.maxPnt
@@ -1218,8 +1378,15 @@ class dmSectionLevelCreation :
         ]))
         opt = Options()
         opt.View = self.view
-        for li in self.dmDoc.linkInstances :        
-            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+        for li in self.dmDoc.linkInstances : 
+            nextModel = False 
+            for stopStr in stopModelNameStr :       
+                if li.linkInstance.Name.Contains(stopStr) : 
+                    print(li);
+                    print("Пропускаем")
+                    nextModel = True 
+                    break 
+            if nextModel : continue
             ducts.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
         pgs = []
         #print("Количество найденых воздуховодов {}".format(len(ducts)))
@@ -1228,6 +1395,7 @@ class dmSectionLevelCreation :
 
         for pg in pgs :
             try :
+                #if pg.Area > maxArea : continue
                 finalPg = finalPg.Union(pg)
                 if type(finalPg) == geoms.GeometryCollection :
                     finalPg = finalPg.Buffer(0)
@@ -1266,6 +1434,33 @@ class dmSectionLevelCreation :
             solids.extend(duct.getSolidsSected(self.eshelonSolid, opt))
         return solids
     
+    def testDuctCalc(self) :
+        """
+        Тестируем что получается в процессе вычисления 
+        эшелона труб
+        """
+        ducts = []
+        
+        finalPg = geoms.Polygon.Empty
+        maxArea = self.eshelonPolygon.Area * 0.1
+        ducts = []
+        flt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_DuctCurves, bic.OST_DuctFitting, bic.OST_DuctAccessory,
+                bic.OST_MechanicalEquipment, 
+                bic.OST_DuctInsulations
+        ]))
+        opt = Options()
+        #opt.View = self.view
+        for li in self.dmDoc.linkInstances :        
+            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+            ducts.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
+
+        for duct in ducts :
+            duct.showGeometry()
+
+      
+        
+    
     def createEshelonSolid(self) :
         """
         Больше для визуализации процесса
@@ -1295,7 +1490,14 @@ class dmSectionLevelCreation :
         opt = Options()
         opt.View = self.view
         for li in self.dmDoc.linkInstances :        
-            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+            nextModel = False 
+            for stopStr in stopModelNameStr :       
+                if li.linkInstance.Name.Contains(stopStr) : 
+                    print(li);
+                    print("Пропускаем")
+                    nextModel = True 
+                    break 
+            if nextModel : continue
             pipes.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
         pgs = []
@@ -1305,6 +1507,7 @@ class dmSectionLevelCreation :
             pgs.append(element.getPolygon(self.eshelonSolid, opt))
         for pg in pgs :
             try :
+                #if pg.Area > maxArea : continue
                 finalPg = finalPg.Union(pg)
             except :
                 pass
@@ -1312,6 +1515,30 @@ class dmSectionLevelCreation :
         #print("Количество полигонов труб {}".format(len(pgs)))
         self._pipePolygon = finalPg.Buffer(0) if type(finalPg) == geoms.GeometryCollection else finalPg
         return finalPg
+    
+    def testPipeCalc(self) :
+        """
+        Тестируем что получается в процессе вычисления 
+        эшелона труб
+        """
+        pipes = []
+        
+        finalPg = geoms.Polygon.Empty
+        maxArea = self.eshelonPolygon.Area * 0.1
+        pipes = []
+        flt = ElementMulticategoryFilter(System.Array[bic]([
+                bic.OST_PipeCurves, bic.OST_PipeFitting, bic.OST_PipeAccessory,
+                bic.OST_MechanicalEquipment, 
+                bic.OST_PipeInsulations
+        ]))
+        opt = Options()
+        #opt.View = self.view
+        for li in self.dmDoc.linkInstances :        
+            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+            pipes.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
+
+        for pipe in pipes :
+            pipe.showGeometry()
     
     def calcPipeSolids(self) :
         pipes = []
@@ -1350,7 +1577,14 @@ class dmSectionLevelCreation :
         opt = Options()
         opt.View = self.view
         for li in self.dmDoc.linkInstances :        
-            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+            nextModel = False 
+            for stopStr in stopModelNameStr :       
+                if li.linkInstance.Name.Contains(stopStr) : 
+                    print(li);
+                    print("Пропускаем")
+                    nextModel = True 
+                    break 
+            if nextModel : continue
             arches.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
         pgs = []
@@ -1389,6 +1623,7 @@ class dmSectionLevelCreation :
         
         for pg in pgs :
             try :
+                if pg.Area > maxArea : continue
                 finalPg = finalPg.Union(pg)
                 if type(finalPg) == geoms.GeometryCollection :
                     finalPg = finalPg.Buffer(0)
@@ -1435,9 +1670,17 @@ class dmSectionLevelCreation :
         opt = Options()
         opt.View = self.view
         for li in self.dmDoc.linkInstances :        
-            #if not  li.linkInstance.Name.Contains("E") : print(li);continue
+            nextModel = False 
+            for stopStr in stopModelNameStr :       
+                if li.linkInstance.Name.Contains(stopStr) : 
+                    print(li);
+                    print("Пропускаем")
+                    nextModel = True 
+                    break 
+            if nextModel : continue
             els.extend(li.getElementsInsideBoundingBox(self.eshelonBB, flt = flt))
 
+        print("Количество найденых лотков и коробов {}".format(len(els)))
         solids = []
         pgs = []
         for el in els :
@@ -1445,6 +1688,7 @@ class dmSectionLevelCreation :
 
         for pg in pgs :
             try :
+                if pg.Area > maxArea : continue
                 finalPg = finalPg.Union(pg)
             except :
                 pass
@@ -1510,10 +1754,36 @@ class dmSectionLevelCreation :
 
     def getFreePolygon(self, pipeD=100*dut) :
         if not hasattr(self, '_freePolygon') :
-            self._freePolygon = self.eshelonPolygon.Difference(self.ductPolygon)\
-                .Difference(self.pipePolygon)\
-                .Difference(self.electricalPolygon)\
-                .Difference(self.archPolygon).Buffer(-pipeD)
+            try :
+                self._freePolygon = self.eshelonPolygon.Difference(self.ductPolygon.Buffer(0)).Buffer(0)\
+                    .Difference(self.pipePolygon.Buffer(0)).Buffer(0)\
+                    .Difference(self.electricalPolygon.Buffer(0)).Buffer(0)\
+                    .Difference(self.archPolygon.Buffer(0)).Buffer(-pipeD)
+            except :
+                print("Обнаружена ошибка при формировании свободного полигона")
+                print(self)
+                try :
+                    pg1 = self.eshelonPolygon.Difference(self.ductPolygon)\
+                        .Buffer(-2*dut).Buffer(4*dut).Buffer(-2*dut)
+                except :
+                    print("pg1 ductPolygon")
+                    pg1 = self.eshelonPolygon
+                try :
+                    pg2 = pg1.Difference(self.pipePolygon.Buffer(-10*dut).Buffer(20*dut).Buffer(-10*dut))
+                except :
+                    print("pg2 pipePolygon")
+                    pg2 = pg1
+                try :
+                    pg3 = pg2.Difference(self.electricalPolygon)
+                except :
+                    print("pg3 electricalPolygon")
+                    pg3 = pg2
+                try :
+                    pg4 = pg3.Difference(self.archPolygon)
+                except :
+                    print("pg4 archPolygon")
+                    pg4 = pg3
+                self._freePolygon = pg4.Buffer(-pipeD).Buffer(-5*dut).Buffer(10*dut).Buffer(-5*dut)
         return self._freePolygon
     
     def showFreePolygon(self, pipeD = 100*dut) :
@@ -1522,6 +1792,29 @@ class dmSectionLevelCreation :
             self.getFreePolygon(pipeD=pipeD),
                 self.doc, 
                 dp= XYZ(0,0,self.centerElevation))
+        
+    def showPipePolygon(self) :
+        ds = create_ds_safe(
+            self.pipePolygon,
+                self.doc, 
+                dp= XYZ(0,0,self.centerElevation))
+    def showDuctPolygon(self) :
+        ds = create_ds_safe(
+            self.ductPolygon,
+                self.doc, 
+                dp= XYZ(0,0,self.centerElevation))
+    def showElectricalPolygon(self) :
+        ds = create_ds_safe(
+            self.electricalPolygon,
+                self.doc, 
+                dp= XYZ(0,0,self.centerElevation))
+    def showArchPolygon(self) :
+        ds = create_ds_safe(
+            self.archPolygon,
+                self.doc, 
+                dp= XYZ(0,0,self.centerElevation))
+
+
          
     def loadFromDb(self) :
         """
@@ -1551,11 +1844,11 @@ class dmSectionLevelCreation :
         
         #print(3)
         
-        self._getArchPolygon        = nts.IO.WKTReader().Read(res['archPolygon'])
-        self._getDuctPolygon        = nts.IO.WKTReader().Read(res['ductPolygon'])
-        self._getPipePolygon        = nts.IO.WKTReader().Read(res['pipePolygon'])
-        self._getElectricalPolygon  = nts.IO.WKTReader().Read(res['electricalPolygon'])
-        self._getWallsPolygon       = nts.IO.WKTReader().Read(res['wallsPolygon'])
+        self._archPolygon        = nts.IO.WKTReader().Read(res['archPolygon'])
+        self._ductPolygon        = nts.IO.WKTReader().Read(res['ductPolygon'])
+        self._pipePolygon        = nts.IO.WKTReader().Read(res['pipePolygon']).Buffer(-pipeGap).Buffer(2*pipeGap).Buffer(-pipeGap)
+        self._electricalPolygon  = nts.IO.WKTReader().Read(res['electricalPolygon'])
+        self._wallsPolygon       = nts.IO.WKTReader().Read(res['wallsPolygon'])
         #print(4)
     def writeToDb(self) :
         conn = getSQLConnection()
@@ -1608,17 +1901,21 @@ class dmSectionLevelCreation :
                          ?
                      );
         """
-
-        data = (self.wallsPolygon.ToText(), 
-                self.archPolygon.ToText(), 
-                self.electricalPolygon.ToText(),
-                self.pipePolygon.ToText(),
-                self.ductPolygon.ToText(),
-                Plan_code,
-                self.height,
-                self.centerElevation,  
-                self.levelElevation  
-                )
+        try :
+            data = (self.wallsPolygon.ToText(), 
+                    self.archPolygon.ToText(), 
+                    self.electricalPolygon.ToText(),
+                    self.pipePolygon.ToText(),
+                    self.ductPolygon.ToText(),
+                    Plan_code,
+                    self.height,
+                    self.centerElevation,  
+                    self.levelElevation  
+                    )
+        except :
+            print("Ошибка при формировании строки в БД")
+            print(self)
+            raise
 
         conn.execute(sq3, data)
         conn.commit()
@@ -1652,11 +1949,11 @@ class dmSectionLevelCreation :
         return {
             "centerElevation"     : self.centerElevation,
             "height"        : self.height,
-            "electricalPolygon"   : self.electricalPolygon.ToText() ,
-            "archPolygon" : self.archPolygon.ToText(),
-            "ductPolygon" : self.ductPolygon.ToText(),
-            "pipePolygon" : self.pipePolygon.ToText(),
-            "wallsPolygon" : self.wallsPolygon.ToText(),
+            "electricalPolygon"   : self.electricalPolygon.ToText().Buffer(0) ,
+            "archPolygon" : self.archPolygon.ToText().Buffer(0),
+            "ductPolygon" : self.ductPolygon.ToText().Buffer(0),
+            "pipePolygon" : self.pipePolygon.ToText().Buffer(0),
+            "wallsPolygon" : self.wallsPolygon.ToText().Buffer(0),
             "viewName"    : self.view.Name
         }
         
@@ -1697,6 +1994,30 @@ class dmPlan :
         if not rows :
             raise dmNoLevelsOfPlan
         return [row['levelElevation'] for row in rows]
+    def clearEshelons(self) :
+        """
+        Удаляет из БД все эшелоны связанные с уровнем
+        """
+
+        conn = getSQLConnection()
+        qs1     = """
+            SELECT Plan_code
+            FROM PLANS
+            WHERE Plan_name = ?;
+
+        """
+        row = conn.execute(qs1, (self.view.Name,)).fetchone()
+        if not row :
+            raise dmNotFoundPlanInDataBaseError
+        planNum = row['Plan_code']
+
+        qs2     = """
+        DELETE FROM Eshelons
+            WHERE Plan_code = ?;
+        """
+        rows = conn.execute(qs2, (planNum,))
+        conn.commit()
+
     def loadEshelonByElevation(self, levelElevation) :
         conn = getSQLConnection()
         qs1     = """
@@ -1736,6 +2057,40 @@ class dmPlan :
         for level in self.loadEshelonLevels() :
             #print(level)
             self.eshelons[level] = self.loadEshelonByElevation(level)
+    def createIfAbsent(self, startElevation, endElevation, height = 180, createDs = False)  :
+        """
+        Загружает существующие эшелоны и  если эшелона нет, то
+        создает эшелоны в диапазоне от startElevation до endElevation
+        startElevation дается в миллиметрах и от рабочего уровня плана
+        шаг 25 мм.
+        
+        """
+        #height = 180 * dut
+        if height > 250  :
+            height = 250
+        # self.loadAllEshelons()
+
+        planElevation = self.view.GenLevel.Elevation
+        levels = self.loadEshelonLevels()
+        for elevation in range(startElevation, endElevation, 25) :
+            if elevation in levels :
+                print("Эшелон {} присутствует".format(elevation))
+                continue
+            else :
+                print("Эшелон {} будет сформирован".format(elevation))
+
+            centerElevation = planElevation + elevation * dut 
+
+            eshelon = dmSectionLevelCreation(
+                doc = self.doc,
+                centerElevation = centerElevation,
+                height = height * dut,
+                view = self.view 
+                )
+            eshelon.writeToDb()
+            if createDs :
+                eshelon.showFreePolygon()
+
     def getNearestEshelon(self, elevation) :
         return min(self.eshelons.values(), key = lambda x : abs(x.centerElevation - elevation))
     
@@ -1747,9 +2102,39 @@ class dmPlan :
 
     def showAllFreeEshelons(self, pipeD = 150 * dut) :
         for eshelon in self.eshelons.values() :
-            eshelon.showFreePolygon(pipeD)
+            try :
+                eshelon.showFreePolygon(pipeD)
+            except :
+                print("ошибкка")
+                print(eshelon)
     def __repr__(self) :
         return "План для работы с эшелонами :\nИмя: {}".format(self.view.Name)
+    
+    def createEshelons(self, startElevation, endElevation, height = 180) :
+        """
+        Создает эшелоны в диапазоне от startElevation до endElevation
+        startElevation дается в миллиметрах и от рабочего уровня плана
+        шаг 25 мм
+        """
+        #height = 180 * dut
+        if height > 250  :
+            height = 250
+            
+        planElevation = self.view.GenLevel.Elevation
+        for elevation in range(startElevation, endElevation, 25) :
+            centerElevation = elevation
+            centerElevation = planElevation + elevation * dut 
+            eshelon = dmSectionLevelCreation(
+                doc = self.doc,
+                centerElevation = centerElevation,
+                height = height * dut,
+                view = self.view 
+                )
+            eshelon.writeToDb()
+
+
+
+        pass 
     
     
          
@@ -1786,7 +2171,7 @@ class dmPipeSolver :
         pipeLocation = self.pipe.Location.Curve
         p1, p2 = pipeLocation.GetEndPoint(0), pipeLocation.GetEndPoint(1)
         eshelon = self.workEshelon
-        print(eshelon)
+        # print(eshelon)
         pipeSegment = geoms.LineSegment(p1.X, p1.Y, p2.X, p2.Y)
         coords = System.Array[geoms.Coordinate]([
             geoms.Coordinate(p1.X, p1.Y),
@@ -1813,9 +2198,6 @@ class dmPipeSolver :
         
         segment = lineAnalyzer.doCalc()
 
-        
-
-        
         return segment
     
         

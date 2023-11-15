@@ -1,0 +1,218 @@
+# Поиск проблемных объектов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+		
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+	
+onViewElements = []
+faces =[]
+elements = []
+curves = []
+edges = []
+polylines = []
+floors = []
+class dmExpCntx(IExportContext2D) :
+	pass
+	def Start(self) :
+		print("начинается")
+	def OnViewBegin(self, vn) :
+		print("OnViewBegin")
+		return RenderNodeAction.Proceed
+	def OnLinkBegin(self, vn) :
+		print("OnLinkBegin", vn)
+		return RenderNodeAction.Proceed
+	def OnLinkEnd(self, en) :
+		print("OnLinkEnd", en)
+		return RenderNodeAction.Proceed
+	def OnElementBegin(self, en) :
+		print("OnElementBegin")
+		e = en.Document.GetElement(en.ElementId)
+		return RenderNodeAction.Skip
+		if e and type(e) == Floor :
+			print("OnElementBegin2D")
+			print("Документ {}".format(en.Document.PathName))
+			print("Элемент Id {}".format(en.ElementId))
+			print("Линк Id {}".format(en.LinkInstanceId))
+			print("Элемент {}".format(e))
+			return RenderNodeAction.Proceed
+		else :
+			#return RenderNodeAction.Proceed
+			return RenderNodeAction.Skip
+		
+		return RenderNodeAction.Proceed
+	def OnElementBegin2D(self, en) :
+		e = en.Document.GetElement(en.ElementId)
+		if e and type(e) == Floor :
+			print("OnElementBegin2D")
+			print("Документ {}".format(en.Document.PathName))
+			print("Элемент Id {}".format(en.ElementId))
+			print("Линк Id {}".format(en.LinkInstanceId))
+			print("Элемент {}".format(e))
+			onViewElements.append(en.ElementId)
+			return RenderNodeAction.Proceed
+		else :
+			return RenderNodeAction.Proceed
+			return RenderNodeAction.Skip
+			
+		
+		#print("Категория {}".format(e.Category.Name))
+		
+		
+	def OnElementEnd2D(self, eid) :
+		if not onViewElements : return
+		if onViewElements[-1] == eid.ElementId :
+			eidlast = onViewElements.pop()
+			floors.append(eidlast)
+			print("OnElementEnd2D", eid.ElementId)
+		"""
+		
+		print(eid.ElementId)
+		print(eid.LinkInstanceId)
+		if eid.LinkInstanceId :
+			lnk = doc.GetElement(eid.LinkInstanceId)
+			if not lnk : return
+			ldoc = lnk.GetLinkDocument()
+			e = ldoc.GetElement(eid.ElementId)
+		else :
+			e = doc.GetElement(eid.ElementId)
+			if e :
+				print(e.Category.Name)
+		"""
+				
+	def OnElementEnd(self, eid) :
+		print("OnElementEnd")
+		print(eid)
+		e = doc.GetElement(eid)
+		print(e.Category.Name)
+	def OnViewEnd(self,id) :
+		view = doc.GetElement(id)
+		print(view)
+		print(view.Name)
+		print("OnViewEnd")
+	
+	def IsCanceled(self) :
+		return False
+		
+	def OnCurve(self, cn) :
+		print("OnCurve")
+		curves.append(cn.GetCurve())
+		c1 = cn.GetCurve()
+		try :
+			print(c1.GetEndPoint(0))
+			print(c1.GetEndPoint(1))
+		except :
+			pass
+		return RenderNodeAction.Proceed
+		
+	
+	def OnFaceEdge2D(self, fn) :
+		print("OnFaceEdge2D", fn)
+		faceEdge = fn.GetFaceEdge()
+		print(faceEdge)
+		print(faceEdge.Tessellate())
+		pnts = list(faceEdge.Tessellate())
+		edges.append(pnts)
+		return RenderNodeAction.Proceed
+		
+	def OnFaceSilhouette2D(self, fn) :
+		print("OnFaceSilhouette2D", fn)
+		
+		return RenderNodeAction.Proceed
+	
+
+	
+	def OnLineSegment(self, ls) :
+		print("OnLineSegment")
+		raise
+		
+	def Finish(self) :
+		print("Кончается")
+		pass
+		
+	def OnFaceBegin(self, fn) :
+		print("OnFaceBegin")
+		faces.append(fn.GetFace())
+		return RenderNodeAction.Proceed
+	def OnFaceEnd(self, fn) :
+		print("OnFaceEnd")
+		return RenderNodeAction.Proceed
+	def OnInstanceBegin(self,instNode) :
+		print("OnInstanceBegin")
+		return RenderNodeAction.Proceed
+	def OnInstanceEnd(self,instNode) :
+		print("OnInstanceBegin")
+		return RenderNodeAction.Proceed
+	def OnPolyline(self, pl) :
+		print("OnPolyline")
+		return RenderNodeAction.Proceed
+		raise
+		
+	def OnPolylineSegments(self, pl) :
+		print("OnPolylineSegments")
+		polylines.append(pl.GetVertices())
+		
+		return RenderNodeAction.Proceed
+	def OnText(self, tn) :
+		return 
+		
+
+cnts = dmExpCntx()
+exp = CustomExporter(doc, cnts)
+exp.Export(uidoc.ActiveView)
+
+for edge in polylines[:] :
+	lengths = [(p2-p1).GetLength() for p1, p2 in zip(edge[:-1], edge[1:])]
+	newpnts = [edge[0]] + [p for p,l in zip(edge[1:], lengths) if l > doc.Application.ShortCurveTolerance ]
+
+	lines = [Line.CreateBound(p1, p2) for p1, p2 in zip(newpnts[:-1], newpnts[1:])]
+	dm.create_ds_safe(lines, doc)
