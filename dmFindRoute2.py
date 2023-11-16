@@ -75,18 +75,19 @@ def createDb(dbPath) :
     """
 
     qt2 = """
-    CREATE TABLE Eshelons (
-        Elevation_code    INTEGER PRIMARY KEY,
-        centerElevation   NUMERIC,
-        levelElevation    INTEGER,
-        Height            NUMERIC,
-        Plan_code         INTEGER REFERENCES PLANS (Plan_code),
-        ductPolygon       TEXT,
-        pipePolygon       TEXT,
-        electricalPolygon TEXT,
-        archPolygon       TEXT,
-        wallsPolygon      TEXT
-);
+        CREATE TABLE Eshelons (
+            Elevation_code     INTEGER PRIMARY KEY,
+            centerElevation    NUMERIC,
+            levelElevation     INTEGER,
+            Height             NUMERIC,
+            Plan_code          INTEGER REFERENCES PLANS (Plan_code),
+            wallsPolygonB      BLOB,
+            archPolygonB       BLOB,
+            ductPolygonB       BLOB,
+            pipePolygonB       BLOB,
+            electricalPolygonB BLOB
+        );
+
 
     """
 
@@ -423,13 +424,13 @@ class dmSegment :
                 return self._elevation
             #print("ищем уровень")
             for eshelon in self.solver.plan.getEshelonsByDistance(initialElevation) :
-                #print('проверяем эшелон {}'.format(eshelon))
+                print('проверяем эшелон {}'.format(eshelon))
                 if ls.Within(eshelon.getFreePolygon()) :
-                    #print("найдено пространство")
+                    print("найдено пространство")
                     found = True 
                     self._elevation = eshelon.centerElevation
                     return self._elevation
-                #print("идем дальше")
+                print("идем дальше")
         else :
             #print("Отметка раньше найдена, возвращаем ранее вычисленное значение")
             return self._elevation 
@@ -659,19 +660,19 @@ class dmPipeLineSegmentAnalyzer :
         pipeLineString = geoms.LineString(coords)
 
         initialLevelSegments = pipeLineString.Intersection(freePg)
-        #print(initialLevelSegments)
+        print(initialLevelSegments)
 
         pipeLen = pipeSegment.Length
         projections = sorted(
             [pipeSegment.ProjectionFactor(_p0)   
              for _p0 in initialLevelSegments.Coordinates])
         
-        #print(projections)
+        print(projections)
 
         points = [dmSplitPoint(parameter) for parameter in projections]
         #Создаем сегменты и связываем их между собой
         if points[0].parameter != 0 :
-            #print("начинается не со свободного конца")
+            print("начинается не со свободного конца")
             #это случай, если начало трубы попадает внутрь препятствия и по сути
             #он становится первым обходным сегментом
             points = [dmSplitPoint(0)] + points
@@ -692,6 +693,7 @@ class dmPipeLineSegmentAnalyzer :
                 segment.status = status % 2
 
         if points[-1].parameter != 1 :
+            print("заканчивается в препятствии")
             # Это на тот случай, если конец трубы попадает в препятствие
             # Добавляем конечную точку
             points.append(dmSplitPoint(1))
@@ -700,7 +702,7 @@ class dmPipeLineSegmentAnalyzer :
                                 solver= self.solver)
             segment.status = 1
             segments.append(segment)
-
+        print(points)
         prev = None 
         for i in range(len(segments)) :
             if i == len(segments)-1 :
@@ -745,8 +747,8 @@ class dmPipeLineSegmentAnalyzer :
             resSegments.append(segment)
             segment = segment.next 
 
-        for segment in resSegments :
-            print(segment)
+        # for segment in resSegments :
+        #     print(segment)
 
         # print(100*"*")
         # print("Нахождение отметки обхода или обходного пути")
@@ -773,7 +775,25 @@ class dmPipeLineSegmentAnalyzer :
             # print("Проверяем сегмент {}".format(num))
             segment.checkConnectionSegment()
 
-        # print("Проверка на соединяющие сегменты окончена")
+        # segment = resSegments[0]
+        # newSegments2 = [segment]
+        # while segment :
+        #     i += 1
+        #     if i > 200 : raise 
+        #     # print(20*"-")
+        #     # print(segment)
+        #     # print('предыдущий')
+        #     # print(segment.prev)
+        #     # print("следующий")
+        #     # print(segment.next)
+        #     # print(20*"-")
+        #     #segment = segment.next
+        #     segment = segment.checkSegmentLength()
+        #     newSegments2.append(segment)
+
+        # resSegments = newSegments2
+
+        # # print("Проверка на соединяющие сегменты окончена")
         # print(100* "*")
 
         # for segment in resSegments :
@@ -1749,9 +1769,6 @@ class dmSectionLevelCreation :
     electricalPolygon = property(_getElectricalPolygon) 
     wallsPolygon    = property(_getWallsPolygon)
 
-
-
-
     def getFreePolygon(self, pipeD=100*dut) :
         if not hasattr(self, '_freePolygon') :
             try :
@@ -1779,7 +1796,7 @@ class dmSectionLevelCreation :
                     print("pg3 electricalPolygon")
                     pg3 = pg2
                 try :
-                    pg4 = pg3.Difference(self.archPolygon)
+                    pg4 = pg3.Difference(self.archPolygon.Buffer(-10*dut).Buffer(20*dut).Buffer(-10*dut))
                 except :
                     print("pg4 archPolygon")
                     pg4 = pg3
@@ -1820,35 +1837,63 @@ class dmSectionLevelCreation :
         """
         Считывание полигонов для эшелонов из БД
         """
+        conn = getSQLConnection()
+        qs1 = """
+            SELECT Plan_code,
+                Plan_name,
+                Level_name
+            FROM PLANS
+            WHERE Plan_name = '{}';
+        """.format(self.view.Name)
+
+        row = conn.execute(qs1).fetchone()
+        Plan_code = row['Plan_code']
         qs1 = """
         SELECT Elevation_code,
             centerElevation,
             levelElevation,
             Height,
             Plan_code,
-            ductPolygon,
-            pipePolygon,
-            electricalPolygon,
-            archPolygon,
-            wallsPolygon
+            ductPolygonB,
+            pipePolygonB,
+            electricalPolygonB,
+            archPolygonB,
+            wallsPolygonB
         FROM Eshelons
-        WHERE levelElevation = ?;
+        WHERE Plan_code = ? AND levelElevation = ?;
             """
         #print(1)
-        conn = getSQLConnection()
+        
         #print(2)
-        res     = conn.execute(qs1, (self.levelElevation,)).fetchone()
+        res     = conn.execute(qs1, (Plan_code, self.levelElevation,)).fetchone()
         #print(res)
         if not res :
             raise dmNotFoundSectionInDataBaseError
         
         #print(3)
+        from System.IO import MemoryStream
         
-        self._archPolygon        = nts.IO.WKTReader().Read(res['archPolygon'])
-        self._ductPolygon        = nts.IO.WKTReader().Read(res['ductPolygon'])
-        self._pipePolygon        = nts.IO.WKTReader().Read(res['pipePolygon']).Buffer(-pipeGap).Buffer(2*pipeGap).Buffer(-pipeGap)
-        self._electricalPolygon  = nts.IO.WKTReader().Read(res['electricalPolygon'])
-        self._wallsPolygon       = nts.IO.WKTReader().Read(res['wallsPolygon'])
+        self._archPolygon        = nts.IO.WKBReader()\
+                                        .Read(
+                                            MemoryStream(
+                                            System.Array[System.Byte](res['archPolygonB'])))
+        self._ductPolygon        = nts.IO.WKBReader()\
+                                        .Read(
+                                            MemoryStream(
+                                            System.Array[System.Byte](res['ductPolygonB'])))
+        self._pipePolygon        = nts.IO.WKBReader()\
+                                        .Read(
+                                            MemoryStream(
+                                            System.Array[System.Byte](res['pipePolygonB'])))\
+                                            .Buffer(-pipeGap).Buffer(2*pipeGap).Buffer(-pipeGap)
+        self._electricalPolygon  = nts.IO.WKBReader()\
+                                        .Read(
+                                            MemoryStream(
+                                            System.Array[System.Byte](res['electricalPolygonB'])))
+        self._wallsPolygon       = nts.IO.WKBReader()\
+                                        .Read(
+                                            MemoryStream(
+                                                System.Array[System.Byte](res['wallsPolygonB'])))
         #print(4)
     def writeToDb(self) :
         conn = getSQLConnection()
@@ -1879,11 +1924,11 @@ class dmSectionLevelCreation :
 
         sq3 = """
             INSERT INTO Eshelons (
-                         wallsPolygon,
-                         archPolygon,
-                         electricalPolygon,
-                         pipePolygon,
-                         ductPolygon,
+                         wallsPolygonB,
+                         archPolygonB,
+                         electricalPolygonB,
+                         pipePolygonB,
+                         ductPolygonB,
                          Plan_code,
                          Height,
                          centerElevation,
@@ -1902,11 +1947,11 @@ class dmSectionLevelCreation :
                      );
         """
         try :
-            data = (self.wallsPolygon.ToText(), 
-                    self.archPolygon.ToText(), 
-                    self.electricalPolygon.ToText(),
-                    self.pipePolygon.ToText(),
-                    self.ductPolygon.ToText(),
+            data = (self.wallsPolygon.ToBinary(), 
+                    self.archPolygon.ToBinary(), 
+                    self.electricalPolygon.ToBinary(),
+                    self.pipePolygon.ToBinary(),
+                    self.ductPolygon.ToBinary(),
                     Plan_code,
                     self.height,
                     self.centerElevation,  
@@ -1939,26 +1984,6 @@ class dmSectionLevelCreation :
         if tr : tr.Commit()
         
 
-
-
-
-
-
-
-    def makeDict(self) :
-        return {
-            "centerElevation"     : self.centerElevation,
-            "height"        : self.height,
-            "electricalPolygon"   : self.electricalPolygon.ToText().Buffer(0) ,
-            "archPolygon" : self.archPolygon.ToText().Buffer(0),
-            "ductPolygon" : self.ductPolygon.ToText().Buffer(0),
-            "pipePolygon" : self.pipePolygon.ToText().Buffer(0),
-            "wallsPolygon" : self.wallsPolygon.ToText().Buffer(0),
-            "viewName"    : self.view.Name
-        }
-        
-
-    
 
 class dmPlan :
     def __init__(self, view, height = 150 * dut, width = 150 * dut) :
@@ -2026,6 +2051,7 @@ class dmPlan :
             WHERE Plan_name = ?;
 
         """
+        
         row = conn.execute(qs1, (self.view.Name,)).fetchone()
         if not row :
             raise dmNotFoundPlanInDataBaseError
@@ -2055,7 +2081,7 @@ class dmPlan :
     def loadAllEshelons(self) :
         self.eshelons = {}
         for level in self.loadEshelonLevels() :
-            #print(level)
+            # print(level)
             self.eshelons[level] = self.loadEshelonByElevation(level)
     def createIfAbsent(self, startElevation, endElevation, height = 180, createDs = False)  :
         """
@@ -2071,7 +2097,10 @@ class dmPlan :
         # self.loadAllEshelons()
 
         planElevation = self.view.GenLevel.Elevation
-        levels = self.loadEshelonLevels()
+        try :
+            levels = self.loadEshelonLevels()
+        except :
+            levels = []
         for elevation in range(startElevation, endElevation, 25) :
             if elevation in levels :
                 print("Эшелон {} присутствует".format(elevation))
@@ -2135,6 +2164,26 @@ class dmPlan :
 
 
         pass 
+    def calcUnionFreeSpace(self) :
+        """
+        Вычисляет совмещенный полигон свободного места.
+        с его помощью можно нати место для трассы, 
+        где принципиально можно пройти.
+        Вычисляет объединением всех полиготов свободного места
+        """
+        resPg = geoms.Polygon.Empty
+        for eshelon in self.eshelons.values() :
+            try :
+                resPg = resPg.Union(eshelon.getFreePolygon())
+            except :
+                resPg = resPg.Buffer(10*dut).Buffer(-20*dut).Buffer(10*dut)
+                eshelonPg = eshelon.getFreePolygon().Buffer(10*dut).Buffer(-20*dut).Buffer(10*dut)
+                resPg = resPg.Union(eshelonPg)
+                
+
+        return resPg
+    def showUnionFreeSpace(self) :
+        create_ds_safe(self.calcUnionFreeSpace(), self.doc)
     
     
          
@@ -2147,13 +2196,22 @@ class dmPipeSolver :
         self.pipe   = pipe 
         self.plan   = plan
         self.doc    = plan.doc 
+        self.altElevation   = None 
 
-    def _getNearestEshelon (self) :
+    def _getNearestEshelon (self) :       
         if not hasattr(self, "_workEshelon") :
-            p = self.pipe.Location.Curve.GetEndPoint(0)
-            self._workEshelon = self.plan.getNearestEshelon(p.Z)
+            if self.altElevation is None :
+                z = self.pipe.Location.Curve.GetEndPoint(0).Z
+            else :
+                z = self.altElevation
+            self._workEshelon = self.plan.getNearestEshelon(z)
         return self._workEshelon
     workEshelon = property(_getNearestEshelon)
+
+
+    def updateElevation(self, z) :
+        self.altElevation = z
+        self._workEshelon = self.plan.getNearestEshelon(z)
 
     def pipeEnd0Free(self) :
         """

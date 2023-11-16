@@ -1,0 +1,6 @@
+clr.AddReference("IronPython.SQLite, Version=3.4.0.0, Culture=neutral, PublicKeyToken=7f709c5b713576e1" )
+import sqlite3
+asms = [assembly for assembly in clr.References]
+
+for a in asms :
+	print(a)

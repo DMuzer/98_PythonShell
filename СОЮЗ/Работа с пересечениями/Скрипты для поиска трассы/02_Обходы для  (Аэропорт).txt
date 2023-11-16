@@ -81,12 +81,12 @@ bottomElevation 	= workPlan.GenLevel.Elevation
 centerElevation = bottomElevation + 2650 * dut
 height = 180 * dut	
 
-plan = dm.dmPlan(workPlan)
+#plan = dm.dmPlan(workPlan)
 
-plan.loadAllEshelons()
-#plan.eshelons[2975].showFreePolygon(150*dut)
+#plan.loadAllEshelons()
+#plan.eshelons[3725].showFreePolygon(150*dut)
 #plan.showAllFreeEshelons(150*dut)
-pipe = dm2.dmElement(9043777)
+pipe = dm2.dmElement(9055314)
 solver = dm.dmPipeSolver(pipe, plan)
 chl=solver.checkLocation()
 print("Прямой проход: {}".format(solver.checkLocation()))
