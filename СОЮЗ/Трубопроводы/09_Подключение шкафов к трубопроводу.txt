@@ -1,0 +1,170 @@
+#Подключение шкафа к трубопроводу
+# Схема подключения два боковых
+
+# Загрузка эшелонов из БД выполнение обходов на файле СОЮЗ стилобат Ж
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+
+cabinet = dm2.firstSelected()
+pipe1 	= dm2.dmElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+pipe2 	= dm2.dmElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element))
+
+connectors = []
+for conn in cabinet.connectorsDict.values() :
+	if abs(conn.CoordinateSystem.BasisZ.Z) < 0.2 :
+		connectors.append(conn)
+			
+print(connectors)
+
+c1 = connectors[0]
+pipeDiam = c1.Radius * 2 
+print(pipeDiam)
+
+startPnt 	= c1.Origin + c1.CoordinateSystem.BasisZ * 2 * pipeDiam
+pipePnt 	= pipe1.Location.Curve.Project(startPnt).XYZPoint
+destPnt		= pipePnt - XYZ.BasisZ * (pipe1.diameter + 2.5 * pipeDiam)
+
+destVector	= destPnt - startPnt
+standPnt	= startPnt + XYZ.BasisZ * destVector.Z
+
+trace = [
+	Line.CreateBound(c1.Origin, startPnt),
+	Line.CreateBound(startPnt, standPnt),
+	Line.CreateBound(standPnt, destPnt),
+	Line.CreateBound(destPnt, pipePnt)
+]
+
+pipes = []
+tr = Transaction(doc, "подключение шкафа ПК")
+tr.Start()
+for lc in trace :
+	pipeCopy 				= pipe1.copy()
+	pipeCopy.Location.Curve = lc
+	pipeCopy.diameter 		= pipeDiam
+	
+	pipes.append(pipeCopy)
+	
+
+
+try :
+	for np1, np2 in zip(pipes[:-1], pipes[1:]) :
+		try :
+			print(1)
+			print(np1.connectorsDict[1].Origin)
+			print(np2.connectorsDict[0].Origin)
+			doc.Create.NewElbowFitting(np1.connectorsDict[1], np2.connectorsDict[0])
+			print(2)
+		except Exception as ex:
+			print(ex)
+except Exception as ex:
+	print(ex)
+	pass
+c1.ConnectTo(pipes[0].connectorsDict[0])
+doc.Create.NewTakeoffFitting(pipes[-1].connectorsDict[1], pipe1.e)
+	
+tr.Commit()
+
+
+			
+
+c1 = connectors[1]
+pipeDiam = c1.Radius * 2 
+print(pipeDiam)
+
+startPnt 	= c1.Origin + c1.CoordinateSystem.BasisZ * 2 * pipeDiam
+pipePnt 	= pipe2.Location.Curve.Project(startPnt).XYZPoint
+destPnt		= pipePnt - XYZ.BasisZ * (pipe2.diameter + 2.5 * pipeDiam)
+
+destVector	= destPnt - startPnt
+standPnt	= startPnt + XYZ.BasisZ * destVector.Z
+
+trace = [
+	Line.CreateBound(c1.Origin, startPnt),
+	Line.CreateBound(startPnt, standPnt),
+	Line.CreateBound(standPnt, destPnt),
+	Line.CreateBound(destPnt, pipePnt)
+]
+
+pipes = []
+tr = Transaction(doc, "подключение шкафа ПК")
+tr.Start()
+for lc in trace :
+	pipeCopy 				= pipe2.copy()
+	pipeCopy.Location.Curve = lc
+	pipeCopy.diameter 		= pipeDiam
+	
+	pipes.append(pipeCopy)
+	
+
+
+try :
+	for np1, np2 in zip(pipes[:-1], pipes[1:]) :
+		try :
+			print(1)
+			print(np1.connectorsDict[1].Origin)
+			print(np2.connectorsDict[0].Origin)
+			doc.Create.NewElbowFitting(np1.connectorsDict[1], np2.connectorsDict[0])
+			print(2)
+		except Exception as ex:
+			print(ex)
+except Exception as ex:
+	print(ex)
+	pass
+c1.ConnectTo(pipes[0].connectorsDict[0])
+doc.Create.NewTakeoffFitting(pipes[-1].connectorsDict[1], pipe2.e)
+	
+tr.Commit()
+
+

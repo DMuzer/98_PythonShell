@@ -1,3 +1,5 @@
+# Для проекта Аэропорт. Установка параметра DM_Раздел_спецификации
+# в зависимости от того на каком виде видимый
 import Autodesk.Revit.UI as UI
 import sys
 from collections import deque
@@ -28,10 +30,18 @@ views = FilteredElementCollector(doc).OfClass(View3D).ToElements()
 with dm.trans() :
 	for view in views :
 		if not view.Name.StartsWith("Раздел_") : continue
+		
 		partName = view.Name[7:]
+		print(partName)
 		
 		elements = [dm.dmElement(e) for e in FilteredElementCollector(doc, view.Id).WherePasses(emcf).ToElements()]
 		
 		for element in elements :
 			element.Set("DM_Раздел_спецификации", partName)
+			
+			# Устанавливаем на зависимых элементах 
+			for elementId in element.e.GetDependentElements(None) :
+				subElement = dm.dmElement(elementId)
+				subElement.Set("DM_Раздел_спецификации", partName)
+				
 	

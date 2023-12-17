@@ -247,7 +247,10 @@ class dmCreateParallelPipeline :
 			self.newPipes.append(dmElement(newPipe))
 			
 		for pipe1, pipe2 in zip(self.newPipes[:-1], self.newPipes[1:]):
-			pipe1.connectToPipe(pipe2)
+			try :
+				pipe1.connectToPipe(pipe2)
+			except :
+				pass
 			
 		
 		if tr : tr.Commit()
@@ -263,7 +266,7 @@ uidoc.ActiveView.SketchPlane = sketchPlane
 tr.Commit()
 """
 numLines = 2
-offset = 125
+offset = 200
 		
 
 cmd = dmCreateParallelPipeline()

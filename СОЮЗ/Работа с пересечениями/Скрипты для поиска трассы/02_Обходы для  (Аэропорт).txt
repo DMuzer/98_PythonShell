@@ -6,6 +6,7 @@ from imp import reload
 import time
 import json
 dut = 0.0032808398950131233
+
 refLocations = []
 for assembly in clr.References :
 	refLocations.append(assembly.Location)
@@ -59,7 +60,7 @@ typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
 #workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
-workPlan = views["План увязка отм. 0.000"]
+workPlan = views["План увязка -1.900"]
 #workPlan = uidoc.ActiveView
 #targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
@@ -81,9 +82,9 @@ bottomElevation 	= workPlan.GenLevel.Elevation
 centerElevation = bottomElevation + 2650 * dut
 height = 180 * dut	
 
-#plan = dm.dmPlan(workPlan)
+plan = dm.dmPlan(workPlan)
 
-#plan.loadAllEshelons()
+plan.loadAllEshelons()
 #plan.eshelons[3725].showFreePolygon(150*dut)
 #plan.showAllFreeEshelons(150*dut)
 pipe = dm2.dmElement(9055314)

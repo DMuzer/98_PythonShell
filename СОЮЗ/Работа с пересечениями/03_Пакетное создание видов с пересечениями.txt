@@ -37,13 +37,13 @@ baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные 
 baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-08")
 baseFolder = Path(r"D:\17_Проекты\234_Паркинг\02_Исходные данные\Коллизии\2023-09-19")
 baseFolder = Path(r"D:\17_Проекты\234_СОЮЗ\02_Исходные данные\Коллизии\2023-10-19")
-baseFolder = Path(r"D:\17_Проекты\234_СОЮЗ\02_Исходные данные\Коллизии\2023-11-06")
+baseFolder = Path(r"D:\17_Проекты\234_СОЮЗ\02_Исходные данные\Коллизии\2023-11-22")
 v1 = None
 tt1 = time.time()
 foundNum = 0
 clashToCopy = None
 ClashNum = 0
-startClash = 1000
+startClash = 0
 maxClashes = 1100
 for fld in baseFolder.glob("*") :
 	if fld.is_dir :

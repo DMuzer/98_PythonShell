@@ -1,4 +1,4 @@
-# Построение эшелонов и запись в БД тестовая база данных
+# Загрузка эшелонов из БД выполнение обходов на файле СОЮЗ
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -23,15 +23,6 @@ import NetTopologySuite.Geometries as geoms
 libFolder = r"D:\18_проектирование\98_PythonShell"
 if libFolder not in sys.path :
 	sys.path.append(libFolder)
-	
-qs1 = """
-            SELECT rowid,
-            Plan_code,
-                Plan_name,
-                Level_name
-            FROM PLANS
-            WHERE Plan_name = 'Имя плана1';
-        """
 	
 try :
 	reload(dm)
@@ -63,15 +54,14 @@ except Exception as ex :
 	print("импорт dm_connect_2 ok")
 	#raise
 	
-	
-
 
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
-workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+#workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+workPlan = views["Увязка -1 этаж"]
 #workPlan = uidoc.ActiveView
-targetView = views["План1"]
+#targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
 
 dmDoc 				= dm.dmDocument(doc)
@@ -81,16 +71,60 @@ tt1		= time.time()
 solids 		= []
 elements 	= []
 
-height = 120 
-plan = dm.dmPlan(workPlan)
-#plan.createEshelons(500, 3950)
-plan.clearEshelons()
-plan.createIfAbsent(1300, 3750, height, True)
+	
+opt = Options()
+
+eshelons = {}
+eDicts = {}
+viewRange 			= workPlan.GetViewRange()
+bottomElevation 	= workPlan.GenLevel.Elevation 
+centerElevation = bottomElevation + 2650 * dut
+height = 180 * dut	
+
+#plan = dm.dmPlan(workPlan)
+print(plan)
+
+#eshelon = plan.loadEshelonByElevation(2850)
+
 #plan.loadAllEshelons()
+#raise
 #plan.showAllFreeEshelons()
+
+#plan.eshelons[3725].showFreePolygon(150*dut)
+#plan.showAllFreeEshelons(150*dut)
+
+pipe = dm2.firstSelected()
+solver = dm.dmPipeSolver(pipe, plan)
+#chl=solver.checkLocation()
+#print("Прямой проход: {}".format(solver.checkLocation()))
+print(100*"*")
+print("Делаем трассировку")
+segment = solver.solvePipe()
+print(100*"*")
 
 tt2 = time.time()
 print("Время выполнения {}".format(tt2-tt1))
+raise
+
+p0 = pipe.Location.Curve.GetEndPoint(0)
+pnt = geoms.Point(p0.X, p0.Y)
+
+standArea = pnt.Buffer(0.2)
+standArea = plan.eshelons[list(plan.eshelons.keys())[0]].eshelonPolygon
+
+minE = 2200
+maxE = 2400
+
+
+for eshelon in plan.eshelons.values() :
+	if eshelon.levelElevation < minE : continue
+	if eshelon.levelElevation > maxE : continue
+	fpg = eshelon.getFreePolygon()
+	standArea = standArea.Intersection(fpg)
+	
+
+
+
 
 
 	

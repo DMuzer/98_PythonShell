@@ -1,0 +1,43 @@
+# Построение эшелонов и запись в БД тестовая база данных
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute4 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute4 as dm
+	print("импорт dmFindRoute4 ok")
+	#raise
+	
+conn = dm.dmSQLConnection()
+plan = dm.dmPlan()
+plan.createEshelons(2000, 2500, 100,)
+
+clases = set()
+for oname, o in dm.__dict__.items() :
+	print(oname, o)
+	clases.add(type(o))

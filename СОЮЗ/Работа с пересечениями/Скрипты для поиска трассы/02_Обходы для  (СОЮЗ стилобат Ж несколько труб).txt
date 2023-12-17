@@ -1,4 +1,8 @@
-# Построение эшелонов и запись в БД тестовая база данных
+# Загрузка эшелонов из БД выполнение обходов
+# Возможность выполнение обходов сразу для нескольких труб
+# удаление трубы после формирования обходво
+# работа на нескольких планах
+# если работа на 3Д виде, то будет применяться последний использованный план
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -23,15 +27,6 @@ import NetTopologySuite.Geometries as geoms
 libFolder = r"D:\18_проектирование\98_PythonShell"
 if libFolder not in sys.path :
 	sys.path.append(libFolder)
-	
-qs1 = """
-            SELECT rowid,
-            Plan_code,
-                Plan_name,
-                Level_name
-            FROM PLANS
-            WHERE Plan_name = 'Имя плана1';
-        """
 	
 try :
 	reload(dm)
@@ -63,34 +58,60 @@ except Exception as ex :
 	print("импорт dm_connect_2 ok")
 	#raise
 	
-	
-
 
 typeId = ElementId(6036810)
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
-#workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
-workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
-#workPlan = uidoc.ActiveView
-targetView = views["План1"]
-viewRange 			= workPlan.GetViewRange()
+
+try :
+	plans
+	print("переменная plans существует... ok")
+except NameError :
+	plans = {}
+	print("переменной plans нет, создаем новую... ok")
+	
 
 dmDoc 				= dm.dmDocument(doc)
 
 tt1		= time.time()
 
-solids 		= []
-elements 	= []
+if type(uidoc.ActiveView) == ViewPlan :
+	if uidoc.ActiveView.Name in plans :
+		plan = plans[uidoc.ActiveView.Name]
+	else :
+		plan = dm.dmPlan(uidoc.ActiveView)
+		plans[uidoc.ActiveView.Name] = plan
+		plan.loadAllEshelons()
+	
+"""
+print(len(fpg.Coordinates))
+smpl = nts.Simplify.DouglasPeuckerSimplifier(fpg)
+smpl.DistanceTolerance = 20 * dut
+updPg  = smpl.GetResultGeometry()
+print(len(updPg.Coordinates))
 
-height = 120 
-plan = dm.dmPlan(workPlan)
-#plan.createEshelons(500, 3950)
-plan.clearEshelons()
-plan.createIfAbsent(1300, 3750, height, True)
-#plan.loadAllEshelons()
-#plan.showAllFreeEshelons()
+"""
+		
+
+height = 100 * dut	
+print(plan)
+
+for pipe in dm2.getSelection() :
+	if pipe.Category.Id.IntegerValue != int (BuiltInCategory.OST_PipeCurves) : 
+		continue
+	solver = dm.dmPipeSolver(pipe, plan)
+	chl=solver.checkLocation()
+	# если труба полностью пролезает, пропускаем
+	print("Прямой проход: {}".format(chl))
+	if chl : continue
+	
+	print(100*"*")
+	print("Делаем трассировку")
+	segment = solver.solvePipe()
+	print(100*"*")
+	pipe.delete()
+	
+
 
 tt2 = time.time()
 print("Время выполнения {}".format(tt2-tt1))
 
-
-	

@@ -1,0 +1,72 @@
+from types import FunctionType
+from System.Diagnostics import Stopwatch
+timer = Stopwatch()
+times = {}
+
+def profiler_(fnc) :
+	return fnc
+def profiler(fnc) :
+	#print(0)
+	def wrapped(*args, **keywargs) :
+		global times
+		if not timer.IsRunning :
+			timer.Start()
+		#print(1)
+		start 		= timer.ElapsedMilliseconds
+		retVal 		= fnc(*args, **keywargs)
+		timeTaken 	= timer.ElapsedMilliseconds - start
+		
+		name 			= fnc.__name__
+		function_times 	= times.setdefault(name, [])
+		function_times.append(timeTaken)
+		return retVal
+	return wrapped
+		
+
+class ProfilingMetaclass(type) :
+	def __new__(meta, classname, bases, classDict) :
+		print(0)
+		print(meta)
+		print(classname)
+		print(bases)
+		for name, item in classDict.items() :
+			if isinstance(item, FunctionType) :
+				print(f"Формируется {name}")
+				classDict[name] = profiler(item)
+		return type.__new__(meta, classname, bases, classDict)
+#ProfilingMetaclass = type
+		
+from System.Threading import Thread
+class Test(metaclass=ProfilingMetaclass, ) :
+	def __init__(self) :
+		print("инит")
+		counter = 0
+		while counter < 100 :
+			counter += 1
+			self.method()
+			
+	def method(self) :
+		#print("тест")
+		Thread.CurrentThread.Join(20)
+		
+def fncTest() :
+	i1 = 0
+	for i in range(1000) :
+		i1 += 1
+	return i1
+	
+fncTest = profiler(fncTest)
+
+fncTest()
+		
+t = Test()
+t1 = Test()
+
+for name, calls in times.items() :
+	print(f"Функция : {name}")
+	print(f"Вызывалась {len(calls)} раз")
+	print(f"Общее время вызовов {sum(calls)/1000:.1f}")
+	avg = (sum(calls) / float(len(calls)))
+	print(f"Макс: {float(max(calls)):.1f}, Мин: {float(min(calls)):.1f}, Среднее: {avg:.1f}")
+	print()
+	

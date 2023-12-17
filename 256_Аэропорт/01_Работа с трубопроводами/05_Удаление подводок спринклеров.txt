@@ -1,0 +1,83 @@
+# Удаление подводок спринклеров
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+	
+sprinklers = [e for e in dm2.getSelection() if e.IsSprinkler]
+tr = Transaction(doc, "delete sprinkler connection")
+tr.Start()
+for sprinkler in sprinklers :
+	if not sprinkler.IsSprinkler : continue
+	toVisit = [sprinkler]
+	visited = set()
+	
+	while toVisit :
+		current = toVisit.pop()
+		visited.add(current)
+		
+		
+		
+		if current.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+			print(current.e.MEPModel.PartType)
+			if current.e.MEPModel.PartType == PartType.SpudAdjustable :
+				continue
+		
+		for next in current.connectedElementsAll :
+			if next.IsSystem : continue
+			if next in visited : continue
+			toVisit.append(next)
+			
+	for n in visited :
+		pass
+		print(n)
+		if n.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
+			continue
+		n.delete()
+			
+tr.Commit()
+		
+		
+	

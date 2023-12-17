@@ -1,0 +1,150 @@
+# Построение эшелонов и запись в БД для СОЮЗа стилобат Ж
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+refLocations = []
+clr.AddReference("IronPython.SQLite, Version=3.4.0.0, Culture=neutral, PublicKeyToken=7f709c5b713576e1" )
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
+if not bufsPath in refLocations :
+	pass
+	clr.AddReferenceToFileAndPath(bufsPath)
+ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
+if not ntsPath in refLocations :
+	clr.AddReferenceToFileAndPath(ntsPath)
+	
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+		
+try :
+	reload(dm)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dm
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm2)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm2
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dm3)
+	print("Перезагрузка dm_connect_2 ok")
+except Exception as ex :
+	print(ex)
+	import dm_connect_2 as dm3
+	print("импорт dm_connect_2 ok")
+	#raise
+	
+	
+
+
+
+views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
+#workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
+#workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+workPlan = uidoc.ActiveView
+#workPlan = views["Увязка 1 -1 Этаж"]
+#workPlan = views["Увязка Е -2 этаж"]
+#workPlan = views["Увязка А1 -2 этаж"]
+#targetView = views["План1"]
+#viewRange 			= workPlan.GetViewRange()
+
+dmDoc 				= dm.dmDocument(doc)
+
+tt1		= time.time()
+
+solids 		= []
+elements 	= []
+
+height = 100
+
+
+workPlan = views["Увязка В1 - 2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+plan.createIfAbsent(2500, 3900, height, createDs= True)
+
+raise
+
+workPlan = views["Увязка А1 -1 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 4850, height, createDs= True)
+
+
+
+
+
+workPlan = views["Увязка В1 - 2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 3900, height, createDs= True)
+
+
+workPlan = views["Увязка В1 - 1 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 4850, height, createDs= True)
+
+
+workPlan = views["Увязка A2 - 2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 3900, height, createDs= True)
+
+
+
+workPlan = views["Увязка A2 - 1 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 4850, height, createDs= True)
+
+workPlan = views["Увязка A3 - 2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+plan.clearEshelons()
+#plan.createIfAbsent(2500, 3900, height, createDs= True)
+
+
+
+workPlan = views["Увязка A3 - 2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.createEshelons(2200, 2201, height)
+#plan.clearEshelons()
+#plan.createIfAbsent(2500, 4850, height, createDs= True)
+
+
+
+
+tt2 = time.time()
+print("Время выполнения {}".format(tt2-tt1))
+
+
+	

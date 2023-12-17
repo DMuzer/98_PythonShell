@@ -45,6 +45,68 @@ class dmNoLevelsOfPlan(Exception) :
 class dmNotFoundLevelOfPlan(Exception) :
     pass 
 
+from types import FunctionType
+from System.Diagnostics import Stopwatch
+timer = Stopwatch()
+times = {}
+
+t3 = None 
+try :
+    from __main__ import t3  
+except :
+    pass 
+
+def profiler_(fnc) :
+    return fnc
+def profiler(fnc) :
+    def wrapped(*args, **keywargs) :
+        global times
+        if not timer.IsRunning :
+            timer.Start()
+        start 		= timer.ElapsedMilliseconds
+        retVal 		= fnc(*args, **keywargs)
+        timeTaken 	= timer.ElapsedMilliseconds - start
+        
+        name            = fnc.__name__
+        function_times 	= times.setdefault(name, [])
+        function_times.append(timeTaken)
+        if t3 :
+            function_times 	= t3.setdefault(name, [])
+            function_times.append(timeTaken)
+        try :
+            function_times 	= __main__.t4.setdefault(name, [])
+            function_times.append(timeTaken)
+        except :
+            __main__.t4 = {}
+            function_times 	= __main__.t4.setdefault(name, [])
+            function_times.append(timeTaken)
+
+        return retVal
+    return wrapped
+
+def printProfiling(t) :
+    for name, calls in sorted(times.items(), key = lambda x : sum(x[1]), reverse= True):
+        print(f"Функция : {name}")
+        print(f"Вызывалась {len(calls)} раз")
+        print(f"Общее время вызовов {float(sum(calls)):.1f}")
+        avg = (sum(calls) / float(len(calls)))
+        print(f"Макс: {float(max(calls)):.1f}, Мин: {float(min(calls)):.1f}, Среднее: {avg:.1f}")
+        print()
+
+        
+
+
+class ProfilingMetaclass(type) :
+    def __new__(meta, classname, bases, classDict) :
+        #print(0)
+        for name, item in classDict.items() :
+            if isinstance(item, FunctionType) :
+                #print(f"Формируется {name}")
+                classDict[name] = profiler(item)
+        return type.__new__(meta, classname, bases, classDict)
+    
+_ProfilingMetaclass = type
+
 plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)
 
 def printReferences() :
@@ -2583,10 +2645,11 @@ class dmSectionLevelCreation :
     
 
 
-        
+
+     
 
 
-class dmPlan :
+class dmPlan (metaclass = ProfilingMetaclass) :
     def __init__(self, view, height = 150 * dut, width = 150 * dut) :
         self.view               = view
         self.doc                = view.Document  

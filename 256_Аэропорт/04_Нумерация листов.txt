@@ -21,7 +21,10 @@ class dmSheet :
 		flt = ElementCategoryFilter(BuiltInCategory.OST_TitleBlocks)
 		for eid in self.sheet.GetDependentElements(flt) :
 			self.e = doc.GetElement(eid)
-			self.e.LookupParameter("Номер листа N2").Set(str(num))
+			try :
+				self.e.LookupParameter("Номер листа N2").Set(str(num))
+			except :
+				print("ошибка")
 			
 	def change_type(self) :
 		types_fc =  FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)

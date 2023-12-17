@@ -1,4 +1,4 @@
-# Построение эшелонов и запись в БД тестовая база данных
+# Построение эшелонов и запись в БД для СОЮЗа стилобат О
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -7,10 +7,12 @@ import time
 import json
 dut = 0.0032808398950131233
 refLocations = []
+clr.AddReference("IronPython.SQLite, Version=3.4.0.0, Culture=neutral, PublicKeyToken=7f709c5b713576e1" )
 for assembly in clr.References :
 	refLocations.append(assembly.Location)
 bufsPath = r"C:\Users\Дмитрий\System.Buffers.4.4.0\lib\netstandard2.0\System.Buffers.dll"
 if not bufsPath in refLocations :
+	pass
 	clr.AddReferenceToFileAndPath(bufsPath)
 ntsPath = r"C:\Users\Дмитрий\nettopologysuite.2.5.0\lib\netstandard2.0\NetTopologySuite.dll"
 if not ntsPath in refLocations :
@@ -23,16 +25,7 @@ import NetTopologySuite.Geometries as geoms
 libFolder = r"D:\18_проектирование\98_PythonShell"
 if libFolder not in sys.path :
 	sys.path.append(libFolder)
-	
-qs1 = """
-            SELECT rowid,
-            Plan_code,
-                Plan_name,
-                Level_name
-            FROM PLANS
-            WHERE Plan_name = 'Имя плана1';
-        """
-	
+		
 try :
 	reload(dm)
 	print("Перезагрузка dmFindRoute2 ok")
@@ -66,12 +59,13 @@ except Exception as ex :
 	
 
 
-typeId = ElementId(6036810)
+
 views = {v.Name : v  for v in FilteredElementCollector(doc).OfClass(View).ToElements()}
 #workPlan = views["Р_ВПВ_Транзиты Этаж -2 E1-E2-E3 3200-3380"]
-workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
-#workPlan = uidoc.ActiveView
-targetView = views["План1"]
+#workPlan = views["В_Этаж 01_Водопровод_Противопожарный"]
+workPlan = uidoc.ActiveView
+workPlan = views["Увязка -1 этаж"]
+#targetView = views["План1"]
 viewRange 			= workPlan.GetViewRange()
 
 dmDoc 				= dm.dmDocument(doc)
@@ -81,13 +75,41 @@ tt1		= time.time()
 solids 		= []
 elements 	= []
 
-height = 120 
+height = 100
+#plan = dm.dmPlan(workPlan)
+
+
+workPlan = views["Увязка -1 этаж"]
 plan = dm.dmPlan(workPlan)
-#plan.createEshelons(500, 3950)
 plan.clearEshelons()
-plan.createIfAbsent(1300, 3750, height, True)
+plan.createIfAbsent(2200, 3300, height, createDs= True)
+
+workPlan = views["Увязка -2 этаж"]
+plan = dm.dmPlan(workPlan)
+plan.clearEshelons()
+plan.createIfAbsent(2000, 3650, height, createDs= True)
+
+#eshelon = plan.loadEshelonByElevation(3425)
+
+#for eshelon in plan.eshelons.values() :
+#	eshelon.writeToDb()
+#	pass
+#plan.clearEshelons()
+plan.createIfAbsent(2650, 3300, height, createDs= True)
 #plan.loadAllEshelons()
-#plan.showAllFreeEshelons()
+
+#for eshelon in plan.eshelons.values() :
+#	eshelon.writeToDb()
+#	pass
+
+#plan.createEshelons(2700, 2750, height)
+
+try :
+	pass
+	#plan.showAllFreeEshelons(100*dut)
+except :
+	print("Ошибка")
+	
 
 tt2 = time.time()
 print("Время выполнения {}".format(tt2-tt1))
