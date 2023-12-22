@@ -1,4 +1,4 @@
-# Удаление подводок спринклеров
+# Удаление подводок спринклеров вместе со спринклерами
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
@@ -75,7 +75,8 @@ for sprinkler in sprinklers :
 		pass
 		print(n)
 		if n.Category.Id.IntegerValue == int(bic.OST_Sprinklers) :
-			continue
+			pass
+			#continue
 		n.delete()
 			
 tr.Commit()

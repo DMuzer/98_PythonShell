@@ -18,6 +18,6 @@ bic = BuiltInCategory
 dsid = ElementId(bic.OST_GenericModel)
 
 for e in dm.getActiveViewPipingElements() :
-	e.Set("", "-")
+	e.Set("DM_Позиция_спец1", "-")
 	print(e)
 	

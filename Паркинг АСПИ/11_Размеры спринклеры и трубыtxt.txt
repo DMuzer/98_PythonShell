@@ -57,8 +57,9 @@ if hor :
 							+ pntEndProjectionUV.U * workingPlane.XVec \
 							+ pntEndProjectionUV.V * workingPlane.YVec
 else :					
-	dimensionLine = Line.CreateBound(start_p, end_p)
+	
 	start_p = pm + 0.5 * abs(vy) * av.UpDirection
+	dimensionLine = Line.CreateBound(start_p, end_p)
 	pntStartProjectionUV = workingPlane.Project(start_p)[0]
 	pntStartProjection = workingPlane.Origin\
 							+ pntStartProjectionUV.U * workingPlane.XVec \
