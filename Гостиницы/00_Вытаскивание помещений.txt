@@ -1,0 +1,313 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+clr.AddReference("RevitAPIIFC")
+
+
+import 
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+	
+
+
+
+
+	
+
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+
+clr.AddReferenceToFile(r"NetTopologySuite.dll")
+import NetTopologySuite as nts
+import NetTopologySuite.Geometries as geom
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+
+def getCurveLoopFromLinearRing(lr) :
+	res = []
+	for p1, p2 in zip(lr.Coordinates[:-1], lr.Coordinates[1:]) :
+		res.append(Line.CreateBound(XYZ(p1.X, p1.Y,0), XYZ(p2.X, p2.Y,0)))
+	return CurveLoop.Create(System.Array[Curve](res))
+		
+	
+def get_CurveLoopsFromPolygon(pg) :
+	cls = []
+	cls.append(getCurveLoopFromLinearRing(pg.ExteriorRing))
+	
+	for lr in pg.Holes :
+		cls.append(getCurveLoopFromLinearRing(lr))
+	return cls
+	
+	
+class dmRoom(object) :
+	def __init__(self, room, link = None) :
+		self.room = room
+		self.dmE = dm.dmElement(room)
+		self.link = link
+	def __repr__(self) :
+		return "Помещение №{} : {}".format(self.room.Number, self.room.Name)
+		
+	def getBoundary(self) :
+		geoms = self.room.Geometry[Options()]
+		found = None
+		for g in geoms :
+			if isinstance(g, Solid) :
+				for f in g.Faces :
+					if f.FaceNormal.Z < -0.98 :
+						found = f
+						break
+		if not found : return
+		
+		res = []
+		rings = []
+		for cl in found.GetEdgesAsCurveLoops() :
+			pnts = []
+			for curve in cl :
+				if isinstance(curve, Line) :
+					p = curve.GetEndPoint(1)
+					pnts.append(geom.Coordinate(p.X, p.Y))
+			pnts = [pnts[-1]] + pnts
+			pntsArray = System.Array[geom.Coordinate](pnts)
+			lr = geom.LinearRing(pntsArray)
+			rings.append(lr)
+		ringsSorted = sorted(rings, key = lambda x : x.Area, reverse = True)
+		holes = System.Array[geom.LinearRing](ringsSorted[1:])
+		res = geom.Polygon(shell = ringsSorted[0], holes = holes)
+			
+		
+		
+		return res
+	def _getDoors(self) :
+		phases = {ph.Id : ph for ph in self.room.Document.Phases}
+		phase = phases[self.dmE.Value("Код стадии")]
+		allDoors = FilteredElementCollector(self.link.ldoc.doc)\
+			.OfCategory(bic.OST_Doors)\
+			.WhereElementIsNotElementType()\
+			.ToElements()
+			
+		resDoors = set()
+		
+		for door in allDoors :
+			fromRoom = door.get_FromRoom(phase)
+			if not fromRoom is None :
+				dmFromRoom = dm.dmElement(fromRoom)
+				#print(dmFromRoom)
+				if dmFromRoom == self.dmE :
+					#print("Найдена")
+					#print(dmFromRoom)
+					resDoors.add(dm.dmElement(door))
+			toRoom = door.get_ToRoom(phase)
+			
+			if not toRoom is None :
+				dmToRoom = dm.dmElement(toRoom)
+				#print(dmToRoom)
+				if dmToRoom == self.dmE :
+					#print("Найдено оконо toRoomm")
+					#print(dmToRoom)
+					resDoors.add(dm.dmElement(door))
+		
+		return list(resDoors)
+		
+	def _getWindows(self) :
+		phases = {ph.Id : ph for ph in self.room.Document.Phases}
+		phase = phases[self.dmE.Value("Код стадии")]
+		allWindows = FilteredElementCollector(self.link.ldoc.doc)\
+			.OfCategory(bic.OST_Windows)\
+			.WhereElementIsNotElementType()\
+			.ToElements()
+			
+		resWindows = set()
+		
+		for window in allWindows :
+			fromRoom = window.get_FromRoom(phase)
+			if not fromRoom is None :
+				dmFromRoom = dm.dmElement(fromRoom)
+				#print(dmFromRoom)
+				if dmFromRoom == self.dmE :
+					print("Найдено окно FromRoom")
+					print(dmFromRoom)
+					resWindows.add(dm.dmElement(window))
+			toRoom =window.get_ToRoom(phase)
+			
+			if not toRoom is None :
+				dmToRoom = dm.dmElement(toRoom)
+				#print(dmToRoom)
+				if dmToRoom == self.dmE :
+					print("Найдено оконо toRoomm")
+					print(dmToRoom)
+					resWindows.add(dm.dmElement(window))
+		
+		return list(resWindows)
+		
+	
+class dmRevitLink(object) :
+	def __init__(self, link) :
+		self.link = link
+	def __repr__(self) :
+		return self.link.Name
+	def _getLinkDocument(self) :
+		return dmDocument(self.link.GetLinkDocument(), self)
+	ldoc = property(_getLinkDocument)
+
+	
+class dmRoomIndexer(object) :
+	def __init__(self, doc, link = None) :
+		self.doc = doc
+		self.link = link
+		rooms = self.doc._rooms
+		self.number2room = {r.Number : r for r in rooms}
+		self.name2room = {r.Name : r for r in rooms}
+	def __getitem__(self, index) :
+		if index in self.number2room :
+			return dmRoom(self.number2room[index], self.doc.link)
+		if index in self.name2room :
+			return dmRoom(self.name2room[index], self.doc.link)
+		if isinstance(index, int) :
+			for room in self.name2room.values() :
+				if room.Id.IntegerValue == index : 
+					return dmRoom(room, self.doc.link)
+		
+		
+import re	
+class dmDocument (object) :
+	def __init__(self, doc, link = None) :
+		self.doc = doc
+		self.link = link
+		self._roomIndexer = None
+		
+	def __repr__(self) :
+		return "Документ : {}".format(self.doc.PathName)
+	def _getLinks(self) :
+		return {l.Name : dmRevitLink(l) for l in FilteredElementCollector(self.doc).OfClass(RevitLinkInstance).ToElements()}	
+	links = property(_getLinks)
+	
+	def _getLink(self, namePart) :
+		for lname, link in self.links.items() :
+			if re.match(namePart, lname) :
+				return link
+				
+	def _getRooms(self) :
+		return FilteredElementCollector(self.doc).WherePasses(RoomFilter()).ToElements()
+		
+	_rooms = property(_getRooms)
+	
+	def _getRoomIndexer(self) :
+		if self._roomIndexer :
+			return self._roomIndexer
+		else :
+			self._roomIndexer = dmRoomIndexer(self)
+			return self._roomIndexer
+			
+	rooms = property(_getRoomIndexer)
+	
+dsid = ElementId(bic.OST_GenericModel)
+def create_ds(l, category = None, doc = None) :
+	if not doc :
+		doc = __revit__.AcitveUIDocument.Document
+	olist = []
+	if category is None :
+	    catid = dsid
+	else :
+	    catid = dsid
+	
+	# print(type(l))
+	
+	if not hasattr(l, "__iter__") :
+	    olist = [l]
+	else :
+	    olist = list(l)
+	shapes = []
+	
+	while len(olist) > 0 :
+		e = olist.pop()
+		if isinstance(e, Face) :
+			olist.extend(e.GetEdgesAsCurveLoops())	
+		elif isinstance(e, XYZ) :
+			print("точка")
+			shapes.append(Point.Create(e))
+		elif type(e) == geom.Polygon :
+			olist.extend(get_CurveLoopsFromPolygon(e))
+		elif hasattr(e, "__iter__") :
+			olist.extend(list(e))  
+		elif isinstance(e, GeometryObject) :
+			shapes.append(e)
+	
+	shapes_a = System.Array[GeometryObject](shapes)
+	
+	tr = None
+	if not doc.IsModifiable : 
+		tr = Transaction(doc, "создать DS")
+		tr.Start()
+		
+	ds = DirectShape.CreateElement(doc, catid)
+	ds.SetShape(shapes_a)
+	if tr : tr.Commit()
+	
+	return ds
+	
+	
+uidoc = uidoc.Application.ActiveUIDocument
+doc = uidoc.Document
+
+		
+dmDoc = dmDocument(doc)
+ar = dmDoc._getLink("АР.*Паркинг")
+print(ar)
+print(ar.ldoc)
+ldoc = ar.ldoc
+print(ldoc.rooms)
+
+room = ldoc.rooms["01"]
+#room = ldoc.rooms["Административное помещение"]
+print(room)
+
+bnd = room.getBoundary()
+print(bnd)
+
+pnts = []
+print("границы")
+wnds 	= room._getWindows()
+for win in wnds :
+	pnts.append(win.Location.Point)
+print("окна")
+drs 	= room._getDoors()
+for door in drs :
+	if door.Location :
+		pnts.append(door.Location.Point)
+
+pnts.append(bnd)
+ds = create_ds(pnts, doc = doc)
+	
+print("двери")
+
+
+
+
+
+
+
+
+
+	

@@ -1,0 +1,76 @@
+# Раскраска трубопроводов до узлов управления
+# для
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+
+from collections import deque
+
+
+def drawLine(startElement, endElement) :
+
+	toVisit = deque([startElement])
+	Visited = set()
+	
+	tree = {}
+	
+	i = 0
+	while toVisit :
+		i += 1
+		if i > 10000 : break
+		current = toVisit.popleft()
+		
+		if current == endElement : break
+		
+		for next in current.connectedElements :
+			if not next in tree :
+				tree[next] = current
+				toVisit.append(next)
+				
+	se = dm.dmElement(8958674)
+	
+	current = endElement
+	i = 0 
+	while current :
+		i += 1
+		if i > 10000 : break
+		current.Set("DM_Участок_схемы", 1)
+		print(current)
+		if current in tree :
+			current = tree[current]
+		else :
+			current = None
+
+startElement = dm.dmElement(8476553)
+
+for startElement in dm.getSelection() :
+	#if not startElement.IsSprinkler : continue
+	endElement = dm.dmElement(7098875)
+	drawLine(startElement, endElement)

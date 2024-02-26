@@ -301,7 +301,7 @@ class dmPolyLine :
 				pass
 		tr.Commit()
 		
-	def createSprinklers(self, maxDist = 3000 * dut, sprinklerToCopyId = 8476496) :
+	def createSprinklers(self, maxDist = 3000 * dut, sprinklerToCopyId = 8558826) :
 		sprinklerToCopy = dm.dmElement(sprinklerToCopyId)
 		tr = Transaction(doc, "Создаем спринклеры под воздуховодом")
 		tr.Start()
@@ -509,6 +509,16 @@ class dmRevitLinkInstance :
 #line = dmDuctLine(e)
 #line._calcLines()
 
+dref = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+li = doc.GetElement(dref)
+ldoc = li.GetLinkDocument()
+de = dmDuctElement(ldoc.GetElement(dref.LinkedElementId))
+
+dl = dmDuctLine(de)
+dl._calcLines()
+
+
+"""
 processedDucts = set()
 
 links = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
@@ -529,7 +539,7 @@ for l in links_OV :
 				processedDucts.union(
 					set([d1.firstElement for d1 in line.lineElements]))
 			#break
-			
+"""			
 		
 
 

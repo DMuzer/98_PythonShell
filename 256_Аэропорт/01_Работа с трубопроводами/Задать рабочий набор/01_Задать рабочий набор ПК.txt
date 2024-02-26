@@ -1,0 +1,63 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+def getPipes() :
+	for s in FilteredElementCollector(doc)\
+		.OfCategory(BuiltInCategory.OST_MechanicalEquipment).WhereElementIsNotElementType()\
+		.ToElements() :		
+			yield dm.dmElement(s)
+				
+cabinets = list(getCabinets())
+wss = set()
+wss1 = set()
+cabNum = 0 
+
+tr = Transaction(doc, "Удаление неподключенных врезок")
+tr.Start()
+for c in cabinets :
+	
+	if c.e.Name.Contains("ШПК") :
+		cabNum += 1
+		
+		wss.add(c.workset.Name)
+		
+	
+		
+		for e2 in c.getAttachment() :
+			wss1.add(e2.workset.Name)
+			e2.workset ="+ВПВ_Трубопроводы"
+			
+		c.workset = "+ВПВ_Оборудование"
+		
+
+	
+
+	
+print(wss)
+print(wss1)
+print(cabNum)
+tr.Commit()
+	
+
+
+	
+	
+
+
+
+

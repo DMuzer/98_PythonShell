@@ -1,0 +1,92 @@
+"""
+Установка рабочего набора для оросителей и веток (либо для защиты под воздуховодами либо для основных)
+"""
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+def getSprinklers() :
+	for s in FilteredElementCollector(doc)\
+		.OfCategory(BuiltInCategory.OST_Sprinklers).WhereElementIsNotElementType()\
+		.ToElements() :		
+			yield dm.dmElement(s)
+				
+sprinklers = list(getSprinklers())
+doneSprinklers = set()
+wss = set()
+wss1 = set()
+
+tr = Transaction(doc, "Установка рабочих наборов для веток")
+tr.Start()
+for s in sprinklers :
+	
+	if s in doneSprinklers : 
+		print("Обработанный спринклер, пропускаем")
+		continue
+	if not s.e.SuperComponent is None : 		
+		continue
+		
+
+		
+	try :
+		wss.add(s.workset.Name)
+		
+		if s.e.Name.Contains("оздуховод") :
+			#s.workset = "DM_Защита под воздуховодами"
+			
+			for e2 in s.getBranch() :
+				wss1.add(e2.workset.Name)
+				e2.workset ="DM_Защита под воздуховодами"
+				e2.set_color(r=255, view = uidoc.ActiveView)
+				if e2.IsSprinkler : doneSprinklers.add(e2)
+			
+			pass
+		else :
+			try :
+				#s.workset = "+АУПТ_Оросители и рядки"
+				pass
+			except :
+				print("ошибка при установке на спринклере не под коробом")
+				print(s)
+			for e2 in s.getBranch() :
+				try :
+					wss1.add(e2.workset.Name)
+					e2.workset ="+АУПТ_Оросители и рядки"
+					e2.set_color(b=255, view = uidoc.ActiveView)
+					if e2.IsSprinkler : doneSprinklers.add(e2)
+				except :
+					print("Ошибка на подводке на элементе {}".format(e2))
+	except Exception as ex :
+		print(50 * "-")
+		print("ошибка на элементе {}".format(s))
+		print(ex)
+		
+		
+
+	
+print(wss)
+print(wss1)
+tr.Commit()
+	
+
+
+	
+	
+
+
+
+

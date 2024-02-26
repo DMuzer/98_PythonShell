@@ -1,0 +1,353 @@
+# Подключение нестандартных импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+class dmConnector(object) :
+	def __init__(self, c) :
+		self.c = c
+	def _getId(self) :
+		return self.c.Id
+	Id = property(_getId)
+	def _getConnectorType(self) :
+		return self.c.ConnectorType
+	ConnectorType = property(_getConnectorType)
+	def __repr__(self) :
+		return "Соединитель элемент Id {} Id = {}".format(self.c.Owner.Id, self.c.Id)
+	def _getRadius(self) :
+		return self.c.Radius
+	Radius = property(_getRadius)
+	
+	def _getOwner(self) :
+		if self.c.Owner.Category.Id.IntegerValue == int(bic.OST_PipeCurves) :
+			return dmPipe(self.c.Owner)
+		elif self.c.Owner.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+			return dmPipeFitting(self.c.Owner)
+		else :
+			return dm.dmElement(self.c.Owner)
+	Owner = property(_getOwner)
+	
+	def _getConnected(self) :
+		for c in self.c.AllRefs :
+			if c.ConnectorType & ConnectorType.Physical and  c.Owner.Id != self.c.Owner.Id:
+				return dmConnector(c)
+	OppositeConnector = property(_getConnected)
+	
+	def _checkIfConnected(self) :
+		return self.c.IsConnected
+	IsConnected = property(_checkIfConnected)
+	
+	def setDiameter(self, d) :
+		print("23")
+		if self.Owner.IsPipe :
+			self.Owner.diameter = d
+		else :
+			connectorInfo = self.c.GetMEPConnectorInfo()
+			diam = True
+			ass_par_id 		= connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_DIAMETER))
+			if ass_par_id.IntegerValue == -1 :
+				diam = False
+				ass_par_id = connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_RADIUS))
+			print(ass_par_id)
+			print(connectorInfo)
+			
+			ass_par_def = self.c.Owner.Document.GetElement(ass_par_id)
+			print(ass_par_def.GetDefinition().Name)
+			ass_par 	= self.c.Owner.LookupParameter(ass_par_def.GetDefinition().Name)
+			tr = None
+			try :
+				if not self.c.Owner.Document.IsModifiable :
+					tr = Transaction(self.c.Owner.Document, "Изменение размера фитинга")
+					tr.Start()
+					
+				try :
+					if diam :
+						ass_par.Set(d) 
+					else :
+						ass_par.Set(d/2)
+				except :
+					#raise
+					print("устанавливаем напрямую")
+					self.c.Radius = d/2
+				if tr :
+					tr.Commit()
+			except :
+				raise
+				
+				pass
+	def _allRefs(self) :
+		for c in self.c.AllRefs :
+			yield dmConnector(c)
+	AllRefs  = property(_allRefs)
+	
+	def _refsPhys(self) :
+		for c in self.c.AllRefs :
+			if c.ConnectorType & ConnectorType.Physical :
+				yield dmConnector(c)
+	
+			
+			
+			
+			
+			
+class dmPipeFitting(dm.dmElement) :
+	def __repr__(self) :
+		return "Фитинг Id : {} Type : {}".format(self.Id, self.e.MEPModel.PartType)
+	def _getConnectors(self) :
+		res = []
+		for c in self.e.MEPModel.ConnectorManager.Connectors :
+			res.append(dmConnector(c))
+		res = sorted(res, key = lambda x  : x.c.Id)
+		return res
+	
+	connectors = property(_getConnectors)
+	def _getEndConnectors(self) :
+		try :
+			return self._endConnectors
+		except AttributeError:
+			print
+			self._endConnectors = []
+			for c in self.e.MEPModel.ConnectorManager.Connectors :
+				if c.ConnectorType == ConnectorType.End :
+					self._endConnectors.append(dmConnector(c))
+			self._endConnetors = sorted(self._endConnectors, key = lambda x : x.c.Id)
+			return self._endConnectors
+	EndConnectors = property(_getEndConnectors)
+	
+	def _setDiameter(self, d) :
+		pass
+	
+class dmPipe(dm.dmElement) :
+	pass
+	def _getConnectors(self) :
+		res = []
+		for c in self.e.ConnectorManager.Connectors :
+			res.append(dmConnector(c))
+		res = sorted(res, key = lambda x  : x.c.Id)
+		return res
+	
+	connectors = property(_getConnectors)
+	def _getEndFitting(self) :
+		for c in self.connectors :
+			if c.IsConnected and c.c.ConnectorType == ConnectorType.End :
+				for c1 in c.c.AllRefs :
+					if c1.Owner.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+						yield dmPipeFitting(c1.Owner)
+	fittings = property(_getEndFitting)
+	
+	def _getEndFittingDictionary(self) :
+		pass
+		
+	
+	def setDiameterPipeAndFittings(self, d) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Смена диаметра трубы и фитинга")
+			tr.Start()
+			
+		try :
+			self.diameter = d
+			
+			try :
+				c1 = self.connectorsDict[0].OppositeConnector.setDiameter(d)
+			except :
+				pass
+			try :
+				c2 = self.connectorsDict[1].OppositeConnector.setDiameter(d)
+			except :
+				pass
+		except : pass
+		
+		if tr : tr.Commit()
+		
+
+						
+	def getEndFitting(self, num) :
+		return self.connectorsDict[num].OppositeConnector.Owner
+		
+class dmBranch(object) :
+	def __init__(self, e) :
+		self.e = e
+		self._sprinklers = None
+	
+	def _getSprinklers(self) :
+		if not self._sprinklers :		
+			self._sprinklers = [e for e in self.e.getBranch() if e.IsSprinkler]
+		return self._sprinklers
+		
+	def _getElements(self) :
+		return [e for e in self.e.getBranch()]
+	def _getElementsNotAttachments(self) :
+		elements = set([e for e in self.e.getBranch()])
+		sprs = self._getSprinklers()
+		
+		for spr in sprs :
+			for e in spr.getAttachment() :
+				elements.remove(e)
+		res = []
+		
+		for e in elements :
+			if e.IsPipe :
+				res.append(dmPipe(e))
+			elif e.IsFitting :
+				res.append(dmPipeFitting(e))
+			else :
+				res.append(e)
+		return res
+		
+	def setMainLineDiameter(self, d = None) :
+		tr = None
+		pipeD = {
+			1 : 25 * dut,
+			2 : 32 * dut,
+			3 : 40 * dut,
+			4 : 50 * dut,
+			5 : 50 * dut,
+			6 : 50 * dut,
+			7 : 50 * dut,
+			8 : 50 * dut,
+			9 : 50 * dut,
+			10 : 50 * dut,
+			11 : 50 * dut,
+		}
+		
+		print("d={}".format(d))
+		if not d :
+			sprNum = len(self._getSprinklers())
+			if sprNum in pipeD :
+				d = pipeD[sprNum]
+			else :
+				d = 65 * dut
+			
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Замена диаметров ветки")
+			tr.Start()
+		for pipe in self._getElementsNotAttachments() :
+			try :
+				if pipe.IsPipe :
+					pipe.setDiameterPipeAndFittings(d)
+			except :
+				pass
+		
+		if tr : tr.Commit()
+		
+		
+	def set_color(self, r=0, g=0, b=0, a=0) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Установка цвета на ветку")
+			tr.Start()
+		for s in self._getElementsNotAttachments() :
+			s.set_color(r=r, g=g, b=b, view = uidoc.ActiveView)
+		if tr :
+			tr.Commit()
+				
+	
+#spr = dm.dmElement(8482045)
+
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+sprinklers = [dm.dmElement(spr) for spr in FilteredElementCollector(doc, uidoc.ActiveView.Id)\
+	.OfCategory(bic.OST_Sprinklers)\
+	.WhereElementIsNotElementType().ToElementIds()]
+	
+for spr in sprinklers :
+	if any([c.IsConnected for c in spr.connectors]) :
+		spr.set_color(r=0, g=250, b=0, view= uidoc.ActiveView)
+		print("Подключен")
+	else :
+		spr.set_color(r=255, g=0, b=0, view = uidoc.ActiveView)
+		print("Не подключен")
+	
+print("Всего спринклеров {}".format(len(sprinklers)))
+_sprinklers = []
+
+for spr in sprinklers :
+	pass
+	connectors = list(spr.connectors)
+	if len(connectors) == 0 : continue
+	if not any([c.IsConnected for c in connectors]) :
+		_sprinklers.append(spr)
+		
+sprinklers = _sprinklers
+	
+print("Всего неподключенных спринклеров {}".format(len(sprinklers)))
+
+pipes = [dmPipe(e) for e in FilteredElementCollector(doc, uidoc.ActiveView.Id).\
+								OfCategory(bic.OST_PipeCurves).\
+								WhereElementIsNotElementType().ToElementIds()]
+								
+connectors = []
+
+for pipe in pipes :
+	c1 = pipe.connectorsDict[0]
+	c2 = pipe.connectorsDict[1]
+	if  not c1.IsConnected:
+		connectors.append(c1)
+	if not c1.IsConnected :
+		connectors.append(c2)
+
+b1 = dmBranch(spr)
+b1.set_color(r= 0, b = 255)
+to_delete = []
+
+tr = Transaction(doc, "Подключение неподключенных")
+tr.Start()
+print("Ищем коннекторы")
+for spr in sprinklers :
+	try :
+		c0 = list(spr.connectors)[0]
+	except :
+		continue
+	fPipe = None
+	c1 = None
+	
+	for c in connectors :
+		if c.c.Origin.DistanceTo(c0.Origin) < 0.003 :
+			print("Найден")
+			c1 = c
+			c.c.ConnectTo(c0)
+	if not c1 :
+		print("Не Найден")
+tr.Commit()	
+for spr in sprinklers :
+	if any([c.IsConnected for c in spr.connectors]) :
+		spr.set_color(r=0, g=250, b=0, view= uidoc.ActiveView)
+		print("Подключен")
+	else :
+		spr.set_color(r=255, g=0, b=0, view = uidoc.ActiveView)
+		print("Не подключен")
+		
+			
+
+			
+			
+
+

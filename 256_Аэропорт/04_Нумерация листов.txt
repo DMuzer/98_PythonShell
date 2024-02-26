@@ -9,13 +9,15 @@ class dmSheet :
 		return "{} : {}".format(self.sheet.SheetNumber, self.sheet.Name)
 	def set_number(self) :
 		try :
-			num = int(self.sheet.SheetNumber.split("-")[-1])
-			self.sheet.LookupParameter("Ш_Сквозной номер").Set(int(num))
-		except :
+			num = int(self.sheet.SheetNumber.split(".")[-1])
+			self.sheet.LookupParameter("Номер листа N2").Set(int(num))
+		except Exception as ex:	
+			print("ошибка set_number")
+			print(ex)
 			pass
 	def set_title_num(self) :
 		try :
-			num = int(self.sheet.SheetNumber.split("-")[-1])
+			num = int(self.sheet.SheetNumber.split(".")[-1])
 		except :
 			num = 1
 		flt = ElementCategoryFilter(BuiltInCategory.OST_TitleBlocks)
@@ -58,7 +60,7 @@ class dmSheet :
 			e.LookupParameter("Строка4_Дата").Set(1)
 			e.LookupParameter("Строка5_Дата").Set(1)
 			e.LookupParameter("Строка6_Дата").Set(1)
-			e.LookupParameter("Дата утверждения листа").Set("12.23")
+			e.LookupParameter("Дата утверждения листа").Set("01.24")
 					
 		
 			
@@ -108,7 +110,7 @@ for sheet in sheets :
 	print(sheet)
 	dm_sheet = dmSheet(sheet)
 	dm_sheet.set_number()
-	dm_sheet.change_type()
+	#dm_sheet.change_type()
 	dm_sheet.set_title_num()
 	
 	

@@ -1,0 +1,71 @@
+"""Подключение ветки к магистрали"""
+
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+sprinklers = set([spr for spr in dm.getSelection()])
+
+visiblePipes = [p for p in dm.getActiveViewPipingElements() if p.IsPipe and p.diameter >= 80 * dut]
+
+
+
+
+tr = Transaction(doc, "Подключение ветки к магистрали")
+tr.Start()
+while sprinklers :
+	spr = sprinklers.pop()
+	print(spr.IsAttached)
+	if not spr.IsBranchConnected or True:
+		print("Не подключен")
+	else :
+		print("подключен")
+		
+	#Ищем неподключенные конечные трубные коннекторы
+	
+	pipes = [p for p  in spr.getBranch() if p.IsPipe]
+	unconnectedConnectors = []
+	for pipe in pipes :
+		for c in pipe.connectors :
+			if c.ConnectorType == ConnectorType.End and not c.IsConnected :
+				unconnectedConnectors.append(c)
+	#Необходимо найти ближайшую подходящую для подключения трубу
+	possibleConnections = []
+	for c in unconnectedConnectors :
+		p = c.Origin
+		
+		nearestPipe = min(visiblePipes, key = lambda x : x.e.Location.Curve.Distance(p))
+		possibleConnections.append((c, nearestPipe, nearestPipe.e.Location.Curve.Distance(p)))
+		
+	toConnect = min(possibleConnections, key = lambda x : x[2])
+	
+	doc.Create.NewTakeoffFitting(toConnect[0], toConnect[1].e)
+	
+	sprinklers.difference_update(set(spr.getBranch()))
+	
+	
+		
+	
+	
+		
+			
+tr.Commit()
+	
+
+
+	
+	
