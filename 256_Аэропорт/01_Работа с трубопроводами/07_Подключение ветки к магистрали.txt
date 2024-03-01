@@ -56,13 +56,7 @@ while sprinklers :
 	doc.Create.NewTakeoffFitting(toConnect[0], toConnect[1].e)
 	
 	sprinklers.difference_update(set(spr.getBranch()))
-	
-	
 		
-	
-	
-		
-			
 tr.Commit()
 	
 

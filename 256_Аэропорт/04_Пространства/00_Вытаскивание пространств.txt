@@ -92,11 +92,9 @@ class dmRoom(object) :
 			rings.append(lr)
 		ringsSorted = sorted(rings, key = lambda x : x.Area, reverse = True)
 		holes = System.Array[geom.LinearRing](ringsSorted[1:])
-		res = geom.Polygon(shell = ringsSorted[0], holes = holes)
-			
-		
-		
+		res = geom.Polygon(shell = ringsSorted[0], holes = holes)	
 		return res
+		
 	def _getDoors(self) :
 		phases = {ph.Id : ph for ph in self.room.Document.Phases}
 		phase = phases[self.dmE.Value("Код стадии")]
@@ -159,6 +157,56 @@ class dmRoom(object) :
 		
 		return list(resWindows)
 		
+	def showContour(self, pos = None) :
+		print(self)
+		print("Контур")
+		
+			
+		bb = self.room.get_BoundingBox(None)
+		if not bb : return pos
+		minX = bb.Min.X
+		minY = bb.Min.Y
+		maxX = bb.Max.X
+		print("pos {}, maxX = {}, minX = {}, minY = {}".format(pos, maxX, minX, minY))
+		newPos = pos + maxX - minX + 2
+		
+		moveVec = XYZ(-minX + pos, -minY, 0)
+		
+		moveToBegin = Transform.CreateTranslation(moveVec)
+		print(--2)
+		geoms = self.room.Geometry[Options()].GetTransformed(moveToBegin)
+		founds = []
+		print("--3")
+		for g in geoms :
+			if isinstance(g, Solid) :
+				for f in g.Faces :
+					if not isinstance(f, PlanarFace) : continue
+					if f.FaceNormal.Z < -0.98 :
+						founds.append(f)
+						
+		tr = None 
+		doc = self.room.Document
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Рисование контура" + str(self.room.Id))
+			tr.Start()
+						
+		for found in founds : 
+		
+			for cl in found.GetEdgesAsCurveLoops() :
+				for curve in cl :
+					try :
+						doc.Create.NewDetailCurve(doc.ActiveView, curve)
+					except :
+						pass
+		if tr : tr.Commit()
+		
+		return newPos
+		
+class dmSpace(dmRoom) :
+	def __repr__(self) :
+		return "Пространство №{} : {}".format(self.room.Number, self.room.Name)
+	
+	pass
 	
 class dmRevitLink(object) :
 	def __init__(self, link) :
@@ -220,6 +268,9 @@ class dmDocument (object) :
 			
 	rooms = property(_getRoomIndexer)
 	
+	def _getSpaces(self) :
+		return [dmSpace(s) for s in FilteredElementCollector(self.doc).WherePasses(DB.Mechanical.SpaceFilter()).ToElements()]
+	
 dsid = ElementId(bic.OST_GenericModel)
 def create_ds(l, category = None, doc = None) :
 	if not doc :
@@ -271,41 +322,13 @@ doc = uidoc.Document
 
 		
 dmDoc = dmDocument(doc)
-ar = dmDoc._getLink("АР.*Паркинг")
-print(ar)
-print(ar.ldoc)
-ldoc = ar.ldoc
-print(ldoc.rooms)
-
-room = ldoc.rooms["01"]
-#room = ldoc.rooms["Административное помещение"]
-print(room)
-
-bnd = room.getBoundary()
-print(bnd)
-
-pnts = []
-print("границы")
-wnds 	= room._getWindows()
-for win in wnds :
-	pnts.append(win.Location.Point)
-print("окна")
-drs 	= room._getDoors()
-for door in drs :
-	if door.Location :
-		pnts.append(door.Location.Point)
-
-pnts.append(bnd)
-ds = create_ds(pnts, doc = doc)
+pos = 0
+for space in dmDoc._getSpaces()[:] :
+	#print(space)
+	#print(space.getBoundary())
+	print("Позиция {}".format(pos))
+	pos = space.showContour(pos = pos)
 	
-print("двери")
-
-
-
-
-
-
-
-
-
 	
+	
+

@@ -1,4 +1,4 @@
-# Подключение нестандартных импортов
+# Подключение стандартных импортов
 import clr
 from Autodesk.Revit import DB, UI
 import System, sys
