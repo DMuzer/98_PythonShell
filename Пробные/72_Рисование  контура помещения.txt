@@ -1,0 +1,150 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+clr.AddReferenceToFile(r"NetTopologySuite.dll")
+
+import NetTopologySuite as nts
+#from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+
+def getFace(solid) :
+	for face in solid.Faces :
+		if face.FaceNormal.Z < -0.98 :
+			return face
+			
+
+def getFRType() :
+	fc = {t.Name : t for t in FilteredElementCollector(doc).OfClass(FilledRegionType).ToElements()}
+	return fc["Защищаемая площадь"]
+	
+def CurveLoopAsLinearRing(cl) :
+	points = []
+	for curve in cl :		
+		points.extend(list(curve.Tessellate())[:-1])
+	
+	points.append(points[0])
+	coords = []
+	for point in points :
+		coord = geoms.Coordinate(point.X, point.Y)
+		coords.append(coord)
+	return geoms.LinearRing(System.Array[geoms.Coordinate](coords))
+		
+		
+	
+def CurveLoopsAsPolygon(cls) :
+	polygons = []
+	for cl in cls :
+		polygons.append(CurveLoopAsLinearRing(cl))
+	outer = max(polygons, key = lambda x : x.Area)
+	polygons.remove(outer)
+	pg = geoms.Polygon(outer, System.Array[geoms.LinearRing](polygons))
+	return pg
+	
+class dmFace :
+	def __init__(self, face) :
+		self.face = face
+		self.pg = None
+		
+	def drawContour(self) :
+		edges = self.face.GetEdgesAsCurveLoops()
+	
+		trans = Transaction(doc,"create room region")
+		trans.Start()		
+		FilledRegion.Create(doc, frt.Id, uidoc.ActiveView.Id, edges)		
+		trans.Commit()		
+		
+	def asPolygon(self) :
+		if self.pg is None :
+			edges = self.face.GetEdgesAsCurveLoops()
+			self.pg = CurveLoopsAsPolygon(edges)
+		return self.pg
+		
+		
+frt = getFRType()
+ddoc= dmDoc.dmDocument(doc)
+print(ddoc)
+found = False
+
+for e in ddoc.getLinksMasked(".*АР_.*") :
+	print(e)
+	
+	room = e.linkDoc.rooms["2.1п"]
+	if room : break
+		
+for g in room.getGeometry() :
+	print(g)
+	
+f = dmFace(getFace(g))
+e1 = dmDoc.dmElementWithGeometry(1129264)
+
+for g in e1.getGeometry() :
+	print(g)
+	
+floors = ddoc.getFloorsFromLinks()
+faces = []
+for floor in floors :
+	fs = [face for face in floor.getFaces() \
+				if isinstance(face.face, PlanarFace) and face.face.FaceNormal.DotProduct(-XYZ.BasisZ)>0]
+	faces.extend(fs)
+	
+trans = Transaction(doc,"создание")
+trans.Start()
+i = 0
+for face in faces :
+	i += 1
+	if i > 5000 : break
+	try :
+		face.drawContour()
+	except :
+		pass
+	
+trans.Commit()
+
+
+
+
+
+
+
+	
+	
+	
+
+
+	

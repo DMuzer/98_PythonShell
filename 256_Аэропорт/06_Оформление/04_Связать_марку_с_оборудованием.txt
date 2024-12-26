@@ -1,0 +1,44 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+	
+while True :
+	try :
+		label = dm.dmElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element, "Выбрать аннотацию"))
+		equip = dm.dmElement(uidoc.Selection.PickObject(UI.Selection.ObjectType.Element, "Выбрать оборудование"))
+		
+		label.Set("СвязанныйЭлемент", equip.Id.IntegerValue)
+	except :
+		break
+	
+
+
+	

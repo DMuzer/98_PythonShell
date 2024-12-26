@@ -1,0 +1,47 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+tr = Transaction(doc, "Простановка группирования")
+tr.Start()
+for e in dm.getAllPipingElements() :
+	if e.Value("О_Наименование").Contains("Переход стальной") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+	if e.Value("О_Наименование").Contains("ран шаровый") :
+		e.Set("DM_Группирование", "18_Арматура муфтовая")
+	if e.Value("О_Наименование").Contains("Муфта приварная") :
+		e.Set2("DM_Группирование", "16.9_Оросители")
+		
+	if e.Value("О_Наименование").Contains("Муфта грувлочная") :
+		e.Set("DM_Группирование", "52_Детали трубопровода")
+	if e.Value("О_Наименование").Contains("Сочленение") :
+		e.Set("DM_Группирование", "52_Детали трубопровода")
+tr.Commit()
+	

@@ -1,7 +1,7 @@
 import Autodesk.Revit.UI as UI
 import Autodesk.Revit.DB as DB
-import re
-import math
+import re  
+import math 
 import clr
 import System
 import sys
@@ -24,25 +24,31 @@ except Exception as ex:
 
 
 import random	
-
+import re
 av = dm.dmView(uidoc.ActiveView)
 
 bl = av[2]
-
 av.resetGridBubbles()
 av.showHideGridBubbles()
-av.alignGridEnds(30*dut)
+av.alignGridEnds(25*dut)
 av.alignGridBubbles()
 av.createDimensions()
 
-if False :
-	app = dm.dmApp4Views()
+views = {v.Name : dm.dmView(v) for v in FilteredElementCollector(doc).OfClass(ViewPlan) if
+			v.GetTypeId().IntegerValue == 2288361 and v.Name > "04"}
+			
+for v in sorted(views) :
+	print(v)
+
+if True :
+	#app = dm.dmApp4Views()
 	
-	for v in app.getViewsStartsWith("О_ПТ_Этаж -01_-3.490 -") :
+	for v in views.values() :
 		print(v.view.Name)
 		v.showHideGridBubbles()		
-		v.alignGridEnds(30*dut)
+		v.alignGridEnds(25*dut)
 		v.resetGridBubbles()
 		v.alignGridBubbles()
+		v.createDimensions()
 	
 

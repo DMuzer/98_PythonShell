@@ -1,0 +1,134 @@
+# Заполнение параметров листов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+class dmTitle(dm.dmElement) :
+	pass
+	def __repr__(self) :
+		return "\nсемейство, Формат листа:{}".format( self.e.Name)
+class dmSheet(dm.dmElement) :
+	def _getTittles(self) :
+		tittles = [dmTitle(e) for e in \
+			FilteredElementCollector(doc, self.Id)\
+			.OfCategory(bic.OST_TitleBlocks)\
+			.WhereElementIsNotElementType()\
+			.ToElements()]
+		tittles = sorted(tittles, key = lambda x : x.Location.Point.X)
+		return tittles
+	tittles = property(_getTittles)
+	def __repr__(self) :
+		return "Лист {} - {} - {}"\
+			.format(self.Value("Номер листа"), 
+						self.Value("Имя листа"), self.Value("ADSK_Штамп Раздел проекта"))
+	
+	def setNames(self) :
+		with dm.trans(a = "Установка значений штампа") :
+			self.Set("ADSK_Штамп_1 должность", "Разработал")
+			self.Set("ADSK_Штамп_2 должность", "Проверил")
+			self.Set("ADSK_Штамп_3 должность", "")
+			self.Set("ADSK_Штамп_4 должность", "")
+			self.Set("ADSK_Штамп_5 должность", "ГИП")
+			self.Set("ADSK_Штамп_6 должность", "Н.Контр.")
+			
+			self.Set("ADSK_Штамп_1 фамилия", "Сошников")
+			self.Set("ADSK_Штамп_2 фамилия", "Костромской")
+			self.Set("ADSK_Штамп_3 фамилия", "")
+			self.Set("ADSK_Штамп_4 фамилия", "")
+			self.Set("ADSK_Штамп_5 фамилия", "Костромской")
+			self.Set("ADSK_Штамп_6 фамилия", "Распорская")
+	
+	def setDates(self) :
+		with dm.trans(a = "Установка значений штампа") :
+			self.Set("Дата утверждения листа", "08.24")
+		
+			for t in self.tittles :
+				t.Set("Строка1_Дата",1)
+				t.Set("Строка2_Дата",1)
+				t.Set("Строка3_Дата",0)
+				t.Set("Строка4_Дата",0)
+				t.Set("Строка5_Дата",1)
+				t.Set("Строка6_Дата",1)
+				
+	def setNumber(self) :
+		try :
+			number = self.Value("Номер листа").split("-")[-1]
+		except :
+			number = "-"
+		
+		with dm.trans(a="Номер листа") :
+		
+			tittles = self.tittles 
+			if len(tittles) == 1 :
+				
+				tittles[0].Set("Номер листа N2", number)
+			elif len(tittles) > 1 :
+				for num, t in enumerate(tittles, 1) :
+					print(str(num))
+					t.Set("Номер листа N2", str(num))
+					
+		
+		
+		
+		
+	pass
+	
+parts = [
+"АУВПТ"
+"АУВПТ.СО",
+"АУВПТ.ЗД1",
+"АУВПТ.ЗД2",
+"АУВПТ.ЗД3",
+"АУВПТ.ЗД4",
+]	
+sheets = [dmSheet(e) for e in FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()]
+
+sheets = [s for s in sheets if s.Value("ADSK_Штамп Раздел проекта") in parts]
+
+with dm.trans(a = "установка листов") :
+	for s in sheets :
+		pass
+		s.setDates()
+		s.setNames()
+		s.setNumber()
+
+
+
+	
+
+
+	

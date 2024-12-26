@@ -1,0 +1,103 @@
+import sqlite3 as sql
+import os
+
+
+fld = os.path.split(doc.PathName)[0]
+fname = doc.Title + "_окна3.db"
+
+bdpath = fld + '\\' + fname
+print(bdpath)
+print(os.path.exists(bdpath))
+
+def createDB(path) :
+	q = """
+			CREATE TABLE DoorsWin (
+		    Door   INTEGER,
+		    Room INTEGER,
+		    link   INTEGER
+		);
+	"""
+	conn = sql.connect(path)
+	conn.execute(q)
+	conn.commit()
+	conn.close()
+	
+def clearDB(path) :
+	q = """
+	Delete From DoorsWin
+	"""
+	conn = sql.connect(path)
+	conn.commit()
+	conn.close()
+	
+	
+
+if not os.path.exists(bdpath) :
+	createDB(bdpath)
+else :
+	clearDB(bdpath)
+	
+	
+q1 = """
+
+INSERT INTO DoorsWin (
+                         link,
+                         Room,
+                         Door
+                     )
+                     VALUES (
+                         ?,
+                         ?,
+                         ?
+                     );
+
+"""
+	
+phaseParId = uidoc.ActiveView.Parameter[BuiltInParameter.VIEW_PHASE].AsElementId()
+phase = doc.GetElement(phaseParId)
+
+links = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
+	
+conn = sql.connect(bdpath)
+
+try :
+
+	for link in links :
+		ldoc = link.GetLinkDocument()
+		if not ldoc : continue
+		print(ldoc.Title)
+		
+		fc = FilteredElementCollector(ldoc)\
+				.OfCategory(BuiltInCategory.OST_Doors)\
+				.WhereElementIsNotElementType().ToElements()
+		for door in fc :
+			fRoom = door.ToRoom[phase]
+			tRoom = door.FromRoom[phase]
+			
+			if fRoom :
+				conn.execute(q1 , (link.Id.IntegerValue, fRoom.Id.IntegerValue, door.Id.IntegerValue ))
+				conn.commit()
+			if tRoom :
+				conn.execute(q1 , (link.Id.IntegerValue, tRoom.Id.IntegerValue, door.Id.IntegerValue ))
+				conn.commit()
+				
+		fc = FilteredElementCollector(ldoc)\
+				.OfCategory(BuiltInCategory.OST_Windows)\
+				.WhereElementIsNotElementType().ToElements()
+		for door in fc :
+			fRoom = door.ToRoom[phase]
+			tRoom = door.FromRoom[phase]
+			
+			if fRoom :
+				conn.execute(q1 , (link.Id.IntegerValue, fRoom.Id.IntegerValue, door.Id.IntegerValue ))
+				conn.commit()
+			if tRoom :
+				conn.execute(q1 , (link.Id.IntegerValue, tRoom.Id.IntegerValue, door.Id.IntegerValue ))
+				conn.commit()
+except :
+	conn.close()
+		
+		
+conn.close()
+
+

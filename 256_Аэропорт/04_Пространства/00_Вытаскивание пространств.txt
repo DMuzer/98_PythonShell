@@ -323,11 +323,15 @@ doc = uidoc.Document
 		
 dmDoc = dmDocument(doc)
 pos = 0
+
+tr = Transaction(doc, "Создание контуров")
+tr.Start()
 for space in dmDoc._getSpaces()[:] :
 	#print(space)
 	#print(space.getBoundary())
 	print("Позиция {}".format(pos))
 	pos = space.showContour(pos = pos)
+tr.Commit()
 	
 	
 	

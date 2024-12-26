@@ -1,0 +1,67 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+tr = Transaction(doc, "Простановка группирования")
+tr.Start()
+for e in dm.getAllPipingElements() :
+	naim = e.Value("О_Наименование")
+	if naim is None :
+		e.Set2("DM_Группирование", "99_")
+		continue
+	naim = naim.ToLower()
+	
+	if naim.Contains("переход стальной") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+		continue
+	if naim.Contains("ран шаровый") :
+		e.Set("DM_Группирование", "18_Арматура муфтовая")
+		continue
+	if naim.Contains("муфта приварная") :
+		e.Set2("DM_Группирование", "16.9_Оросители")
+		continue
+	if naim.Contains("отвод") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+		continue
+		
+	if naim.ToLower().Contains("муфта грувлочная") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+		continue
+	if naim.Contains("Сочленение") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+		continue
+	if naim.Contains("гибкая сейсмовставка") :
+		e.Set2("DM_Группирование", "21_Сейсмокомпенсаторы")
+		continue
+	if naim.Contains("адаптер фланцевый") :
+		e.Set2("DM_Группирование", "52_Детали трубопровода")
+		continue
+tr.Commit()
+	

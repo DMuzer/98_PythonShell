@@ -1,0 +1,99 @@
+import sqlite3 as sql
+import os
+
+from Autodesk.Revit import UI as UI
+
+
+fld = os.path.split(doc.PathName)[0]
+fname = doc.Title + "_окна3.db"
+
+bdpath = fld + '\\' + fname
+print(bdpath)
+print(os.path.exists(bdpath))
+
+def createDB(path) :
+	q = """
+			CREATE TABLE DoorsWin (
+		    Door   INTEGER,
+		    Room INTEGER,
+		    link   INTEGER
+		);
+	"""
+	conn = sql.connect(path)
+	conn.execute(q)
+	conn.commit()
+	conn.close()
+	
+def clearDB(path) :
+	q = """
+	Delete From DoorsWin
+	"""
+	conn = sql.connect(path)
+	conn.commit()
+	conn.close()
+	
+	
+
+if not os.path.exists(bdpath) :
+	createDB(bdpath)
+else :
+	clearDB(bdpath)
+	
+	
+q1 = """
+
+INSERT INTO DoorsWin (
+                         link,
+                         Room,
+                         Door
+                     )
+                     VALUES (
+                         ?,
+                         ?,
+                         ?
+                     );
+
+"""
+	
+phaseParId = uidoc.ActiveView.Parameter[BuiltInParameter.VIEW_PHASE].AsElementId()
+phase = doc.GetElement(phaseParId)
+
+links = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
+
+q = """
+SELECT Door,
+       Room,
+       link
+  FROM DoorsWin
+ WHERE Room = ?;
+"""
+	
+
+
+try :
+	conn = sql.connect(bdpath)	
+	roomRef = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+	link = doc.GetElement(roomRef)
+	ldoc = link.GetLinkDocument()
+	room = ldoc.GetElement(roomRef.LinkedElementId)
+	
+	dIds = conn.execute(q, (room.Id.IntegerValue,)).fetchall()
+	
+	for dId in dIds :
+		print(dId)
+		wn = ldoc.GetElement(ElementId(dId[0]))
+		
+		print(wn)		
+		try :
+			print(wn.FromRoom[phase])
+		except :
+			pass
+		try :
+			print(wn.ToRoom[phase])
+		except :
+			pass
+
+
+except Exception as ex:
+	print(ex)
+	conn.close()

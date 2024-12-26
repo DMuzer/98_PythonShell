@@ -17,7 +17,10 @@ from collections import deque
 bic = BuiltInCategory
 dsid = ElementId(bic.OST_GenericModel)
 
+tr = Transaction(doc, "Проставить DM_Позиция_спец1")
+tr.Start()
 for e in dm.getActiveViewPipingElements() :
 	e.Set("DM_Позиция_спец1", "-")
 	print(e)
+tr.Commit()
 	

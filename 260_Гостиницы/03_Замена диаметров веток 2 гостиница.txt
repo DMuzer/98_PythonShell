@@ -1,0 +1,342 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+class dmConnector(object) :
+	def __init__(self, c) :
+		self.c = c
+	def _getId(self) :
+		return self.c.Id
+	Id = property(_getId)
+	def _getConnectorType(self) :
+		return self.c.ConnectorType
+	ConnectorType = property(_getConnectorType)
+	def __repr__(self) :
+		return "Соединитель элемент Id {} Id = {}".format(self.c.Owner.Id, self.c.Id)
+	def _getRadius(self) :
+		return self.c.Radius
+	Radius = property(_getRadius)
+	
+	def _getOwner(self) :
+		if self.c.Owner.Category.Id.IntegerValue == int(bic.OST_PipeCurves) :
+			return dmPipe(self.c.Owner)
+		elif self.c.Owner.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+			return dmPipeFitting(self.c.Owner)
+		else :
+			return dm.dmElement(self.c.Owner)
+	Owner = property(_getOwner)
+	
+	def _getConnected(self) :
+		for c in self.c.AllRefs :
+			if c.ConnectorType & ConnectorType.Physical and  c.Owner.Id != self.c.Owner.Id:
+				return dmConnector(c)
+	OppositeConnector = property(_getConnected)
+	
+	def _checkIfConnected(self) :
+		return self.c.IsConnected
+	IsConnected = property(_checkIfConnected)
+	
+	def setDiameter(self, d) :
+		print("23")
+		if self.Owner.IsPipe :
+			self.Owner.diameter = d
+		else :
+			connectorInfo = self.c.GetMEPConnectorInfo()
+			diam = True
+			ass_par_id 		= connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_DIAMETER))
+			if ass_par_id.IntegerValue == -1 :
+				diam = False
+				ass_par_id = connectorInfo.GetAssociateFamilyParameterId(ElementId(BuiltInParameter.CONNECTOR_RADIUS))
+			print(ass_par_id)
+			print(connectorInfo)
+			
+			ass_par_def = self.c.Owner.Document.GetElement(ass_par_id)
+			print(ass_par_def.GetDefinition().Name)
+			ass_par 	= self.c.Owner.LookupParameter(ass_par_def.GetDefinition().Name)
+			tr = None
+			try :
+				if not self.c.Owner.Document.IsModifiable :
+					tr = Transaction(self.c.Owner.Document, "Изменение размера фитинга")
+					tr.Start()
+					
+				try :
+					if diam :
+						ass_par.Set(d) 
+					else :
+						ass_par.Set(d/2)
+				except :
+					#raise
+					print("устанавливаем напрямую")
+					self.c.Radius = d/2
+				if tr :
+					tr.Commit()
+			except :
+				raise
+				
+				pass
+	def _allRefs(self) :
+		for c in self.c.AllRefs :
+			yield dmConnector(c)
+	AllRefs  = property(_allRefs)
+	
+	def _refsPhys(self) :
+		for c in self.c.AllRefs :
+			if c.ConnectorType & ConnectorType.Physical :
+				yield dmConnector(c)
+	
+			
+			
+			
+			
+			
+class dmPipeFitting(dm.dmElement) :
+	def __repr__(self) :
+		return "Фитинг Id : {} Type : {}".format(self.Id, self.e.MEPModel.PartType)
+	def _getConnectors(self) :
+		res = []
+		for c in self.e.MEPModel.ConnectorManager.Connectors :
+			res.append(dmConnector(c))
+		res = sorted(res, key = lambda x  : x.c.Id)
+		return res
+	
+	connectors = property(_getConnectors)
+	def _getEndConnectors(self) :
+		try :
+			return self._endConnectors
+		except AttributeError:
+			print
+			self._endConnectors = []
+			for c in self.e.MEPModel.ConnectorManager.Connectors :
+				if c.ConnectorType == ConnectorType.End :
+					self._endConnectors.append(dmConnector(c))
+			self._endConnetors = sorted(self._endConnectors, key = lambda x : x.c.Id)
+			return self._endConnectors
+	EndConnectors = property(_getEndConnectors)
+	
+	def _setDiameter(self, d) :
+		pass
+	
+class dmPipe(dm.dmElement) :
+	pass
+	def _getConnectors(self) :
+		res = []
+		for c in self.e.ConnectorManager.Connectors :
+			res.append(dmConnector(c))
+		res = sorted(res, key = lambda x  : x.c.Id)
+		return res
+	
+	connectors = property(_getConnectors)
+	def _getEndFitting(self) :
+		for c in self.connectors :
+			if c.IsConnected and c.c.ConnectorType == ConnectorType.End :
+				for c1 in c.c.AllRefs :
+					if c1.Owner.Category.Id.IntegerValue == int(bic.OST_PipeFitting) :
+						yield dmPipeFitting(c1.Owner)
+	fittings = property(_getEndFitting)
+	
+	def _getEndFittingDictionary(self) :
+		pass
+		
+	
+	def setDiameterPipeAndFittings(self, d) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Смена диаметра трубы и фитинга")
+			tr.Start()
+			
+		try :
+			self.diameter = d
+			
+			try :
+				c1 = self.connectorsDict[0].OppositeConnector.setDiameter(d)
+			except :
+				pass
+			try :
+				c2 = self.connectorsDict[1].OppositeConnector.setDiameter(d)
+			except :
+				pass
+		except : pass
+		
+		if tr : tr.Commit()
+		
+
+						
+	def getEndFitting(self, num) :
+		return self.connectorsDict[num].OppositeConnector.Owner
+		
+class dmBranch(object) :
+	def __init__(self, e) :
+		self.e = e
+		self._sprinklers = None
+		
+	def _getNumSprinklers(self) :
+		return len(self._getSprinklers())
+	numSprinklers = property(_getNumSprinklers)
+	
+	def _getSprinklers(self) :
+		if not self._sprinklers :		
+			self._sprinklers = [e for e in self.e.getBranch(maxDiameter = 50*dut) if e.IsSprinkler]
+		return self._sprinklers
+		
+	def _getElements(self) :
+		return [e for e in self.e.getBranch(maxDiameter = 50*dut)]
+	Elements = property(_getElements)
+	
+	def _getElementsNotAttachments(self) :
+		elements = set([e for e in self.e.getBranch(maxDiameter = 50*dut)])
+		sprs = self._getSprinklers()
+		
+		for spr in sprs :
+			for e in spr.getAttachment() :
+				elements.remove(e)
+		res = []
+		
+		for e in elements :
+			if e.IsPipe :
+				res.append(dmPipe(e))
+			elif e.IsFitting :
+				res.append(dmPipeFitting(e))
+			else :
+				res.append(e)
+		return res
+		
+	def setMainLineDiameter(self, d = None) :
+		tr = None
+		pipeD = {
+			1 : 25 * dut,
+			2 : 25 * dut,
+			3 : 25 * dut,
+			4 : 25 * dut,
+			5 : 25 * dut,
+			6 : 32 * dut,
+			7 : 32 * dut,
+			8 : 32 * dut,
+			9 : 32 * dut,
+			10 : 40 * dut,
+			11 : 40 * dut,
+			12 : 40 * dut,
+			13 : 40 * dut,
+			14 : 40 * dut,
+			15 : 40 * dut
+			
+		}
+		
+		print("d={}".format(d))
+		if not d :
+			sprNum = len(self._getSprinklers())
+			if sprNum in pipeD :
+				d = pipeD[sprNum]
+			else :
+				d = 40 * dut
+		print("-1- setMainLineDiameter")	
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Замена диаметров ветки")
+			tr.Start()
+			
+		branchEls = self._getElementsNotAttachments()
+		for pipe in  branchEls:
+			try :
+				if pipe.IsPipe :				
+					pipe.setDiameterPipeAndFittings(d)
+			except :
+				pass
+		
+		if tr : tr.Commit()
+		print("-2- setMainLineDiameter")
+		
+	def set_color_all(self, r=0, g=0, b=0, a=0) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Установка цвета на ветку")
+			tr.Start()
+		for s in self.Elements :
+			#s.set_color(r=r, g=g, b=b, view = uidoc.ActiveView)
+			pass
+		if tr :
+			tr.Commit()
+		
+		
+	def set_color(self, r=0, g=0, b=0, a=0) :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "Установка цвета на ветку")
+			tr.Start()
+		for s in self._getElementsNotAttachments() :
+			#s.set_color(r=r, g=g, b=b, view = uidoc.ActiveView)
+			pass
+		if tr :
+			tr.Commit()
+				
+	
+uidoc 	= __revit__.ActiveUIDocument
+doc 	= uidoc.Document
+
+#fec = FilteredElementCollector(doc, uidoc.ActiveView.Id).OfCategory(bic.OST_Sprinklers).ToElementIds()
+els = set(dm.getSelection())
+
+
+
+#sprinklers = {dm.dmElement(eId) for eId in fec}
+#sprinklers = {s for s in sprinklers if len(list(s.connectors)) > 0}
+#sprinklers = {s for s in sprinklers if s.e.SuperComponent is None}
+
+#print("Количество спринклеров : {}".format(len(sprinklers)))
+it = 0
+while els :
+	
+	if it > 100 : break
+	print("-0")
+	el = els.pop()
+	it += 1
+	branch = dmBranch(el)
+	branch_sprinklers = set(branch._getSprinklers())
+	branchEls = set(branch.Elements)
+	print("-1")
+	if len(branch_sprinklers) == 1 :
+		if branch._sprinklers[0].IsBranchConnected :
+			branch.set_color_all(r=255,g=0, b=255)
+		else :
+		
+			branch.set_color_all(r=250,g=0, b=0)
+		
+	else :
+		branch.set_color_all(r=0, g=255, b=255)
+		
+	try :		
+		branch.setMainLineDiameter()
+	except :
+		print("Ошибка в branch.setMainLineDiameter()")
+		
+	els.difference_update(branchEls)
+	
+print("Количество итераций {}".format(it))	
+
+
+

@@ -4,6 +4,7 @@ import Autodesk.Revit.UI as UI
 import sys
 from collections import deque
 import math
+import time
 from imp import reload
 libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
 if libpath not in sys.path :
@@ -27,15 +28,18 @@ FltCategories = System.Array[bic]([ bic.OST_PipeCurves,
 emcf = ElementMulticategoryFilter(FltCategories)
 
 views = FilteredElementCollector(doc).OfClass(View3D).ToElements() 
-with dm.trans() :
-	for view in views :
-		if not view.Name.StartsWith("Раздел_") : continue
-		
-		partName = view.Name[7:]
-		print(partName)
-		
-		elements = [dm.dmElement(e) for e in FilteredElementCollector(doc, view.Id).WherePasses(emcf).ToElements()]
-		
+
+tt1 = time.time()
+for view in views :
+	if not view.Name.StartsWith("Раздел_") : continue
+	
+	partName = view.Name[7:]
+	print(partName)
+	
+	elements = [dm.dmElement(e) for e in FilteredElementCollector(doc, view.Id).WherePasses(emcf).ToElements()]
+	
+	with dm.trans(a="Простановка параметра раздела спецификации") :
+	
 		for element in elements :
 			element.Set("DM_Раздел_спецификации", partName)
 			
@@ -43,5 +47,8 @@ with dm.trans() :
 			for elementId in element.e.GetDependentElements(None) :
 				subElement = dm.dmElement(elementId)
 				subElement.Set("DM_Раздел_спецификации", partName)
-				
+
+tt2 = time.time()
+
+print("Общее время выполнения {}".format(tt2-tt1))
 	

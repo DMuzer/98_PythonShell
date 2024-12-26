@@ -1,0 +1,319 @@
+# Установка спринклеров у окон на этаже. Гостиница 2
+import clr, sqlite3 as sql
+import math
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+dbpath = r"C:\Users\Дмитрий\Documents\01_Revit 24\ПТ_Р_НН_Уч2_Гостиница_R24_Сошников_Дмитрий_ИНКО_окна3.db"
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+try :
+	nts
+	print("NetTopologySuite уже импортирован")
+except :
+	clr.AddReferenceToFile(r"NetTopologySuite.dll")
+
+	import NetTopologySuite as nts
+	from NetTopologySuite.Geometries import *
+	import NetTopologySuite.Geometries as geoms
+	
+	
+class dmLinkInstance :
+	def __init__(self, link) :
+		self.link = link
+	def __repr__(self) :
+		return "Связь: {}".format(self.link.GetLinkDocument().Title)
+	@property
+	def document(self) :
+		return dmDocument(self.link.GetLinkDocument(), link = self.link)
+class dmDocument :
+	def __init__(self, doc, link=None) :
+		self.doc = doc	
+		self.link = link
+	def __repr__(self) :
+		return "Документ : {}".format(self.doc.Title)
+	@property
+	def rooms(self) :
+		return [dmRoom(e, link = self.link) for e in FilteredElementCollector(self.doc).OfCategory(bic.OST_Rooms).ToElements()]
+	def getRoom(self, name) :
+		if isinstance(name, str) :
+			dict = {r.e.Number : r for r in self.rooms}
+			return dict[name]
+		if isinstance(name, (int, ElementId)) :
+			dict = {r.e.Id.IntegerValue : r for r in self.rooms}
+			if isinstance(name, int) :
+				return dict[name]
+			else :
+				return dict[name.IntegerValue]
+		
+	@property 
+	def links(self) :
+		links = [dmLinkInstance(l) for l in FilteredElementCollector(self.doc).OfClass(RevitLinkInstance).ToElements()]
+		return links
+		
+	def getLinkByName(self, name) :
+		dict = {n.link.Name : n for n in self.links}
+		return dict[name]
+		
+class dmRoom(dm.dmElement) :
+	def getWindows(self, phase) :
+		q1 = """
+			SELECT Door,
+			       Room,
+			       link
+			  FROM DoorsWin
+			 WHERE Room = ?;
+			"""			
+		
+		try :
+			conn = sql.connect(dbpath)
+			rres = conn.execute(q1, (self.Id.IntegerValue,)).fetchall()
+			print(rres)
+			ldoc = self.link.GetLinkDocument()
+			
+			res = []
+			
+			for wdId in rres :
+				wd = dmWindow(ldoc.GetElement(ElementId(wdId[0])), link = self.link)
+				res.append(wd)
+				
+			conn.close()
+				
+				
+		
+		except Exception as ex:
+			print(ex)
+			conn.close()
+			
+		return res
+	
+		
+	def _getWindows(self, phase) :
+		res = []
+		windows = [dmWindow(e, link = self.link) for e in FilteredElementCollector(self.doc)\
+						.OfCategory(bic.OST_Windows)\
+						.WhereElementIsNotElementType()\
+						.ToElements()]
+						
+		for win in windows :
+			fromRoom = win.e.FromRoom[phase]
+			if fromRoom and fromRoom.Id == self.Id : res.append(win)
+			toRoom = win.e.ToRoom[phase]
+			if toRoom and toRoom.Id == self.Id : res.append(win)
+		res = [win for win in res if win.Location]
+		return res
+		
+	def getFace(self) :
+		opt = Options()
+		
+		s1 = list(self.e.Geometry[opt].GetTransformed(self.link.GetTotalTransform()))[0]
+		
+		for f in s1.Faces :
+			if f.FaceNormal.Z < -0.9 :
+				return f
+				
+	def getBoundaryAsLinearRing(self) :
+		f = self.getFace()
+		cls = f.GetEdgesAsCurveLoops()
+		rings = []
+		
+		for cl in cls :
+			coords = []
+			for curve in cl :
+				pnts = list(curve.Tessellate())
+				for pnt in pnts[:-1] :
+					coord = Coordinate(pnt.X, pnt.Y)
+					coords.append(coord)
+			pnt = pnts[-1]		
+			coord = Coordinate(pnt.X, pnt.Y)
+			coords.append(coord)
+			coords = System.Array[Coordinate](coords)
+			lr = LinearRing(coords)
+			rings.append(lr)
+		return rings
+		
+
+
+class dmWindow(dm.dmElement) :
+	def getSprinklerLine(self) :
+		if self.link :
+			ttr = self.link.GetTotalTransform()
+		else :
+			ttr = Transoform.Identity
+
+		width = self.Value("Ширина")
+		
+		fdir = ttr.OfVector(self.e.FacingOrientation)
+		wdir = fdir.CrossProduct(XYZ.BasisZ)
+		
+		p0 = ttr.OfPoint(self.Location.Point)
+		p1 = p0 + 300 * dut * fdir
+		
+		p2 = p1 + width * wdir * 0.5
+		p3 = p1 - width * wdir * 0.5
+		
+		l = Line.CreateBound(p2, p3)
+		return l
+
+		
+
+def drawLinearRing(lr) :
+	view = uidoc.ActiveView
+	
+	with dm.trans(doc =doc, a="отображение LinearRing"):
+	
+		pnts = list(lr.Coordinates)
+		
+		for p1_, p2_ in zip(pnts[:-1], pnts[1:]) :
+			p1, p2 = XYZ(p1_.X, p1_.Y,0), XYZ(p2_.X, p2_.Y, 0)
+			
+			l1 = Line.CreateBound(p1, p2)
+			doc.Create.NewDetailCurve(view, l1)
+		
+		
+		
+dmDoc = dmDocument(doc)
+	
+link1 = dmDoc.getLinkByName('АР_П_НН_Уч2_Гостиница_К1-К3-К5-К7_R24.rvt : 2 : позиция По умолчанию')
+#room = link1.document.getRoom(4939783)
+
+try :
+	spr = [e for e in dm.getSelection() if e.IsSprinkler][0]
+except :
+	pass
+	
+def createSprinklersAlongLine(spr, line, dist = 1000*dut) :
+
+	d = line.Direction
+	d = XYZ(d.X, d.Y, 0)
+	p0 = line.GetEndPoint(0)
+
+	
+	numSpr = math.ceil(line.Length/dist)
+
+	
+	step = line.Length / numSpr
+
+	try :
+		p0_ = spr.Location.Point
+	except :
+		print("спринклер не имеет локашн.")
+		raise
+
+	sprPnt = XYZ(p0_.X, p0_.Y, 0)
+	startPnt = XYZ(p0.X, p0.Y, 0)
+
+	for i in range(numSpr) :
+
+
+		p1 = startPnt + (0.5 + i) * step * d
+
+
+		dp = p1 - sprPnt
+
+		newSpr = spr.copy(dp)
+		
+
+		
+
+
+av = dm.dmElement(uidoc.ActiveView)
+phase = doc.GetElement(av.Value('Стадия'))
+
+
+def getWindows(level) :
+
+	q = """
+		SELECT Door,
+       	Room,
+       	link
+		FROM DoorsWin
+	"""
+	
+	
+	db = sql.connect(dbpath)
+	try :
+		res = db.execute(q).fetchall()
+	finally :
+		print("Закрываем БД")
+		db.close()
+		
+	for r in res :
+		link = doc.GetElement(ElementId(r[2]))
+		ldoc = link.GetLinkDocument()
+		e = ldoc.GetElement(ElementId(r[0]))
+		elevel = ldoc.GetElement(e.LevelId)
+		if not elevel.Name.StartsWith(level) : continue
+		if e.Category.Name != "Окна" : continue
+		print(elevel.Name)
+		e = dmWindow(e, link=link)
+		yield e
+
+
+
+if True :
+	winds = getWindows("18")
+	
+	if True :
+	
+		with dm.trans(doc) :
+			for w in winds :
+				print(w)
+				
+				
+				if w.Category.Name != "Окна" : continue
+				if w.e.Location is None : continue
+				
+				try :
+					l = w.getSprinklerLine()
+					print(2)
+					if l :
+						try :
+							pass
+							print("перед созданием спринклеров...")
+							createSprinklersAlongLine(spr, l, dist = 1000*dut)
+							print("Создали спринклеры")
+							
+							#doc.Create.NewDetailCurve(uidoc.ActiveView, l)
+						except Exception as ex:
+							print("На создании спринклера")
+							pass
+				except Exception as ex :
+					print("1")
+					print(ex)					
+					pass
+				#break
+					

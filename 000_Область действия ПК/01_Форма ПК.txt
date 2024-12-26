@@ -1,0 +1,77 @@
+import clr
+clr.AddReference('System.Windows.Forms')
+clr.AddReference('System.Drawing')
+
+from System.Windows.Forms import Application, Form, Label, TextBox, Button, FormStartPosition
+from System.Drawing import Point, Size
+
+class FireHoseCalculationForm(Form):
+    def __init__(self):
+        self.Text = u"Расчет действия пожарных кранов"
+        self.Size = Size(350, 250)
+        self.StartPosition = FormStartPosition.CenterScreen
+
+        # Label and TextBox for Hose Length
+        self.label_hose_length = Label()
+        self.label_hose_length.Text = u"Длина рукава (м):"
+        self.label_hose_length.Location = Point(10, 20)
+        self.Controls.Add(self.label_hose_length)
+
+        self.textbox_hose_length = TextBox()
+        self.textbox_hose_length.Location = Point(150, 20)
+        self.textbox_hose_length.Size = Size(150, 20)
+        self.textbox_hose_length.Text = "20"
+        self.Controls.Add(self.textbox_hose_length)
+
+        # Label and TextBox for Jet Length
+        self.label_jet_length = Label()
+        self.label_jet_length.Text = u"Длина струи (м):"
+        self.label_jet_length.Location = Point(10, 60)
+        self.Controls.Add(self.label_jet_length)
+
+        self.textbox_jet_length = TextBox()
+        self.textbox_jet_length.Location = Point(150, 60)
+        self.textbox_jet_length.Size = Size(150, 20)
+        self.textbox_jet_length.Text = "6"
+        self.Controls.Add(self.textbox_jet_length)
+
+        # Button "Выбрать ПК"
+        self.button_select = Button()
+        self.button_select.Text = u"Выбрать ПК"
+        self.button_select.Location = Point(10, 110)
+        self.button_select.Click += self.on_select_click
+        self.Controls.Add(self.button_select)
+
+        # Button "Рассчитать"
+        self.button_calculate = Button()
+        self.button_calculate.Text = u"Рассчитать"
+        self.button_calculate.Location = Point(120, 110)
+        self.button_calculate.Click += self.on_calculate_click
+        self.Controls.Add(self.button_calculate)
+
+        # Button "Закрыть"
+        self.button_close = Button()
+        self.button_close.Text = u"Закрыть"
+        self.button_close.Location = Point(230, 110)
+        self.button_close.Click += self.on_close_click
+        self.Controls.Add(self.button_close)
+
+    def on_select_click(self, sender, event):
+        # Logic for selecting fire hydrants can be added here
+        print(u"Выбор пожарного крана")
+
+    def on_calculate_click(self, sender, event):
+        # Logic for calculation can be added here
+        try:
+            hose_length = float(self.textbox_hose_length.Text)
+            jet_length = float(self.textbox_jet_length.Text)
+            print(u"Рассчет для длины рукава: {} м и длины струи: {} м".format(hose_length, jet_length))
+        except ValueError:
+            print(u"Пожалуйста, введите числовые значения для длины рукава и струи.")
+
+    def on_close_click(self, sender, event):
+        self.Close()
+
+# Run the form
+form = FireHoseCalculationForm()
+Application.Run(form)

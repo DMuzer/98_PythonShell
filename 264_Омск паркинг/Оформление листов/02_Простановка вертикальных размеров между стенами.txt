@@ -1,0 +1,125 @@
+"""
+Создание размеров между трубами и спринклерами
+D:\18_проектирование\98_PythonShell\264_Омск паркинг\Оформление листов\02_
+
+"""
+def getReferenceForSprinkler(sprinkler) :
+	for c1 in sprinkler.MEPModel.ConnectorManager.Connectors :
+		for c2 in c1.AllRefs :
+			if c2.ConnectorType & ConnectorType.Physical \
+				and type(c2.Owner) == Plumbing.Pipe :
+					return Reference(c2.Owner)
+					
+	opt = Options()
+	opt.ComputeReferences = True
+	opt.IncludeNonVisibleObjects = True
+	opt.View = uidoc.ActiveView
+	
+	for g in sprinkler.Geometry[opt] :
+		if type(g) == Point and hasattr(g, "Reference") :
+			return g.Reference
+			
+def getSprinklerReference(spr) :
+	connector = list(spr.MEPModel.ConnectorManager.Connectors)[0]
+	conOrigin = connector.Origin
+	
+	opts = Options()
+	opts.ComputeReferences = True
+	opts.View= av
+	geoms = [spr.Geometry[opts]]
+	
+	while geoms :
+		e = geoms.pop()
+		if isinstance(e, GeometryElement) :
+			geoms.extend(e)
+		if isinstance(e, GeometryInstance) :
+			geoms.extend(e.GetInstanceGeometry())
+		if isinstance(e, Line) :	
+			if abs(e.Direction.Z) == 1 :
+				return e.Reference
+		
+	
+	
+dut = 0.0032808398950131233					
+bic = BuiltInCategory
+av = uidoc.ActiveView
+
+
+allViews = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+refView =allViews['DM_Пересечения']
+
+refFilter = ElementClassFilter(Wall)
+
+refInt =  ReferenceIntersector(refFilter,FindReferenceTarget.Face, refView)
+refInt.FindReferencesInRevitLinks = True
+
+planElevation = av.GenLevel.Elevation
+
+pntZ = planElevation + av.GetViewRange().GetOffset(PlanViewPlane.CutPlane)
+
+p1 = uidoc.Selection.PickPoint()
+viewPnt = XYZ(p1.X, p1.Y, pntZ)
+
+wall1 = refInt.FindNearest(viewPnt, av.UpDirection)
+wall2 = refInt.FindNearest(viewPnt, -av.UpDirection)
+
+sprinklers = FilteredElementCollector(doc, av.Id).OfCategory(bic.OST_Sprinklers).ToElements()
+
+
+#p2 = uidoc.Selection.PickPoint()
+
+
+
+#section_line = Line.CreateBound(p1, p2)
+
+#pm = (p2 + p1) * 0.5
+
+#v = p2 - p1
+
+vx = av.RightDirection
+vy = av.UpDirection
+
+
+
+dimReferences = ReferenceArray()
+
+dimReferences.Append(wall1.GetReference())
+dimReferences.Append(wall2.GetReference())
+dimensionLine = Line.CreateBound(p1, p1 + av.RightDirection)
+
+p1 = wall1.GetReference().GlobalPoint
+p1 = XYZ(p1.X, p1.Y, 0)
+p2 = wall2.GetReference().GlobalPoint
+p2 = XYZ(p2.X, p2.Y, 0)
+
+fLine = Line.CreateBound(p1, p2)
+
+par0 = fLine.GetEndParameter(0)
+par1 = fLine.GetEndParameter(1)
+
+def isOnLine(line, spr, maxDist = 400 * dut) :
+	par0 = line.GetEndParameter(0)
+	par1 = line.GetEndParameter(1)
+	org = spr.Location.Point
+	org = XYZ(org.X, org.Y, 0)
+	ir = line.Project(org)
+	return ir.Parameter > par0 and ir.Parameter < par1 and ir.Distance < maxDist
+sprs = [spr for spr in sprinklers if isOnLine(fLine, spr)]
+
+print("Найдено {} спринклеров".format(len(sprs)))
+for spr in sprs :
+	dimReferences.Append(getReferenceForSprinkler(spr))
+
+
+
+
+	
+tr = Transaction(doc, "new detail")
+
+tr.Start()
+#dim_line = doc.Create.NewDetailCurve(av, dimensionLine)
+new_dim = doc.Create.NewDimension(av, dimensionLine, dimReferences)
+tr.Commit()
+						
+
+	

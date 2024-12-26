@@ -1,0 +1,101 @@
+# Построение Т образной ветки
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from System.Collections.Generic import IList, List
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+def connect(p1, p2) :
+	if not p1.IsPipe or not p1.IsPipe :
+		print("Не трубы")
+		return
+	if p1.diameter > p2.diameter :
+		p1, p2 = p2, p1
+		
+	lc1 = p1.Location.Curve
+	lc2 = p2.Location.Curve
+	
+
+	
+	t = clr.Reference[IList[ClosestPointsPairBetweenTwoCurves]](List[ClosestPointsPairBetweenTwoCurves]()) 
+	lc1.ComputeClosestPoints(lc2, True, True, False, t)
+	pt1 = t.Item[0].XYZPointOnFirstCurve
+	pt2 = t.Item[0].XYZPointOnSecondCurve
+	
+	if pt1.DistanceTo(lc1.GetEndPoint(0)) < 1e-5 or pt1.DistanceTo(lc1.GetEndPoint(1)) < 1e-5 :
+		print("На конце 1 линии")
+		return
+	if pt2.DistanceTo(lc2.GetEndPoint(0)) < 1e-5 or pt2.DistanceTo(lc2.GetEndPoint(1)) < 1e-5 :
+		print("На конце 2 линии")
+		return
+	
+	
+	print(pt1)
+	print(pt2)
+	#return 
+	
+	
+	
+	lc3 = Line.CreateBound(pt1, pt2)
+	
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Создание перемычки")
+		tr.Start()
+		
+	p3 = p1.copy()
+	p3.Location.Curve = lc3
+	
+	doc.Create.NewTakeoffFitting(p3.connectorsDict[0], p1.e)
+	doc.Create.NewTakeoffFitting(p3.connectorsDict[1], p2.e)
+	
+	
+	if tr : tr.Commit()
+	
+
+from itertools import product
+
+def pickObjects() :
+	refs = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+	return [dm.dmElement(ref) for ref in refs]
+#p1 = dm.dmElement(1099028)
+#p2 = dm.dmElement(1355117)
+
+pipes1 = pickObjects()
+pipes2 = pickObjects()
+
+for p1, p2 in product(pipes1, pipes2) :
+	connect(p1, p2)
+
+
+
+
+	
+
+	
+

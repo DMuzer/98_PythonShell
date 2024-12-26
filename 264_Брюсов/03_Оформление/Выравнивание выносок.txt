@@ -1,0 +1,27 @@
+from Autodesk.Revit import DB, UI 
+dut = 0.0032808398950131233
+startTagId = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+otherTagsIds = uidoc.Selection.PickObjects(UI.Selection.ObjectType.Element)
+
+
+startTag = doc.GetElement(startTagId)
+otherTags = [doc.GetElement(tId) for tId in otherTagsIds if type(doc.GetElement(tId)) == IndependentTag]
+startPnt = startTag.TagHeadPosition
+otherTags.append(startTag)
+positions = {startTag.TagText : startTag.TagHeadPosition}
+lastPos = startPnt
+tr = Transaction(doc, "Выравнивание выносок")
+tr.Start()
+while otherTags :
+	current = otherTags.pop()
+	if current.TagText in positions :
+		pos = positions[current.TagText]
+	else :
+		lastPos -= uidoc.ActiveView.UpDirection * 5 * uidoc.ActiveView.Scale * dut
+		positions[current.TagText] = lastPos
+		pos = lastPos
+		
+	current.TagHeadPosition = pos
+	
+
+tr.Commit()

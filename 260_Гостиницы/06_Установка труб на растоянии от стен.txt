@@ -1,0 +1,254 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+
+views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D)}
+refView = views["DM_Пересечения"]
+
+if not refView.Id in [v.ViewId for v in uidoc.GetOpenUIViews()] :
+	lastView = uidoc.ActiveView
+	uidoc.RequestViewChange(refView)
+	uidoc.ActiveView = refView
+	uidoc.ActiveView = lastView
+
+
+try :
+	refInt 
+except :
+	
+	
+	flt = ElementCategoryFilter(BuiltInCategory.OST_Walls)
+	flt = ElementMulticategoryFilter(System.Array[BuiltInCategory]([
+				BuiltInCategory.OST_Walls,
+				BuiltInCategory.OST_StructuralColumns,
+				]))
+	
+	refInt = ReferenceIntersector(flt, FindReferenceTarget.Face, refView)
+	refInt.FindReferencesInRevitLinks = True
+
+
+def checkPoints(pipe, vl) :
+
+	l1 = pipe.Location.Curve
+	p0 = l1.GetEndPoint(0)
+	l = l1.Length
+	d = l1.Direction
+	dn = XYZ(d.Y, -d.X,0).Normalize()
+	
+	res = []
+	for k, vk in vl :
+		#print(k, vk)
+		p1 = p0 + d * l * k
+		v = dn * vk
+		r1 = refInt.FindNearest(p1, v)
+		
+		ref1 = r1.GetReference()
+		link1 = doc.GetElement(ref1)
+		ldoc1 = link1.GetLinkDocument()	
+		wall1 = ldoc1.GetElement(ref1.LinkedElementId)
+		"""
+		print(k,vk)
+		print(wall1.Name, wall1.Category.Name, r1.Proximity)
+		"""
+		
+		if (wall1.Name.StartsWith('ST44_Отделка_10') 
+				or wall1.Category.Name == "Несущие колонны") and r1.Proximity < 800*dut :
+			res1 = (v, r1.Proximity)
+			res.append(res1)
+			
+	if res :
+		
+		print("Найдено {} вариантов".format(len(res)))
+		for r in res :
+			print("Расстояние {}".format(r[1]))
+		k
+		return min(res, key = lambda x : x[1])
+		
+		
+		
+		
+
+def findNearest(pipe) :
+	"""
+	ищем ближайшую стену или колонну
+	"""
+	
+	l1 = pipe.Location.Curve
+	d = l1.Direction
+	dn = XYZ(d.Y, -d.X,0).Normalize()
+	
+	if l1.Length < 350 * dut :
+		vl = [(0.05, 1), (0.05,-1), (0.95,1), (0.95,-1)]
+	else :
+		vl= [(0.5, 1), (0.5, -1)]
+		
+	res = checkPoints(pipe, vl)
+	return res
+	
+	
+
+def movePipe(pipe, tdist = 60*dut) :
+
+	res = findNearest(pipe)	
+	if res :
+		tr = None
+		if not doc.IsModifiable :
+			tr = Transaction(doc, "двигаем трубу")
+			tr.Start()
+			
+		dist = res[1] - tdist
+		moveVec = res[0] * dist
+		pipe.e.Location.Move(moveVec)
+		if tr : tr.Commit()
+		
+
+
+d50 = 50 * dut
+
+try :
+	pipes
+except :
+	pipes = []
+	
+pipes2 = [pipe for pipe in dm.getSelection() 
+					if pipe.IsPipe and pipe.diameter == d50 and pipe.e.Location.Curve.Length > 10 * dut]
+print(len(pipes2))
+if pipes2 :	
+	print("Берем трубы из выбранного")
+	pipes = pipes2
+elif not pipes :
+	print("Берем все трубы на виде")
+	pipes = [pipe for pipe in dm.getActiveViewPipingElements() 
+		if pipe.IsPipe and pipe.diameter == d50 and pipe.e.Location.Curve.Length > 10 * dut]
+
+print(len(pipes))
+pipes.sort(key = lambda x : x.Location.Curve.Length, reverse = False)
+
+def check() :
+	with open("d:\check.txt") : pass
+	
+i = 0
+fd = None
+fma1 = None
+class MyFailuresPreprocessor(IFailuresPreprocessor):
+	def PreprocessFailures1(self, failuresAccessor):
+		global fd
+		
+		global fma1
+		for fma in failuresAccessor.GetFailureMessages():
+			failure_definition_id = fma.GetFailureDefinitionId()
+			fma1 = fma
+			fd = failure_definition_id
+			#print("can resolve = {}".format(failureAccessor.CanResolveFailure(fma)))			
+			print("Failure Definition ID:", str(failure_definition_id))
+			print("description text:", fma.GetDescriptionText())
+			print("severety:", fma.GetSeverity())
+			print("number of Resolutions:", fma.GetNumberOfResolutions())
+			print("hasResolutinos:", fma.HasResolutions())
+			#failuresAccessor.ResolveFailure(fma)
+			ids = fma.GetFailingElementIds()
+
+			failuresAccessor.DeleteElements(ids)
+			
+			
+			#failuresAccessor.CommitPendingTransaction()
+			print("resolution")
+			
+	def PreprocessFailures(self, failuresAccessor):
+		# Перебираем все сообщения об ошибках и предупреждениях
+		
+		for fma in failuresAccessor.GetFailureMessages():
+			# Получаем уровень серьезности
+			severity = fma.GetSeverity()
+
+			# Если это ошибка, пытаемся разрешить её удалением элементов
+			if severity == FailureSeverity.Error:
+				# Получаем элементы, вызвавшие ошибку
+				failing_elements = fma.GetFailingElements()
+				print(1)
+				print(failing_elements)
+				print(2)
+
+				# Проверяем, можно ли удалить элементы, вызвавшие ошибку
+				if failing_elements:
+					# Удаляем ошибочные элементы
+					failuresAccessor.DeleteElements(failing_elements)
+					print(f"Удалены элементы с ID: {list(failing_elements)}")
+				else:
+					print("Нет элементов для удаления, связанных с этой ошибкой.")
+
+		# Продолжаем выполнение транзакции
+		return FailureProcessingResult.Continue
+			
+			
+			
+				
+			
+			
+			#failuresAccessor.DeleteWarning(fma)
+		return FailureProcessingResult.Continue
+
+tr = Transaction(doc, "Кооректировка положения труб")
+tr.Start()
+
+failure_options = tr.GetFailureHandlingOptions()
+failure_options.SetFailuresPreprocessor(MyFailuresPreprocessor())
+failure_options.SetForcedModalHandling(False)
+#tr.SetFailureHandlingOptions(failure_options)
+maxIters = 100000
+while pipes :
+	check()
+	i += 1 
+	if i > maxIters : break
+	pipe = pipes.pop()
+	movePipe(pipe)
+	print(pipe.Location.Curve.Length)
+print(len(pipes))
+
+tr.Commit()
+
+
+		
+		
+
+
+	
+
+
+	

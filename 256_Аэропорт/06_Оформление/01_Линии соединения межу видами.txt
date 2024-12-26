@@ -1,0 +1,81 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+	print("перезагружен")
+except Exception as ex:
+	print(ex)
+	
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+sheets = {v.Name : v for v in FilteredElementCollector(doc).OfClass(ViewSheet).ToElements()}
+
+view1 = dm.dmElement(views["Схема секции 4 багаж"])
+view2 = dm.dmElement(views["Схема секции 4 багаж под воздуховодами"])
+#view2 = dm.firstSelected()
+sheetName = view1.Value("Имя листа")
+sheet = sheets[sheetName]
+viewPorts = {vp.ViewId : vp for vp in FilteredElementCollector(doc, sheet.Id).OfClass(Viewport).ToElements()}
+vp1 = viewPorts[view1.Id]
+vp2 = viewPorts[view2.Id]
+
+vp2 = dm.firstSelected().e
+view2 = dm.dmElement(vp2.ViewId)
+
+
+
+cabinet = dm.dmElement(7173493)
+
+pnt = cabinet.getBranchConnections()[0]
+print(pnt)
+
+
+
+def showConnectionLine(view1, view2, pnt) :
+	trans1_M2P = view1.e.GetModelToProjectionTransforms()[0].GetModelToProjectionTransform()
+	trans2_M2P = view2.e.GetModelToProjectionTransforms()[0].GetModelToProjectionTransform()
+	trans1_P2S = vp1.GetProjectionToSheetTransform()
+	trans2_P2S = vp2.GetProjectionToSheetTransform()
+	
+	p1 = trans1_P2S.OfPoint(trans1_M2P.OfPoint(pnt))
+	p2 = trans2_P2S.OfPoint(trans2_M2P.OfPoint(pnt))
+
+	l1 = Line.CreateBound(p1, p2)
+	
+	lStyle = doc.GetElement(ElementId(604445))
+	
+	newDetail = doc.Create.NewDetailCurve(sheet, l1)
+	newDetail.LineStyle = lStyle
+
+
+elements = set(dm.getViewPipingElements(view2))
+tr = Transaction(doc, "Рисуем линию")
+tr.Start()
+
+while elements :
+	current = elements.pop()
+	branch = set(current.getBranch())
+	pnts = current.getBranchConnections()
+	elements.difference_update(branch)
+	for pnt in pnts :
+		showConnectionLine(view1, view2, pnt)
+
+
+
+
+
+
+
+tr.Commit()

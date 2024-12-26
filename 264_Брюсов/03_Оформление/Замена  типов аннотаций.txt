@@ -1,0 +1,53 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+
+	
+tags = [dm.dmElement(e) for e in FilteredElementCollector(doc).OfClass(IndependentTag).ToElements()]
+tags = [e for e in tags if e.e.Name == 'DM_Марка трубы размер для скрипта_21']
+maxD = 50 * dut
+typeId = ElementId(2023411)
+with dm.trans(doc = doc, a="замена размеров труб") :
+	for tag in tags :
+		pipe = dm.dmElement(tag.e.GetTaggedLocalElement())
+		
+		if pipe.diameter < maxD :
+			tag.e.ChangeTypeId(typeId)
+
+	

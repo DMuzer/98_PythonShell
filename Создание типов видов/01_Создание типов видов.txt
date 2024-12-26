@@ -1,0 +1,118 @@
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+
+fc = FilteredElementCollector(doc).OfClass(ViewFamilyType).ToElements()
+
+planNames = [
+"ПТ_Насосная план ввод",
+"ПТ_Насосная план воздух",
+"ПТ_Насосная план дренаж",
+"ПТ_Насосная план напорные",
+"ПТ_Насосная план напорные",
+"ПТ_Насосная план сводный",
+"ПТ_Насосная план сухотрубы",
+"ПТ_Насосная план тестовая линия",
+"ПТ_План гидравлического расчета",
+"ПТ_План этажа спринклеры",
+"ПТ_Задание план СС",
+"ПТ_Задание план  ВК",
+"ПТ_Задание план  ЭОМ",
+"ПТ_Задание план  Фундаменты",
+]
+
+view3dNames = [
+"ПТ_Схема ввод",
+"ПТ_Схема воздух",
+"ПТ_Схема для разделов спецификации",
+"ПТ_Схема дренаж",
+"ПТ_Схема напорный",
+"ПТ_Схема общая",
+"ПТ_Схема секция 1",
+"ПТ_Схема секция 1 Гидр. расчет",
+"ПТ_Схема сухотрубы",
+"ПТ_Схема тестовая",
+]
+
+viewSectionNames = [
+"ПТ_Разрез ввод", 
+"ПТ_Разрез воздух", 
+"ПТ_Разрез дренаж", 
+"ПТ_Разрез напорный", 
+"ПТ_Разрез сводный", 
+"ПТ_Разрез секция 1", 
+"ПТ_Разрез спринклеры", 
+"ПТ_Разрез сухотрубы", 
+"ПТ_Разрез тестовая линия", 
+]
+viewDetailNames = [
+"ПТ_Таблица ГР",
+"ПТ_Технологическая схема"
+]
+
+viewToCopyPlan = dm.dmElement(next(iter(v for v in fc if v.ViewFamily  == ViewFamily.FloorPlan)))
+viewToCopy3D = dm.dmElement(next(iter(v for v in fc if v.ViewFamily  == ViewFamily.ThreeDimensional)))
+viewToCopySect = dm.dmElement(next(iter(v for v in fc if v.ViewFamily  == ViewFamily.Section)))
+print(viewToCopy.Name)
+
+with dm.trans() :
+	for n in planNames :
+		try :
+			newType = viewToCopyPlan.copy()
+			newType.e.Name = n
+		except :
+			pass
+	for n in viewSectionNames :
+		try :
+			newType = viewToCopySect.copy()
+			newType.e.Name = n
+		except :
+			pass
+			
+	for n in view3dNames :
+		try :
+			newType = viewToCopy3D.copy()
+			newType.e.Name = n
+		except :
+			pass
+
+
+	
+
+
+

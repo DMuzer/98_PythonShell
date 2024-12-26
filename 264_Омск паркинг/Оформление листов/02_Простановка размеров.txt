@@ -1,0 +1,157 @@
+"""
+Создание вертикальных размеров между трубами и спринклерами и стенами по одной точке.
+Пользователь указывает точку. Из этой точки строится линия. И размер строится
+между двумя ближайшими стенами в разные стороны и размеры делются между спринклерами которые
+в плане не далее 1,2м от линии.
+D:\18_проектирование\98_PythonShell\264_Омск паркинг\Оформление листов\02_
+
+"""
+def getReferenceForSprinkler(sprinkler) :
+	for c1 in sprinkler.MEPModel.ConnectorManager.Connectors :
+		for c2 in c1.AllRefs :
+			if c2.ConnectorType & ConnectorType.Physical \
+				and type(c2.Owner) == Plumbing.Pipe :
+					return Reference(c2.Owner)
+					
+	opt = Options()
+	opt.ComputeReferences = True
+	opt.IncludeNonVisibleObjects = True
+	opt.View = uidoc.ActiveView
+	
+	for g in sprinkler.Geometry[opt] :
+		if type(g) == Point and hasattr(g, "Reference") :
+			return g.Reference
+			
+def getSprinklerReference(spr) :
+	connector = list(spr.MEPModel.ConnectorManager.Connectors)[0]
+	conOrigin = connector.Origin
+	
+	opts = Options()
+	opts.ComputeReferences = True
+	opts.View= av
+	geoms = [spr.Geometry[opts]]
+	
+	while geoms :
+		e = geoms.pop()
+		if isinstance(e, GeometryElement) :
+			geoms.extend(e)
+		if isinstance(e, GeometryInstance) :
+			geoms.extend(e.GetInstanceGeometry())
+		if isinstance(e, Line) :	
+			if abs(e.Direction.Z) == 1 :
+				return e.Reference
+		
+	
+	
+dut = 0.0032808398950131233					
+bic = BuiltInCategory
+av = uidoc.ActiveView
+
+
+maxDist = 500 * dut
+
+allViews = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+refView =allViews['DM_Пересечения']
+
+refFilter = ElementClassFilter(Wall)
+
+refInt =  ReferenceIntersector(refFilter,FindReferenceTarget.Face, refView)
+refInt.FindReferencesInRevitLinks = True
+
+planElevation = av.GenLevel.Elevation
+
+pntZ = planElevation + av.GetViewRange().GetOffset(PlanViewPlane.CutPlane)
+
+p1 = uidoc.Selection.PickPoint()
+viewPnt = XYZ(p1.X, p1.Y, pntZ)
+
+wall1 = refInt.FindNearest(viewPnt, av.UpDirection)
+wall2 = refInt.FindNearest(viewPnt, -av.UpDirection)
+
+sprinklers = FilteredElementCollector(doc, av.Id).OfCategory(bic.OST_Sprinklers).ToElements()
+
+
+#p2 = uidoc.Selection.PickPoint()
+
+
+
+#section_line = Line.CreateBound(p1, p2)
+
+#pm = (p2 + p1) * 0.5
+
+#v = p2 - p1
+
+vx = av.RightDirection
+vy = av.UpDirection
+
+
+
+dimReferences = ReferenceArray()
+
+if wall1 :
+	dimReferences.Append(wall1.GetReference())
+if wall2 :
+	dimReferences.Append(wall2.GetReference())
+dimensionLine = Line.CreateBound(p1, p1 + av.UpDirection)
+
+p1 = wall1.GetReference().GlobalPoint
+p1 = XYZ(p1.X, p1.Y, 0)
+p2 = wall2.GetReference().GlobalPoint
+p2 = XYZ(p2.X, p2.Y, 0)
+
+fLine = Line.CreateBound(p1, p2)
+
+par0 = fLine.GetEndParameter(0)
+par1 = fLine.GetEndParameter(1)
+
+def isOnLine(line, spr, maxDist = 400 * dut) :
+	par0 = line.GetEndParameter(0)
+	par1 = line.GetEndParameter(1)
+	org = spr.Location.Point
+	org = XYZ(org.X, org.Y, 0)
+	ir = line.Project(org)
+	return ir.Parameter > par0 and ir.Parameter < par1 and ir.Distance < maxDist
+sprs = [spr for spr in sprinklers if isOnLine(fLine, spr, maxDist)]
+
+print("Найдено {} спринклеров".format(len(sprs)))
+for spr in sprs :
+	dimReferences.Append(getReferenceForSprinkler(spr))
+	
+def isPipeSected(line, pipe) :
+	pLoc = pipe.Location.Curve
+	
+	print(pLoc.Direction)
+	
+	if abs(pLoc.Direction.DotProduct(av.ViewDirection)) > 1e-5 : return False
+	
+	p0, p1 = pLoc.GetEndPoint(0), pLoc.GetEndPoint(1)
+	print(p0, p1)
+	p0, p1 = XYZ(p0.X, p0.Y, 0), XYZ(p1.X, p1.Y, 0)
+	print(p0, p1)
+	
+	if abs(pLoc.Direction.DotProduct(line.Direction)) > 1e-5 : return False
+	try :
+		l2 = Line.CreateBound(p0, p1)
+	except Exception as ex:
+		print("Ошибка №1")
+		print(ex)
+		return False
+	return line.Intersect(l2) == SetComparisonResult.Overlap
+
+pipesVisible = FilteredElementCollector(doc, av.Id).OfClass(Plumbing.Pipe).ToElements()
+pipes = [pipe for pipe in pipesVisible if isPipeSected(fLine, pipe)]
+
+for pipe in pipes :
+	dimReferences.Append(Reference(pipe))
+
+
+	
+tr = Transaction(doc, "new detail")
+
+tr.Start()
+#dim_line = doc.Create.NewDetailCurve(av, dimensionLine)
+new_dim = doc.Create.NewDimension(av, dimensionLine, dimReferences)
+tr.Commit()
+						
+
+	

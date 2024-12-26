@@ -16,10 +16,11 @@ from System.Collections.Generic import IList, List
 bic = BuiltInCategory
 dsid = ElementId(bic.OST_GenericModel)
 
-def getPipes() :
+def getCabinets() :
 	for s in FilteredElementCollector(doc)\
 		.OfCategory(BuiltInCategory.OST_MechanicalEquipment).WhereElementIsNotElementType()\
-		.ToElements() :		
+		.ToElements() :
+			
 			yield dm.dmElement(s)
 				
 cabinets = list(getCabinets())
@@ -27,17 +28,96 @@ wss = set()
 wss1 = set()
 cabNum = 0 
 
-tr = Transaction(doc, "Удаление неподключенных врезок")
+def isolateSelectedBranches(view = None) :
+	s1 = set(dm.getSelection())
+	toIsolate = set()
+	while s1 :
+		current = s1.pop()		
+		branch = set(current.getBranch())
+		toIsolate.update(branch)
+		s1.difference_update(branch)
+	toHide = []
+	for e in dm.getAllPipingElements() :
+		if not e in toIsolate :
+			toHide.append(e.Id)
+	toHide = System.Array[ElementId](toHide)
+	
+	if view is None :
+		view = uidoc.ActiveGraphicalView
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Изолирование выбранных веток")
+		tr.Start()
+		
+	view.HideElements(toHide)
+	if tr : tr.Commit()
+	
+	
+
+def setColor(a, r=0, g=0, b=0) :
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Раскраска элементов")
+		tr.Start()
+	for e in a :
+		try :
+			e.set_color(r=r, g=g, b=b)
+		except :
+			pass
+	if tr : tr.Commit()
+
+def resetColor(a) :
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Сброс цвета элементов")
+		tr.Start()
+	for e in a :
+		try :
+			e.resetColor()
+		except :
+			pass
+	if tr : tr.Commit()
+	
+def hideOthers(a, view = None) :
+	if not view :
+		view = uidoc.ActiveGraphicalView
+	a = set(a) 
+	toHide = []
+	
+	for e in dm.getActiveViewPipingElements() :
+		if not e in a :
+			toHide.append(e.Id)
+	
+	toHide = System.Array[ElementId](toHide)
+	
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Скрыть другие элементы")
+		tr.Start()
+	view.HideElements(toHide)
+	tr.Commit()
+	
+def showAllOnView(view = None) :
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Показать спрятанное на виде")
+		tr.Start()
+	if view is None :
+		view = uidoc.ActiveView
+	
+	els = System.Array[ElementId]([e.Id for e in dm.getAllPipingElements()])
+	view.UnhideElements(els)
+
+	if tr : tr.Commit()
+			
+			
+tr = Transaction(doc, "Задать рабочий набор для трубопроводов ПК")
 tr.Start()
 for c in cabinets :
 	
 	if c.e.Name.Contains("ШПК") :
-		cabNum += 1
-		
+		cabNum += 1	
 		wss.add(c.workset.Name)
-		
-	
-		
 		for e2 in c.getAttachment() :
 			wss1.add(e2.workset.Name)
 			e2.workset ="+ВПВ_Трубопроводы"

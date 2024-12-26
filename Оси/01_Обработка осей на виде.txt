@@ -123,7 +123,8 @@ class dmAxis :
 		doc.Create.NewDetailCurve(self.view.view, l)
 		tr.Commit()
 import Autodesk.Revit.DB as DB		
-dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+#dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+dut = 0.0032808398950131233
 v = dmView(uidoc.ActiveView)
 
 

@@ -1,0 +1,200 @@
+#Установка дренажного крана
+import Autodesk.Revit.UI as UI
+import Autodesk.Revit.DB as DB
+import re
+import math
+import clr
+import System
+import sys
+from imp import reload
+from System.Collections.Generic import IList, List
+
+dut = 0.0032808398950131233
+#dut = DB.UnitUtils.ConvertToInternalUnits(1, DB.DisplayUnitType.DUT_MILLIMETERS)
+bic = DB.BuiltInCategory
+
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+
+
+copy_element_id = ElementId(9692643)
+#copy_element_id = ElementId(10066506)
+
+def get_origin(e) :
+	for c in e.MEPModel.ConnectorManager.Connectors :
+		if c.CoordinateSystem.BasisZ.Z < 0.99 :
+			return c
+
+def airvent_hor_pipe(pipe, pnt) :
+	pipe_ = dm.dmElement(pipe)
+	lc = pipe.Location.Curve	
+	av = uidoc.ActiveView
+
+	
+	lc2 = Line.CreateUnbound(pnt, av.ViewDirection)
+	
+	res = dm.computeClosestPoint(lc, lc2, False, False)
+	
+	pt1 = res.Item[0].XYZPointOnFirstCurve
+	print(pt1)
+	
+	p0 = pt1
+	p1 = p0 - XYZ.BasisZ * 0.3
+	
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Создание дренажа")
+		tr.Start()
+	dn = pipe_.diameter	
+	drainType = drainTypes[dn] if dn <= 50 * dut else drainTypes[50*dut]
+	
+	if not drainType.e.IsActive :
+		drainType.e.Activate()
+	
+	drain = doc.Create.NewFamilyInstance(p1, drainType.e, DB.Structure.StructuralType.NonStructural)
+	drain = dm.dmElement(drain)
+		
+	if tr : tr.Commit()
+	
+	
+	
+	c = next(drain.connectors)
+	p00, d0 = c.Origin, c.Radius * 2
+
+	l2 = Line.CreateBound(p0, p00)
+	
+	
+	with Transaction(doc, "Подключение дренажа") as tr:
+		tr.Start()
+
+		pipe2 = pipe_.copy()
+		pipe2.Location.Curve = l2
+		pipe2.diameter = d0
+		
+		cd = pipe2.connectorsDict
+		cp0, cp1 = cd[0], cd[1]
+		
+		doc.Create.NewTakeoffFitting(cp0, pipe)
+		c.ConnectTo(cp1)
+		
+		tr.Commit()
+		
+def drain_vert_pipe(pipe) :
+	
+	
+	pipe_ = dm.dmElement(pipe)
+	lc = pipe.Location.Curve	
+	av = uidoc.ActiveView
+
+	
+	lc2 = Line.CreateUnbound(pnt, av.ViewDirection)
+	
+	res = dm.computeClosestPoint(lc, lc2, False, False)
+	
+	pt1 = res.Item[0].XYZPointOnFirstCurve
+	print(pt1)
+	
+	dn = pipe_.diameter
+	
+	if lc.GetEndPoint(0).Z < lc.GetEndPoint(1).Z :
+		p0 = lc.GetEndPoint(0) + lc.Direction * dn
+	else :
+		p0 = lc.GetEndPoint(1) - lc.Direction * dn
+		
+	p1 = p0 - XYZ.BasisY * 2.5 * dn
+	p2 = p1 - XYZ.BasisZ * (max(dn*0.5, 25 * dut) + dn)
+	
+	tr = None
+	if not doc.IsModifiable :
+		tr = Transaction(doc, "Создание дренажа")
+		tr.Start()
+	dn = pipe_.diameter	
+	dn = dn if dn <= 50 * dut else 50 *dut
+	drainType = drainTypes[dn]
+	
+	if not drainType.e.IsActive :
+		drainType.e.Activate()
+	
+	drain = doc.Create.NewFamilyInstance(p2, drainType.e, DB.Structure.StructuralType.NonStructural)
+	drain = dm.dmElement(drain)
+		
+	if tr : tr.Commit()
+	
+	
+	
+	drainConnector = next(drain.connectors)
+
+
+	
+
+	l1 = Line.CreateBound(p0, p1)
+	l2 = Line.CreateBound(p1, p2)
+	
+	tr = Transaction(doc)
+	tr.Start("Add drain valve")
+	
+	
+	pipe1 = pipe_.copy()
+	pipe1.Location.Curve =  l1
+	pipe2 = pipe_.copy()
+	pipe2.Location.Curve = l2
+	
+	pipe1.diameter = dn
+	pipe2.diameter = dn
+	
+	
+	cDict1 = pipe1.connectorsDict
+	cDict2 = pipe2.connectorsDict
+	
+	doc.Create.NewTakeoffFitting(cDict1[0], pipe)
+	doc.Create.NewElbowFitting(cDict1[1], cDict2[0])
+	
+	
+	drainConnector.ConnectTo(cDict2[1])
+	
+	tr.Commit()
+	
+version = __revit__.Application.VersionNumber
+familyNames = {
+	"2021" : "DM_Дренажный кран_R21",
+	"2022" : "DM_Дренажный кран_R22",
+	"2023" : "DM_Дренажный кран_R23",
+	"2024" : "DM_Дренажный кран_R24",
+	
+	}
+drainFamily = familyNames[version]
+types = [dm.dmElement(t) for t in FilteredElementCollector(doc)\
+			.OfCategory(bic.OST_PipeAccessory)\
+			.WhereElementIsElementType().ToElements() if t.FamilyName == drainFamily]
+
+drainTypes = {t.Value("DN") : t for t in types}
+
+
+
+if not type.IsActive :
+	tr = None
+	if not doc.IsModifiable : 
+		tr = Transaction(doc, "Активация узла")
+		tr.Start()
+	type.Activate()
+	tr.Commit()
+	
+while True :
+	ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.Element)
+	pipe, pnt = doc.GetElement(ref), ref.GlobalPoint
+	print(pipe)
+	d = pipe.Location.Curve.Direction
+	if abs(d.Z) < 0.6 :
+		airvent_hor_pipe(pipe, pnt)
+	else :
+		drain_vert_pipe(pipe)

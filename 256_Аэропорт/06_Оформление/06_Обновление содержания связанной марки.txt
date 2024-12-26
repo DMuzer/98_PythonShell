@@ -1,0 +1,57 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+
+labels = [dm.dmElement(eid) for eid in FilteredElementCollector(doc)\
+				.OfCategory(bic.OST_GenericAnnotation)\
+				.WhereElementIsNotElementType().ToElementIds()]
+				
+labels = [l for l in labels if l.e.Name == "DM_Связанная марка оборудования"]
+
+#label = dm.dmElement(10174712)
+#equip = dm.dmElement(7619967)
+for label in labels :
+	equip = dm.dmElement(label.Value("СвязанныйЭлемент"))
+	if equip.e.Category.Id.IntegerValue == int(bic.OST_MechanicalEquipment) :
+		systemName = equip.Value("ИмяСистемы").split(",")[0]
+	else :
+		systemName = equip.Value("Сокращение для системы")
+	if not systemName : systemName = "???"
+	alphaCode = equip.Value("БуквенныйКод")
+	if not alphaCode :
+		print("not alpha")
+		alphaCode = "??"
+		
+	num = equip.Value("ЦБК_Номер")
+	label.Set("Сокращение", alphaCode)
+	label.Set("Система", systemName)
+	label.Set("Номер", str(num))
+	

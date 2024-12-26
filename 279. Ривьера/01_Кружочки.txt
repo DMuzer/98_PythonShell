@@ -1,0 +1,123 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+sprTypes = {t.Name : t for t in FilteredElementCollector(doc)\
+				.OfCategory(bic.OST_Sprinklers)\
+				.WhereElementIsElementType()\
+				.ToElements()}
+				
+sprType = sprTypes["Бронза"]
+sprType2 = sprTypes["Под венткоробом головкой вверх"]
+	
+
+class dmCurve :
+	def __init__(self, l) :
+		self.line = l
+		self._layerName = None
+	def _getLayerName(self) :
+		if not self._layerName :
+			self._layerName = doc.GetElement(self.line.GraphicsStyleId)\
+					.GraphicsStyleCategory.Name
+		return self._layerName
+					
+	def _checkIfLine(self) :
+		return isinstance(self.line, Line)
+		
+	isLine = property(_checkIfLine)
+	def _checkIfArc(self) :
+		return isinstance(self.line, Arc)
+	isArc = property(_checkIfArc)
+					
+	layerName = property(_getLayerName)
+	
+	def createSprinkler(self, z = -6.5) :
+		with dm.trans(a = "Создание спринклера") :
+			p0 = self.line.Center
+			p1 = XYZ(p0.X, p0.Y, z)
+			ln = self.layerName
+			if self.layerName == ""
+			elif self.layerName == 
+			doc.Create.NewFamilyInstance(p1, 
+		
+		
+	
+	
+
+#e = dm.firstSelected()	
+e = dm.dmElement(4007527)
+opt = Options()
+
+gs = list(e.e.Geometry[opt])
+lines = []
+while gs :
+	g = gs.pop()
+	print(g)
+	if isinstance(g, GeometryInstance) :
+		gs.append(g.GetInstanceGeometry())
+		continue
+	if isinstance(g, GeometryElement) :
+		gs.extend(g)
+		continue
+	if isinstance(g, (Arc, Line)) :
+		lines.append(dmLine(g))
+		
+	
+
+cents = [a.line.Center for a in lines if a.isArc]
+layers = set([l.layerName for l in lines])
+print(layers)
+
+with dm.trans(a = "Создание спринклеров") :
+	i = 0
+	for p  in cents :
+		i += 1
+		if i > 0 : 
+			break
+		p1 = XYZ(p.X, p.Y,-6.5)
+		newSpr = doc.Create.NewFamilyInstance(p1, 
+						sprType,
+						Structure.StructuralType.NonStructural) 
+		print(newSpr)
+		
+		
+
+
+
+
+	

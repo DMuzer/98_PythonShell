@@ -1,0 +1,567 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+sprinklerToCopyId = 1527719
+pipeToCopyId = 1458412
+
+class dmDuctConnector :
+	def __init__(self, connector) :
+		self.connector = connector
+	def _ifStraight (self) :
+		e = dmDuctElement(self.connector.Owner)
+		#Если это врезка, то врезка точно не будет проходным коннектором. На врезке линия должна закончиться
+		fittingType = e.fittingType
+		if fittingType == PartType.TapAdjustable : return False
+		#
+		if fittingType != PartType.Tee \
+			and fittingType != PartType.Cross :
+			return True 
+		connectors = e.endConnectors
+		#Удаляем из словаря коннекторов текущий коннектор
+		connectors.Remove(self.Id)
+		connectorsProducts = [
+			self.connector.CoordinateSystem.BasisZ.DotProduct(c.CoordinateSystem.BasisZ) 
+				for c in connectors]
+		#Если у элемента 2 и меньше оконечных коннекторов то этот 
+		# коннектор будет проходным и дальше проверять не надо
+		if len(connectors) <= 2 : return True
+		# коннектор будет прямым если есть хотя бы
+		
+		return 
+	IsStraight = property(_ifStraight)
+	def _ifTakeoff(self) :
+		if self.connector.ConnectorType == ConnectorType.Curve : return True
+		
+		return 
+	IsTakeoff = property(_ifTakeoff)
+class dmConnectedPair :
+	def __init__(self, firstElement, firstConnector, 
+					secondElement, secondConnector) :
+		self.firstElement = firstElement
+		self.firstConnector = firstConnector
+		self.secondElement = secondElement
+		self.secondConnector = secondConnector
+	def __repr__(self) :
+		return "------------""\nПара подключений\n 1 : {} - коннектор Id - {}\n2 : {} - коннектор Id - {}\n".format(self.firstElement, 
+							self.firstConnector.Id, 
+							self.secondElement, 
+							self.secondConnector.Id)
+
+class dmDuctElement(dm.dmElement) :
+	def _getVertAlignment(self) :
+		return self.e.Parameter[BuiltInParameter.RBS_CURVE_VERT_OFFSET_PARAM].AsInteger()
+	vertAlignment = property(_getVertAlignment)
+	def _getHorAlignment(self) :
+		return self.e.Parameter[BuiltInParameter.RBS_CURVE_HOR_OFFSET_PARAM].AsInteger()
+	horAlignment = property(_getHorAlignment)
+	def _getFittingType(self) :
+		if hasattr(self.e, "MEPModel") :
+			if hasattr(self.e.MEPModel, "PartType") :
+				return self.e.MEPModel.PartType
+	fittingType = property(_getFittingType)
+	
+	def _getDuctConnectedElements(self) :
+		for e in self._getConnectedElements() :
+			yield dmDuctElement(e.e)
+	
+	connectedElements = property(_getDuctConnectedElements)
+	
+	def _getEndConnectors(self) :
+		conns = self.e.ConnectorManager.Connectors \
+					if hasattr(self.e, "ConnectorManager") \
+					else self.e.MEPModel.ConnectorManager.Connectors
+		return {c.Id : c for c in conns if c.ConnectorType == ConnectorType.End}
+	endConnectors = property(_getEndConnectors)
+	
+	def _getPhysicalConnectors(self) :
+		conns = self.e.ConnectorManager.Connectors \
+					if hasattr(self.e, "ConnectorManager") \
+					else self.e.MEPModel.ConnectorManager.Connectors
+		return {c.Id : c for c in conns if c.ConnectorType & ConnectorType.Physical}
+	physicalConnectors = property(_getEndConnectors)
+	
+	def _getConnectedPairs(self) :
+		conns = self.e.ConnectorManager.Connectors \
+					if hasattr(self.e, "ConnectorManager") \
+					else self.e.MEPModel.ConnectorManager.Connectors
+		phConns = {c.Id : c for c in conns if c.ConnectorType & ConnectorType.Physical}
+		res = []
+		for c1 in phConns.values() :
+			for c2 in c1.AllRefs :
+				if c2.ConnectorType & ConnectorType.Physical :
+					if c2.Owner.Id == self.Id : continue
+					res.append(dmConnectedPair(self, c1, dmDuctElement(c2.Owner), c2))
+		return res
+					
+	connectedPairs = property(_getConnectedPairs)
+	
+			
+		
+		
+	def _getLineNeighborsPairs(self) :
+		res = None
+		mainLineConnectors = self._getMainLineConnectors()
+		res = []
+		for c1 in mainLineConnectors :
+			for c2 in c1.AllRefs :
+				if not c2.ConnectorType & ConnectorType.Physical : continue
+				owner = dmDuctElement(c2.Owner)
+				if owner.IsDuct and owner.Width < 750 * dut : continue
+				if owner != self :
+					res.append(dmConnectedPair(self, c1, owner, c2))
+
+		return res
+	lineNeighbors = property(_getLineNeighborsPairs)
+	
+	def _getMainLineConnectors(self) :
+		conns = self.e.ConnectorManager.Connectors \
+					if hasattr(self.e, "ConnectorManager") \
+					else self.e.MEPModel.ConnectorManager.Connectors
+		Conns = {c.Id : c for c in conns if c.ConnectorType & ConnectorType.End}
+		
+		if self.fittingType == PartType.TapAdjustable or self.fittingType == PartType.TapPerpendicular :
+			vl = {c2: [c1.ConnectorType for c1 in c2.AllRefs] for c2 in Conns.Values}
+			vl2 = [c2 for c2 in vl if not ConnectorType.Curve in vl[c2]]
+			return vl2
+			
+			
+		#print("проверяем тройник")
+		
+		if self.fittingType == PartType.Tee :
+			#print("Это тройник")
+			c1,c2,c3 = Conns.Values
+			
+			product12 = abs(c1.CoordinateSystem.BasisZ.DotProduct(c2.CoordinateSystem.BasisZ))
+			product13 = abs(c1.CoordinateSystem.BasisZ.DotProduct(c2.CoordinateSystem.BasisZ))
+			
+			if product12 > 0.98 :
+				return [c1, c2]
+			elif product13 > 0.98 :
+				return [c1, c3]
+			else :
+				return [c2, c3]
+				
+		if self.fittingType == PartType.Cross :
+			c1 = max(Conns.Values, key = lambda x : x.Width * x.Height 
+							if x.Shape == ConnectorProfileType.Rectangular else x.Radius)
+			Conns.Remove(c1.Id)
+			c2,c3,c4 = Conns.Values
+			
+			product12 = abs(c1.CoordinateSystem.BasisZ.DotProduct(c2.CoordinateSystem.BasisZ))
+			product13 = abs(c1.CoordinateSystem.BasisZ.DotProduct(c3.CoordinateSystem.BasisZ))
+			product14 = abs(c1.CoordinateSystem.BasisZ.DotProduct(c4.CoordinateSystem.BasisZ))
+			
+			if product12 > 0.98 :
+				return [c1, c2]
+			elif product13 > 0.98 :
+				return [c1, c3]
+			elif product14 > 0.98:
+				return [c1, c4]
+			else :
+				return [c1]
+		
+		#Во всех остальных случаях возвращаем весь комплект соединителей.
+		#вопрос, что делать с оборудованием
+		
+		if self.Category.Id.IntegerValue in [int(bic.OST_MechanicalEquipment)] :
+			return []
+		return Conns.Values
+		
+	def _getHeight(self) :
+		try :
+			return self.e.Height
+		except :
+			return self.e.Diameter
+	Height = property(_getHeight)
+	def _getWidth(self) :
+		try :
+			return self.e.Width
+		except :
+			return self.e.Diameter
+	Width = property(_getWidth)
+			
+	def _getDuctSprinklerLine(self, distance = 100 * dut) :
+		if not self.e.Category.Id.IntegerValue != bic.OST_DuctCurves : return	
+		l = self.e.Location.Curve
+		c = self.endConnectors[0]
+		dv =  - XYZ.BasisZ * (self.Height / 2 + distance)
+		p0, p1 = [l.GetEndPoint(i) + dv for i in range(2)]
+		
+		return Line.CreateBound(p0, p1)
+		
+	def _setSprinklers(self) :
+		pass
+		
+	def drawSprinklerLine(self, maxDistance = 3000 * dut) :
+		
+		
+		l = self._getDuctSprinklerLine()
+		snum = int(math.ceil(l.Length / maxDistance))
+		fdist = l.Length / snum
+		pnts = [l.GetEndPoint(0) + l.Direction * fdist * (0.5 + i) for i in range(snum)]
+		pnts = [Point.Create(p) for p in pnts]
+		
+		g = System.Array[GeometryObject]([l] + pnts)
+		tr = Transaction(doc, "create line")
+		tr.Start()
+		ds = DirectShape.CreateElement(doc, dsid)
+		ds.SetShape(g)
+		tr.Commit()
+		return ds
+	
+	def _ifDuct(self) :
+		return self.e.Category.Id.IntegerValue == int(bic.OST_DuctCurves)
+	IsDuct = property(_ifDuct)
+		
+			
+		
+		
+
+
+
+
+
+
+
+class dmPolyLine :
+	def __init__(self, lines) :
+		self.lines = lines
+		self.length = sum([l.Length for l in self.lines])
+		self.line2pipe = {}
+		self.sprinkler2line = {}
+		self.point2sprinkler = {}
+	def Evaluate(self, k) :
+		if k == 0 :
+			return self.lines[0].GetEndPoint(0)
+		if k == 1 :
+			return self.lines[-1].GetEndPoint(1)
+		restLength = self.length * k
+		i = 0
+		
+		while restLength > 0 :
+			if self.lines[i].Length < restLength :
+				restLength -= self.lines[i].Length
+				i += 1
+			else :
+				return self.lines[i].GetEndPoint(0) + self.lines[i].Direction * restLength
+	def GetPoint(self, distance) :
+		restLength = distance
+		i = 0	
+		while restLength > 0 :
+			if self.lines[i].Length < restLength :
+				restLength -= self.lines[i].Length
+				i += 1
+			else :
+				p = self.lines[i].GetEndPoint(0) + self.lines[i].Direction * restLength
+				self.sprinkler2line[p] = self.lines[i]
+				return p
+				
+	def _calcPoints(self, maxDist= 3000 * dut) :
+		
+		numS = int(math.ceil(self.length / maxDist))
+		print("Количество спринклеров {}".format(numS))
+		fDist = self.length / numS
+		return [self.GetPoint((0.5 + i) * fDist) for i in range(numS)]
+				
+	def draw(self, maxDist = 3000 * dut) :
+		pnts = [Point.Create(p) for p in self._calcPoints(maxDist)]
+		g = System.Array[GeometryObject](self.lines + pnts)
+		tr = Transaction(doc, "create line")
+		tr.Start()
+		ds = DirectShape.CreateElement(doc, dsid)
+		ds.SetShape(g)
+		tr.Commit()
+		
+	def createPipeLine(self, pipeDownOffset = 50 * dut,  pipeToCopyId = pipeToCopyId ) :
+		pipeDownOffset = pipeDownOffset + 30 * dut
+		pipeToCopy = dm.dmElement(pipeToCopyId)
+		tr = Transaction(doc, "Трубопровод под воздуховодом")
+		tr.Start()
+		for l in self.lines :
+			pipeCopy = pipeToCopy.copy()
+			pipeCopy.Location.Curve = l
+			pipeCopy.Location.Move(XYZ.BasisZ * (-pipeDownOffset))
+			self.line2pipe[l] = pipeCopy
+		for l1, l2 in zip(self.lines[:-1], self.lines[1:]) :
+			pipe1, pipe2 = self.line2pipe[l1], self.line2pipe[l2]
+			try :
+				doc.Create.NewElbowFitting(pipe1.connectorsDict[1], pipe2.connectorsDict[0])
+			except :
+				pass
+		tr.Commit()
+		
+	def createSprinklers(self, maxDist = 3000 * dut, sprinklerToCopyId = sprinklerToCopyId) :
+		sprinklerToCopy = dm.dmElement(sprinklerToCopyId)
+		tr = Transaction(doc, "Создаем спринклеры под воздуховодом")
+		tr.Start()
+		for p in self._calcPoints(maxDist) :
+			sprinklerCopy = sprinklerToCopy.copy()
+			sprinklerCopy.Location.Point = p 
+			self.point2sprinkler[p] = sprinklerCopy
+		tr.Commit()
+	def connectSprinklers(self) :
+		tr = Transaction(doc, "Присоединение спринлеров")
+		tr.Start()
+		for p in self.sprinkler2line.keys() :
+			sprinkler = self.point2sprinkler[p]
+			l = self.sprinkler2line[p]
+			pipe = self.line2pipe[l]
+			ll = pipe.Location.Curve
+			p0 = sprinkler.Location.Point
+			p1 = ll.Project(p0).XYZPoint
+			standLocation = Line.CreateBound(p0,p1)
+			
+			pipeStand = pipe.copy()
+			
+			sprinklerConnector = list(sprinkler.connectors)[0]
+			print(sprinklerConnector)
+			pipeStand.e.Parameter[BuiltInParameter.RBS_PIPE_DIAMETER_PARAM].Set(sprinklerConnector.Radius * 2)
+			pipeStand.Location.Curve = standLocation
+			
+			doc.Create.NewTakeoffFitting(pipeStand.connectorsDict[1], pipe.e)
+			sprinklerConnector.ConnectTo(pipeStand.connectorsDict[0])
+		tr.Commit()
+			
+			
+	
+class dmDuctLine :
+	def __init__(self, startElement, link = None) :
+		self.link = link
+		if link :
+			self.transform = link.GetTotalTransform()
+			print("Трансформ origin : {}".format(self.transform.Origin))
+		else :
+			self.transform = Transform.Identy
+		self.startElement = startElement
+	def __repr__(self) :
+		return "Линия воздуховодов"
+		
+	def _getEndElement(self) :
+		toVisit = set([self.startElement])
+		prev = {self.startElement : None}
+		while toVisit :
+			current = toVisit.pop()
+			lineNeighbors = current.lineNeighbors
+			if len(lineNeighbors) == 1 :
+				return current
+			for nextPair in lineNeighbors :
+				if nextPair.secondElement not in prev :
+					prev[nextPair.secondElement] = current
+					toVisit.add(nextPair.secondElement)
+	def _getLineElements(self) :
+		end1 = self._getEndElement()
+		
+		#print(end1)
+		#print(len(end1.lineNeighbors))
+		
+		toVisit= deque([end1])
+		prev = {end1 : None}
+		res = []
+		
+		while toVisit :
+			current = toVisit.popleft()
+			#print(current)
+			#print(current.fittingType)
+			if not current : continue
+			if current.fittingType == PartType.TapAdjustable :
+				#print("Врезка {}".format(current))
+				pass
+			ln = current.lineNeighbors
+			#print("{} {}".format(current, len(ln)))
+			for nextPair in current.lineNeighbors :
+				if nextPair.secondElement not in prev :
+					prev[nextPair.secondElement] = current
+					res.append(nextPair)
+					toVisit.append(nextPair.secondElement)
+		return res
+	lineElements = property(_getLineElements)
+	
+	def drawLines(self) :
+		for e in self.lineElements :
+			if e.firstElement.IsDuct :
+				e.firstElement.drawSprinklerLine()
+		if e.secondElement.IsDuct :
+			e.secondElement.drawSprinklerLine()
+			
+	
+	
+			
+	def _calcLines(self) :
+		print("_calcLines. Start...")
+		lines = []
+		e = None
+		for e in self.lineElements :
+			if e.firstElement.IsDuct :
+				l1 = e.firstElement._getDuctSprinklerLine()
+				connectorOrigin = e.firstConnector.Origin
+				if l1.GetEndPoint(0).DistanceTo(connectorOrigin) \
+					> l1.GetEndPoint(1).DistanceTo(connectorOrigin) :
+					lines.append(l1)
+				else :
+					lines.append(l1.CreateReversed())
+				
+		if e and e.secondElement.IsDuct :
+			l1 = e.secondElement._getDuctSprinklerLine()
+			connectorOrigin = e.secondConnector.Origin
+			if l1.GetEndPoint(0).DistanceTo(connectorOrigin) \
+				> l1.GetEndPoint(1).DistanceTo(connectorOrigin) :
+				lines.append(l1.CreateReversed())
+			else :
+				lines.append(l1)
+		
+		lines2 = []	
+		if len(lines) > 1 :
+			for l1, l2 in zip(lines[:-1], lines[1:]) :
+				lines2.append(l1)
+				p1 = l1.GetEndPoint(1)
+				p2 = l2.GetEndPoint(0)
+				dp = p2 - p1
+				if dp.GetLength() > 50 * dut :
+					l3 = Line.CreateBound(p1, p2)
+					lines2.append(l3)
+			lines2.append(l2)
+			lines = lines2
+			
+		_lines = [l.CreateTransformed(self.transform) for l in lines]
+		lines = _lines
+		
+		dmPl = dmPolyLine(lines)
+		
+		polylines = []
+		lineStack = []
+		for l in lines :
+			if abs(l.Direction.Z) < 0.5 :
+				if  lineStack and l.Direction.IsAlmostEqualTo(lineStack[-1].Direction) :
+					l2 = lineStack.pop()
+					l3 = Line.CreateBound(l2.GetEndPoint(0), l.GetEndPoint(1))
+					lineStack.append(l3)
+				else :
+					lineStack.append(l)
+			else :
+				if len(lineStack) > 0 :
+					polylines.append(dmPolyLine(lineStack))
+					lineStack = []
+				continue
+		if len(lineStack) > 0 :
+			polylines.append(dmPolyLine(lineStack))
+			
+		maxDistance = 3000 * dut
+		if len(lines) < 1 : return
+		pnts = [Point.Create(l.GetEndPoint(0)) for l in lines] 
+		pntsXYZ = [l.GetEndPoint(0) for l in lines] + [lines[-1].GetEndPoint(1)]
+		pl = PolyLine.Create(System.Array[XYZ](pntsXYZ))
+		
+		print("calcline before create cycle...")
+		for pl in polylines :
+			print("calcline before create createPipeLine...")
+			pl.createPipeLine()
+			print("calcline before create createSprinklers...")
+			pl.createSprinklers()
+			print("calcline before create connectSprinklers...")
+			pl.connectSprinklers()	
+		print("calcline Finish...")
+			
+	def setSprinklers(self) :
+		return
+		
+class dmRevitLinkInstance :
+	def __init__(self, li) :
+		self.linkInstance = li
+	def __repr__(self) :
+		return "Вставленная модель {}".format(self.linkInstance.Name)
+	def _getLinkDocument(self) :
+		return self.linkInstance.GetLinkDocument()	
+	doc = property(_getLinkDocument)
+	
+	def _getDucts(self) :
+		return FilteredElementCollector(self.doc)\
+		.OfCategory(bic.OST_DuctCurves)\
+		.WhereElementIsNotElementType().ToElements()
+	ducts = property(_getDucts)
+	
+	def _getDuctsLarge(self) :
+		for d in self.ducts :
+			try :
+				if d.Width > 750 * dut :
+					yield dmDuctElement(d)
+			except :
+				if d.Diameter > 750 * dut :
+					yield dmDuctElement(d)
+					
+	ductsLarge = property(_getDuctsLarge)
+	
+		
+
+
+
+#ref = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+#link = doc.GetElement(ref)
+#ldoc = link.GetLinkDocument()
+#le = ldoc.GetElement(ref.LinkedElementId)
+#e = dmDuctElement(le)
+
+#e = dmDuctElement(8491065)#воздуховод
+#e = dmDuctElement(8490766)#воздуховод ответвление
+#e = dmDuctElement(8489513)#врезка
+#e = dmDuctElement(8490948)#тройник
+#e = dmDuctElement(8491090)#крест
+
+#t2 = dmDuctElement(8490948)
+
+
+#e = dmDuctElement(dm.pickElement().e)
+#line = dmDuctLine(e)
+#line._calcLines()
+print(1)
+dref = uidoc.Selection.PickObject(UI.Selection.ObjectType.LinkedElement)
+print(2)
+li = doc.GetElement(dref)
+
+ldoc = li.GetLinkDocument()
+de = dmDuctElement(ldoc.GetElement(dref.LinkedElementId), link = li)
+print(3)
+dl = dmDuctLine(de, link = li)
+print(4)
+dl._calcLines()
+print(5)
+
+
+"""
+processedDucts = set()
+
+links = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements()
+links_OV = [dmRevitLinkInstance(l) for l in links if l.Name.Contains("(ОВ")]
+
+
+l1 = links_OV[1]
+
+
+for l in links_OV :
+	print(20*'-')
+	print(l)
+	for d in l.ductsLarge :
+		if d not in processedDucts :
+			line = dmDuctLine(d)
+			line._calcLines()
+			processedDucts = \
+				processedDucts.union(
+					set([d1.firstElement for d1 in line.lineElements]))
+			#break
+"""			
+		
+
+

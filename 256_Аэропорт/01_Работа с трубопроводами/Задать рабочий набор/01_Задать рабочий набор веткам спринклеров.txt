@@ -26,6 +26,7 @@ def getSprinklers() :
 			yield dm.dmElement(s)
 				
 sprinklers = list(getSprinklers())
+sprinklers = [dm.firstSelected()]
 doneSprinklers = set()
 wss = set()
 wss1 = set()
@@ -33,6 +34,7 @@ wss1 = set()
 tr = Transaction(doc, "Установка рабочих наборов для веток")
 tr.Start()
 for s in sprinklers :
+	if s is None : continue
 	
 	if s in doneSprinklers : 
 		print("Обработанный спринклер, пропускаем")

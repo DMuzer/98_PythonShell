@@ -1,0 +1,178 @@
+# Создание наложения граней.
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys, math
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+from dm_connect_2 import get_PolygonFromCurveLoops
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+	
+#clr.AddReferenceToFile(r"NetTopologySuite.dll")
+
+import NetTopologySuite as nts
+from NetTopologySuite.Geometries import *
+import NetTopologySuite.Geometries as geoms
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+try :
+	reload(dmContour)
+	print("Перезагрузка dmSectionContour ok")
+except Exception as ex :
+	print(ex)
+	import dmSectionContour as dmContour
+	print("импорт dmSectionContour ok")
+	
+
+	
+from System.Collections.Generic import List
+solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)   
+
+def createSolidFromLine(line, z = -10 * dut, height=4000 * dut) :
+
+	_d = line.Direction
+	d = XYZ(_d.X, _d.Y, 0)
+	dn = XYZ(-d.Y, d.X, 0)
+	v = dn * dut
+	p1, p2 = line.GetEndPoint(0), line.GetEndPoint(1)
+	p1, p2 = XYZ(p1.X, p1.Y, z), XYZ(p2.X, p2.Y, z)
+	points = [p1, p2, p2 + v, p1 + v, p1]
+	lines = CurveLoop.Create(List[Curve]([Line.CreateBound(_p1,_p2) for _p1, _p2 in zip(points[:-1], points[1:])]))
+	
+	box = GeometryCreationUtilities\
+				.CreateExtrusionGeometry(List[CurveLoop]([lines]),
+                                                  XYZ.BasisZ,
+                                                  height,
+                                                  solid_opt)
+	
+	res = box
+	
+	return res
+	
+	
+	
+	
+
+	
+line = dm.dmElement(1151374)
+
+l1 = line.e.Location.Curve
+d = l1.Direction
+dn = XYZ(-d.Y, d.X, 0)
+
+solid = createSolidFromLine(l1)
+solid2 = SolidUtils.Clone(solid)
+
+#dm.create_ds(solid, doc=doc)
+
+def drawPolygon(pgs, view = None) :
+	if not hasattr(pgs, "NumGeometries") :
+		return
+	
+	if pgs.NumGeometries == 1 :
+		pgs = [pgs]	
+	 
+	if view is None :
+		view = uidoc.ActiveView
+		
+	
+		
+	with dm.trans(doc) :	
+		_i = 0 
+		while pgs : 
+			pg = pgs.pop()
+			_i += 1
+			if _i > 10000 : return
+			print("Цикл {}".format(_i))
+			print(pg)
+			#print(pg.Boundary)
+			#print(pg.Boundary.NumGeometries)
+			if pg.NumGeometries == 1 :
+				if pg.Dimension == nts.Geometries.Dimension.Curve :
+					boundaries = [pg]
+				elif pg.Dimension == nts.Geometries.Dimension.Surface :
+					bnd = pg.Boundary
+					boundaries = list(bnd) if bnd.NumGeometries > 1 else [bnd]
+			else :			
+					
+				pgs.extend(pg)
+				continue
+			i = 0	
+			while boundaries :
+				i += 1
+				if i > 10000 : break
+				lr = boundaries.pop()
+				if lr.NumGeometries > 1 :
+					boundaries.extend(lr)
+					continue
+			
+				print(lr)
+				coords = list(lr.Coordinates)
+				for p1, p2 in zip(coords[:-1], coords[1:]) :
+					try :
+						_p1, _p2 = XYZ(p1.X, p1.Y, 0), XYZ(p2.X, p2.Y,0)
+						l = Line.CreateBound(_p1, _p2)
+						doc.Create.NewDetailCurve(view, l)
+					except :
+						pass
+				
+
+ddoc = dmDoc.dmDocument(doc)
+
+for link in ddoc.getLinks() :
+	print(link)
+	for e in link.getSolidSectedElements(solid) :
+		for s in e.getSolids() :			
+			BooleanOperationsUtils\
+				.ExecuteBooleanOperationModifyingOriginalSolid(
+					solid2,
+					s,					
+					BooleanOperationsType.Difference)
+#dm.create_ds(solid2, doc = doc)
+tFace = None
+for f in solid2.Faces :
+	try :
+		print(f.FaceNormal.IsAlmostEqualTo(-dn))
+		if f.FaceNormal.DotProduct(-dn) > 0.99 :
+			tFace = f
+			print("выходим")
+			break
+	except Exception as ex:
+		print(ex)
+		pass
+		
+print(tFace)
+
+views = {v.Name : v for v in 
+			FilteredElementCollector(doc).OfClass(View).ToElements()}
+drawView = views['План1']
+

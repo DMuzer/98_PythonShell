@@ -1,0 +1,54 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+	
+
+fc = FilteredElementCollector(doc, uidoc.ActiveView.Id).\
+		OfCategory(bic.OST_MechanicalEquipment).ToElementIds()
+
+valves = [dm.dmElement(e) for e in fc]
+valves = [e for e in valves if e.e.Name.StartsWith("Клапан угловой латунный") ]
+
+tagMode = TagMode.TM_ADDBY_CATEGORY
+tagOrn  = TagOrientation.Horizontal
+
+
+with dm.trans(a = "Установка аннотации на клапана") :
+	for valve in valves :
+		print(valve.e.Name)
+		pnt = valve.Location.Point
+		ref = Reference(valve.e)
+		
+		newTag = IndependentTag.Create(doc, uidoc.ActiveView.Id, ref, True, tagMode, tagOrn, pnt)
+		
+		

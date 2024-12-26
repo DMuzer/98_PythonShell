@@ -1,0 +1,251 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+import math
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+refInt = None
+
+def getReferenceIntersector() :
+	global refInt
+	if refInt : return refInt
+	print("refInt не инициализирован")
+	views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+	refView = views["DM_Пересечения"]
+	refFlt = ElementClassFilter(Wall)
+	refFlt = ElementMulticategoryFilter(System.Array[bic]([bic.OST_Walls, bic.OST_Floors]))
+	refInt = ReferenceIntersector(refFlt, FindReferenceTarget.Face, refView)
+	refInt.FindReferencesInRevitLinks = True
+
+sleeveTypeId = None
+def getSleeveTypeId() :
+	if sleeveTypeId : return sleevTypeId
+	types = {(t.FamilyName, t.Name) : t for t  in FilteredElementCollector(doc)\
+						.OfCategory(bic.OST_PipeFitting)\
+						.WhereElementIsElementType()\
+						.ToElements()}
+	return types[("DM_Комплект гильзы прохода R20","DM_Комплект гильзы прохода R20")]
+	
+class dmReference (object) :
+	def __init__(self, refCntx) :
+		self.refCntx = refCntx
+		self.ref = refCntx.GetReference()
+		self.ElementId = self.ref.ElementId
+		self.LinkedElementId = self.ref.LinkedElementId
+		self.Proximity = refCntx.Proximity
+	def __repr__(self) :
+		return "dmReference hash = {}, prox = {}, ElementId = {}, LinkedElementId = {}"\
+			.format(self.__hash__(), self.Proximity, self.ElementId, self.LinkedElementId)
+	def __hash__(self) :
+		return self.ElementId.IntegerValue + self.LinkedElementId.IntegerValue
+	def __eq__(self, other) :
+		return self.ElementId == other.ElementId \
+			and self.LinkedElementId == other.LinkedElementId
+	def __lt__(self, other) :
+		return self.Proximity < other.Proximity
+	def __le__(self, other) :
+		return self.Proximity <= other.Proximity
+	def __gt__(self, other) :
+		return self.Proximity > other.Proximity
+	def __ge__(self, other) :
+		return self.Proximity >= other.Proximity
+			
+class dmPassThrough(object) :
+	def __init__(self) :
+		self.Min = None
+		self.Max = None
+		self.merged = False
+	def __lt__(self, other) :
+		return self.Min < other.Min
+	def __le__(self, other) :
+		return self.Min <= other.Min
+	def __gt__(self, other) :
+		self.Min > other.Min
+	def __ge__(self, other) :
+		self.Min >= other.Min
+	def __and__(self, other) :
+		try :
+			print(1)
+			l1 = (self > other)
+			print("l1 = {}".format(l1))
+			l2 = ((self.Max.Proximity +  50 * dut) > other.Max.Proximity)
+			print("l2 = {}".format(l2))
+			return  l1	and l2
+		except Exception as ex:
+			print(ex)
+	def merge(self, other) :
+		self.addIntersection(other.Min)
+		self.addIntersection(other.Max)
+		other.merged = True
+		
+		
+	def addIntersection(self, int) :
+		if self.Min is None : self.Min = int
+		if self.Max is None : self.Max = int
+		if int <= self.Min  :
+			self.Min = int
+		if int >= self.Max :
+			self.Max = int
+	def getMiddlePoint(self) :
+		if self.Min and self.Max :
+			return (self.Min.ref.GlobalPoint + self.Max.ref.GlobalPoint)/2
+	def getLength(self) :
+		if self.Min and self.Max :
+			return self.Max.Proximity - self.Min.Proximity
+			
+	def __repr__(self) :
+		try :
+			return "dmPassThrough "\
+						"MidllePoint = {}, "\
+						"Length = {}".format(self.getMiddlePoint(), self.getLength())
+		except Exception as ex:
+			return "dmPassThrough, {}".format(ex)
+	
+class dmPipe(dm.dmElement) :
+	def __repr__(self) :
+		return "dmPipe Id = {}".format(self.Id)
+		
+	def findIntersections(self) :
+		p0 	= self.Location.Curve.GetEndPoint(0)
+		d 	= self.Location.Curve.Direction
+		refInt = getReferenceIntersector()
+		refs = [dmReference(r) for r in refInt.Find(p0, d)]
+		refsDict = {}
+		for ref in refs :
+			refsDict.setdefault(ref, []).append(ref)
+		return refsDict
+		
+		
+	def findPasses(self) :
+		refsDict = self.findIntersections()
+		pipeLen = self.Location.Curve.Length
+		passes = []
+		for wall in refsDict :
+			thePass = dmPassThrough()
+			for int_ in refsDict[wall] :	
+				if int_.Proximity > pipeLen : continue
+				thePass.addIntersection(int_)
+			passes.append(thePass)
+		passes = [p for p in passes if not p.getMiddlePoint() is None]
+		numPasses = len(passes)
+		if numPasses > 1 :
+			print("Объединяем пересечения")
+			for i1 in range(numPasses-1) :
+				print("элемент {}".format(i1))
+				pass1 = passes[i1]
+				if pass1.merged : continue
+				for i2 in range(i1+1, numPasses) :
+					pass2 = passes[i2]
+					if pass2.merged : continue
+					print("сравниваем : \n\t\t{}\n\tи\n\t\t{}".format(pass1, pass2))
+					if pass1 & pass2 :
+						print("Объединяются")
+						pass1.merge(pass2)
+					else :
+						print("Не объединяются")
+
+		passes = [_pass for _pass in passes if not _pass.merged]	
+		print("Количество проходов {}".format(len(passes)))
+		return passes
+				
+			
+				
+	def createSleeves(self) :
+		print("Создание гильз")
+		
+		ft = getSleeveTypeId()
+		passes = self.findPasses()
+		sleeves = []
+		d = self.Location.Curve.Direction
+		xyAngle = math.atan2(d.Y, d.Z)
+		xyLen = (d.Y**2 + d.X**2)**0.5
+		zAngle = math.atan2(d.Z, xyLen)
+		with dm.trans(a="Создание гильз") :
+			if not ft.IsActive :
+				ft.Activate()
+				
+			for _pass in passes :
+				p0 = _pass.getMiddlePoint()
+				l = _pass.getLength()
+				if l is None : continue
+				l  = max(l + 100 *dut, 150 * dut)
+				
+				newSleeve = dm.dmElement(doc.Create.NewFamilyInstance(p0, ft, Structure.StructuralType.NonStructural))
+				newSleeve.Set("Гильза_длина", l )
+				newSleeve.Set("DN", pipe.diameter)
+				sleeves.append(newSleeve)
+				rotLine = Line.CreateBound(p0, p0 + XYZ.BasisZ)
+				newSleeve.Location.Rotate(rotLine, xyAngle)
+				
+				
+		return sleeves
+				
+	
+	
+	
+	
+pipe = dmPipe(3468555)
+
+print(pipe)
+print(getReferenceIntersector())
+print(refInt)
+print(getReferenceIntersector())
+
+ints = pipe.findIntersections()
+
+for int in ints :
+	print(50*"-")
+	print(int)
+	print("*")
+	for r in ints[int] :
+		print(r)
+		
+print("Находим проходы")
+passes = pipe.findPasses()
+print("Количество найденых проходов = {}".format(len(passes)))
+for thePass in passes :
+	print(thePass)
+	
+sleeves = pipe.createSleeves()
+
+
+	
+
+	
+
+
+	

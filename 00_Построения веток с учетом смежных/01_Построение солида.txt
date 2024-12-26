@@ -1,0 +1,73 @@
+# Вычисление солида для получения разреза
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\DMuzer FFtst.tab\Тесты.panel\Сечение.pushbutton"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+
+libFolder2 = r"C:\Program Files\pyRevit-Master\pyrevitlib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(script2)
+	print("Перезагрузка script2 ok")
+except Exception as ex :
+	print(ex)
+	import script2
+	print("импорт script2 ok")
+	
+dmDoc = script2.dmDocument(doc)
+
+e = dm.dmElement(10178342)
+line = e.e.GeometryCurve
+
+ow = doc.GetElement(e.e.OwnerViewId)
+level = ow.GenLevel.Elevation
+
+solid = script2.createSolidFromLine(line, level, 5000 * dut)
+
+lis = list(dmDoc.getLinkInstances())
+solids = []
+for li in dmDoc.getLinkInstances() :
+	print(li)
+	
+	for e in li._getElemetsSectedSolid(solid) :
+		print(e)
+		solids.extend(e.getTransformedSolids()
+		
+		
+
+
+	
+	
+	

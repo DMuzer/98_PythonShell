@@ -19,11 +19,16 @@ from System.Collections.Generic import IList, List
 bic = BuiltInCategory
 dsid = ElementId(bic.OST_GenericModel)
 
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
 def getPipes() :
 	for s in FilteredElementCollector(doc)\
 		.OfCategory(BuiltInCategory.OST_PipeCurves).WhereElementIsNotElementType()\
 		.ToElements() :		
 			yield dm.dmElement(s)
+			
+			
 				
 pipes = list(getPipes())
 wss = set()

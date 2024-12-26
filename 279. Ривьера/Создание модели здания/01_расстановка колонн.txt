@@ -1,0 +1,470 @@
+# ТЦ Ривьера. Программа для расстановки колонн по информации из вставленного плана
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+import math
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+sprTypes = {t.Name : t for t in FilteredElementCollector(doc)\
+				.OfCategory(bic.OST_Sprinklers)\
+				.WhereElementIsElementType()\
+				.ToElements()}
+
+nstr = Structure.StructuralType.NonStructural
+#sprType = sprTypes["Бронза"]
+#sprType2 = sprTypes["Под венткоробом головкой вверх"]
+
+pipes = {
+	25. * dut : dm.dmElement(4017763),
+	32. * dut: dm.dmElement(4017795),
+	40. * dut:  dm.dmElement(4017805),
+	50. * dut: dm.dmElement(4017815),
+	65. * dut: dm.dmElement(4017827),
+	80. * dut: dm.dmElement(4017837),
+	100. * dut: dm.dmElement(4017847),
+	
+}
+	
+
+class dmCurve :
+	def __init__(self, l) :
+		self.line = l
+		self._layerName = None
+	def _getLayerName(self) :
+		if not self._layerName :
+			self._layerName = doc.GetElement(self.line.GraphicsStyleId)\
+					.GraphicsStyleCategory.Name
+		return self._layerName
+					
+	def _checkIfLine(self) :
+		return isinstance(self.line, (Line, PolyLine))
+		
+	isLine = property(_checkIfLine)
+	def _checkIfArc(self) :
+		return isinstance(self.line, Arc)
+	isArc = property(_checkIfArc)
+	
+	def _checkIfSprinkler(self) :
+		return self.isArc and self.layerName.StartsWith("_Спринклер")
+	isSprinkler = property(_checkIfSprinkler)
+	
+	def _checkIfPipe(self) :
+		return self.isLine and self.layerName[0] == "Ф"
+	
+	isPipe = property(_checkIfPipe)
+					
+	layerName = property(_getLayerName)
+	
+	def createSprinkler(self, z = -6.5) :
+		if not self.isArc : return
+		with dm.trans(a = "Создание спринклера") :
+			p0 = self.line.Center
+			p1 = XYZ(p0.X, p0.Y, z)
+			ln = self.layerName
+			if self.layerName == '_Спринклер универсальный' :				
+				stype = sprType
+			elif self.layerName == '_Спринклер под коробом' :
+				stype = sprType
+			newS = doc.Create.NewFamilyInstance(
+							p1, 
+							stype, 
+							Structure.StructuralType.NonStructural)  
+			newS = dm.dmElement(newS)
+			print(newS)
+							
+	def getDiameter(self) :
+		return int(self.layerName[1:]) * dut
+		
+	def createPipe(self, z = -7) :
+		if not self.isLine : return
+		if not self.layerName[0] == "Ф" : return 
+		d = int(self.layerName[1:])*dut
+		
+		if isinstance(self.line, Line) :
+			lines = [self.line]
+		elif isinstance(self.line, PolyLine) :
+			coords = self.line.GetCoordinates()
+			lines = [Line.CreateBound(p0, p1) for p0, p1 in zip(coords[:-1], coords[1:])]
+		for lc in lines :
+			p00 = lc.GetEndPoint(0)
+			p0 = XYZ(p00.X, p00.Y, z)
+			p11 = lc.GetEndPoint(1)
+			p1 = XYZ(p11.X, p11.Y, z)
+			
+			newLc = Line.CreateBound(p0, p1)
+			
+			
+			toCopy = pipes[d]
+			
+			with dm.trans() :		
+				newPipe = toCopy.copy()
+				newPipe.Location.Curve = newLc
+			#print(newPipe)
+			
+	def calcIntersect(self, other) :
+		"""
+		Вычисление пересечения и сохранение результата пересечения
+		other = curve, Line
+		для начала реализуем как вычисление пересечения в случае если объект является Line или PolyLine
+		"""
+		
+		if not self.isLine : return
+		
+		self.intersectionPoint = None
+		self.intersectionDistance = float.PositiveInfinity
+		
+		p00 = other.GetEndPoint(0)
+		res = None
+		
+		if isinstance(self.line, Line) :
+			pnts = [self.line.GetEndPoint(0), self.line.GetEndPoint(1)]
+		elif isinstance(self.line, PolyLine) :
+			pnts = self.line.GetCoordinates()
+			
+		minX, maxX = min(pnts, key = lambda x : x.X).X, max(pnts, key = lambda x : x.X).X
+		minY, maxY = min(pnts, key = lambda x : x.Y).Y, max(pnts, key = lambda x : x.Y).Y
+		
+		d = other.Direction
+		if abs(d.Y) > abs(d.X) :
+			if minX >p00.X or maxX < p00.X : return 
+		else :
+			if minY > p00.Y or maxY < p00.Y : return
+		
+		resA = clr.Reference[IntersectionResultArray]()
+		
+		
+		if isinstance(self.line, Line) :	
+			p0_ = self.line.GetEndPoint(0)
+			p1_ = self.line.GetEndPoint(1)
+			p0 = XYZ(p0_.X, p0_.Y, 0)
+			p1 = XYZ(p1_.X, p1_.Y, 0)
+			try :
+				self.line0 = Line.CreateBound(p0, p1)
+			except  :
+				self.intersectionPoint = None
+				return 
+				
+			
+			res = self.line0.Intersect(other, resA)
+			#print(res)
+			if res == SetComparisonResult.Overlap :
+				self.intersectionPoint = resA.Item[0].XYZPoint
+				self.intersectionDistance = p00.DistanceTo(self.intersectionPoint)
+			else :
+				self.intersectionPoint = None
+				self.intersectionDistance = float.PositiveInfinity
+		elif isinstance(self.line, PolyLine) :
+			coords = self.line.GetCoordinates()
+			coords = [XYZ(p.X,p.Y,0) for p in coords]
+			lines = []
+			for p0, p1 in zip(coords[:-1], coords[1:]) :
+				try :
+					lines.append(Line.CreateBound(p0, p1))
+				except :
+					pass
+			
+			ints = []
+			for line in lines :
+				res = line.Intersect(other, resA)
+				if res == SetComparisonResult.Overlap :
+					ints.append(resA.Item[0].XYZPoint)
+			if len(ints) > 0 :
+				pnt = min(ints, key = lambda x : x.DistanceTo(p00))
+				self.intersectionPoint = pnt
+				self.intersectionDistance = p00.DistanceTo(pnt)
+			else :
+				self.intersectionPoint = None
+				self.intersectionDistance = float.PositiveInfinity
+
+			
+		return res
+		
+	def drawLine(self) :
+		with dm.trans() :
+			if isinstance(self.line, PolyLine) :
+				coords = self.line.GetCoordinates()
+				for p1, p2 in zip(coords[:-1], coords[1:]) :
+					l = Line.CreateBound(p1, p2)
+					doc.Create.NewDetailCurve(__revit__.ActiveUIDocument.ActiveView, l)
+					
+		
+			else :
+				doc.Create.NewDetailCurve(__revit__.ActiveUIDocument.ActiveView, self.line)
+				
+	@property
+	def isRoundColumn(self) :
+		return isinstance(self.line, Arc)
+		
+	@property
+	def isRectColumn(self) :
+		return isinstance(self.line, PolyLine)
+	@property
+	def columnSize(self) :
+		if isinstance(self.line, PolyLine) :
+			coords = self.line.GetCoordinates()
+			if len(coords) == 5 :
+				return (round(coords[0].DistanceTo(coords[1])/dut), round(coords[1].DistanceTo(coords[2])/dut))
+		elif isinstance(self.line, Arc) :
+			return round(self.line.Radius * 2/dut)
+			
+			
+	def getColumnCenter(self) :
+		if isinstance(self.line, PolyLine) :
+			coords = self.line.GetCoordinates()
+			if len(coords) == 5 :
+				center = (coords[0] + coords[2])/2
+				center0 = XYZ(center.X, center.Y, 0)
+				return center0
+		elif isinstance(self.line, Arc) :
+			return self.line.Center
+			
+	@property
+	def columnType(self) :
+		try :
+			if isinstance(self.line, PolyLine) :
+				return getColumnTypes()[self.columnSize]
+			elif isinstance(self.line, Arc) :
+				return getColumnRoundTypes()[self.columnSize]
+		except :
+			
+			pass
+		
+	def createColumn(self) :
+	
+		if self.isRectColumn :
+			try :
+				ctype = self.columnType	
+				if not ctype : 
+					print("Некорректно определен тип прямоугольной колонны")
+					print(self.columnSize)
+					if len(self.line.GetCoordinates()) == 4 : return
+					raise
+				tr = Transaction(doc, "Создать колонну")
+			
+				tr.Start()			
+					
+				newS = doc.Create.NewFamilyInstance(
+											self.getColumnCenter(), 
+											ctype.e, level, 
+											Structure.StructuralType.NonStructural)  
+			
+				tr.Commit()					
+				return newS
+			except :
+				print("ошибка при создании  прямоугольной колонны")
+				print(self.columnSize)
+				raise
+			
+		elif self.isRoundColumn :
+			try :
+				ctype = self.columnType		
+				tr = Transaction(doc, "Создать колонну")
+			
+				tr.Start()			
+					
+				newS = doc.Create.NewFamilyInstance(
+											self.getColumnCenter(), 
+											ctype.e, level, 
+											Structure.StructuralType.NonStructural)  
+			
+				tr.Commit()					
+				return newS
+			except :				
+				print("ошибка при создании  круглой колонны")
+				print(self.columnSize)
+				raise
+				
+	
+		
+			
+		
+		
+levels = {l.Name : l for l in FilteredElementCollector(doc).OfClass(Level).ToElements()}	
+level = levels["Этаж -1"]
+
+_colTypes = None
+_colRoundTypes = None
+try :
+	_colTypes
+except :
+	_colTypes = None
+try :
+	_colRoundTypes
+except :
+	_colRoundTypes = None
+def getColumnTypes() :
+	global _colTypes
+
+	if not _colTypes is None : return _colTypes
+
+		
+	fc = [dm.dmElement(t) for t in FilteredElementCollector(doc)\
+				.OfCategory(bic.OST_Columns)\
+				.WhereElementIsElementType()\
+				.ToElements()]
+	_colTypes = {(t.Value("Ширина")/dut, t.Value("Глубина")/dut) : t for t in fc if not t.Value("Диаметр")}
+	
+	return _colTypes
+def getColumnRoundTypes() :
+	global _colRoundTypes
+
+	if not _colRoundTypes is None : return _colRoundTypes
+
+		
+	fc = [dm.dmElement(t) for t in FilteredElementCollector(doc)\
+				.OfCategory(bic.OST_Columns)\
+				.WhereElementIsElementType()\
+				.ToElements()]
+	_colRoundTypes = {round(t.Value("Диаметр")/dut) : t for t in fc if t.Value("Диаметр")}
+	
+	return _colRoundTypes
+	
+			
+
+		
+
+
+levels = {l.Name : l for l in FilteredElementCollector(doc).OfClass(Level).ToElements()}
+level = levels["Этаж -1"]
+
+
+#e = dm.firstSelected()	
+e = dm.dmElement(4007527)
+e = dm.dmElement(533447)
+opt = Options()
+
+layers = set([
+	"2_RC_Column",
+])
+
+
+def getLines(e) :
+	gs = list(e.e.Geometry[opt])
+	lines = []
+	
+	while gs :
+		g = gs.pop()
+		#print(g)
+		curve = None
+		if isinstance(g, GeometryInstance) :
+			gs.append(g.GetInstanceGeometry())
+			continue
+		if isinstance(g, GeometryElement) :
+			gs.extend(g)
+			continue
+		if isinstance(g, (Arc, Line)) :
+			curve = dmCurve(g)
+	
+			
+		if isinstance(g, (PolyLine)) :
+			polyLine = dmCurve(g)
+			curve = dmCurve(g)
+			
+			
+		if curve :
+			if curve.layerName in layers :		
+				lines.append(curve)
+			
+		#print(g)
+	return lines
+	
+def search(lines, l1) :
+	nearest = None
+	for l in lines :
+		#l.drawLine()
+		l.calcIntersect(l1)
+		if not hasattr(l, "intersectionDistance") : 
+			continue
+		if not l.intersectionDistance is None : 
+			if nearest is None : 
+				nearest = l
+			else :
+				if l.intersectionDistance < nearest.intersectionDistance :
+					nearest = l
+					
+	return nearest
+		
+	
+def findPoints(p1) :
+	p10 = XYZ(p1.X, p1.Y, 0)
+	
+	l1 = Line.CreateBound(p10, p10 + uidoc.ActiveView.UpDirection * 1000)
+	l2 = Line.CreateBound(p10, p10 - uidoc.ActiveView.UpDirection * 1000)
+	l3 = Line.CreateBound(p10, p10 + uidoc.ActiveView.RightDirection * 1000)
+	l4 = Line.CreateBound(p10, p10 - uidoc.ActiveView.RightDirection * 1000)
+	
+	nearest1 = search(lines, l1)
+	p1 = nearest1.intersectionPoint
+	nearest2 = search(lines, l2)
+	p2 = nearest2.intersectionPoint
+
+	nearest3 = search(lines, l3)
+	p3 = nearest3.intersectionPoint
+
+	nearest4 = search(lines, l4)
+	p4 = nearest4.intersectionPoint
+	
+	return p1, p2, p3, p4
+	
+
+	
+	
+
+p1 = XYZ(285.126013111, 231.323201447, -17.388451444)
+
+try :
+	lines = getLines(e)
+except :
+	lines = getLines(e)
+	print("нет lines")
+	
+try :
+	if sprToCopy is None :
+		sprToCopy = dm.firstSelected()
+		if sprToCopy is None : raise
+except :
+	sprToCopy = dm.firstSelected()
+	
+for l in lines[:] :
+	l.createColumn()
+	
+
+
+	
+
+
+
+		

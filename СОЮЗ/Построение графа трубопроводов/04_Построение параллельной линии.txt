@@ -5,7 +5,7 @@ st = """
 """
 print(st)
 dut = 0.0032808398950131233
-copyOffset = -200
+copyOffset = 200
 import itertools
 
 class dmElement :
@@ -111,7 +111,7 @@ class dmElement :
 				
 			
 
-raise
+#raise
 pipe1 = dmElement(uidoc.Selection.GetElementIds()[0])
 toVisit = [pipe1]
 tree = {pipe1 : None}
@@ -179,7 +179,8 @@ while True :
 	newPipes.append(newPipeElement)
 	
 	
-	if not pipes : break
+	if not pipes : 
+		break
 	current = pipes.popleft()
 	currentStartConnector = current.nearestConnector(currentEndConnector)
 	elbowConnectors.append((currentEndConnector, currentStartConnector))

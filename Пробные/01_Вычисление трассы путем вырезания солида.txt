@@ -1,0 +1,73 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+	
+	
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dmR)
+	print("Перезагрузка dmFindRoute2 ok")
+except Exception as ex :
+	print(ex)
+	import dmFindRoute2 as dmR
+	print("импорт dmFindRoute2 ok")
+	#raise
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+#l = dm.firstSelected()
+from System.Collections.Generic import List
+solid_opt = SolidOptions(ElementId.InvalidElementId, ElementId.InvalidElementId)
+
+category_id = ElementId(bic.OST_GenericModel)
+	
+gc = l.e.GeometryCurve
+
+d = gc.Direction
+v = XYZ.BasisZ
+n = d.CrossProduct(v)
+print(n)
+tr1 = Transform.CreateTranslation(n)
+gc2 = gc.CreateTransformed(tr1).CreateReversed()
+gc3 = Line.CreateBound(gc.GetEndPoint(1), gc2.GetEndPoint(0))
+gc4 = Line.CreateBound(gc2.GetEndPoint(1), gc.GetEndPoint(0))
+
+rect = List[CurveLoop]([CurveLoop.Create([gc, gc3, gc2, gc4])])
+
+solid = GeometryCreationUtilities.CreateExtrusionGeometry(rect,
+                                                              XYZ.BasisZ,
+                                                              7,
+                                                              solid_opt)
+
+
+
+
+#dm.create_ds( solid, doc = doc)
+docW = dmR.Document(doc)
+for li in docW.linkInstances :
+	print(li)

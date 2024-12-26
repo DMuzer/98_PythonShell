@@ -1,0 +1,55 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+flt = ElementMulticategoryFilter(System.Array[bic]([bic.OST_PipeAccessory,\
+									bic.OST_MechanicalEquipment]))
+									
+els = [dm.dmElement(eid) for eid in FilteredElementCollector(doc)\
+					.WherePasses(flt)\
+					.WhereElementIsNotElementType().ToElements()]
+					
+d1 = {}
+for e in els :
+	systName = e.Value("Сокращение для системы")
+	d2 = d1.setdefault(systName, {})
+	cbk_alpha = e.Value("БуквенныйКод")
+	if not cbk_alpha : cbk_alpha = "?"
+	l = d2.setdefault(cbk_alpha, [])
+	l.append(e)
+	
+for system in d1.values() :
+	for tp in system.values() :
+		for num, e in enumerate(tp,1) :
+			e.Set("ЦБК_Номер", num)
+			print(e)
+	
+	
+	

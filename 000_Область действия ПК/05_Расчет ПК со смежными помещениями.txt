@@ -1,0 +1,291 @@
+# Стандарный код для импортов
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+import NetTopologySuite as nts
+
+from importlib import reload
+import dmNTS
+reload(dmNTS)
+
+import dmCalcVisibility
+reload(dmCalcVisibility)
+
+import dmRoomModule as dmR
+reload(dmR)
+
+dmDoc = dmR.DmDoc(doc)
+
+
+def check() :
+	with open(r"d:\check.txt") : pass
+
+
+def shortestSegment(lr) :
+	c= list(lr.Coordinates)
+	return min([(c[i].Distance(c[i+1]), i) for i in range(len(c)-1)])
+def getEndDistance(lr) :
+	c = list(lr.Coordinates)
+	return c[0].Distance(c[-1])
+
+def analyzePolygon(pg) :
+	print("количество точек в полигоне  {}".format(len(pg.Coordinates)))
+	print("количество контуров в полигоне  {}".format(pg.Boundary.NumGeometries))
+	print("количество дырок  {}".format(len(pg.Holes)))
+	print("количество точек во внешней границе {}".format(len(pg.ExteriorRing.Coordinates)))	
+	print("минимальная длина сегмента внешней границы {}".format(shortestSegment(pg.ExteriorRing)))
+	print("расстояние между первой и последней точкой контура {}".format(getEndDistance(pg.ExteriorRing)))
+	for num, lr in enumerate(pg.InteriorRings) :
+		print("количество точек границе дырки {} - {}".format(num, len(lr.Coordinates)))
+		print("минимальная длина сегмента внутренней границы {} {}".format(num, shortestSegment(lr)))
+		
+class dmCalc :
+	"""
+	класс для расчета области действия ПК с учетом смежных комнат
+	"""
+	def __init__(self, room, origin, max_radius = 20000*dut, visitedRooms = set()) :
+		"""
+		Комната для которой делать расчет
+		pnt - точка от которой делается расчет
+		max_radius - это расчетный радиус. Если точка - это положение ПК то радиус
+			максимальная длина рукава. Если точка уже дверь смежного помещения, то это радиус равен
+			остаточной длине рукава в этой точке
+		"""
+		check()
+		sys.stdout.flush()
+		self.room = room
+		if isinstance(origin, nts.Geometries.Point) :
+			self.originPnt = origin
+			self.origin = (origin.X, origin.Y)
+		elif isinstance(origin, (tuple, list)) :
+			self.origin = (origin[0], origin[1])
+			self.originPnt = nts.Geometries.Point(origin[0], origin[1])
+		self.max_radius = max_radius
+		#self.nextRooms = self.room.getNextRooms()
+		self.nextRooms = self.room.getAdjacentRooms()
+		self.visitedRooms = visitedRooms
+		self.nextRoomCalcs = []
+		
+	def calc_next(self) :
+		check()
+		sys.stdout.flush()
+		for calc in self.nextRoomCalcs :
+			check()
+			sys.stdout.flush()
+			calc.doCalc()
+			calc.calc_next()
+			
+	def draw_coverage(self) :
+		self.calc.draw_total_coverage_polygon()
+		check()
+		sys.stdout.flush()
+		
+		for calc in self.nextRoomCalcs :
+			check()
+			sys.stdout.flush()
+			
+			try :
+				calc.draw_coverage()
+			except :
+				print("ошибка")
+				sys.stdout.flush()
+				
+	def calc_total_coverage(self) :
+		check()
+		sys.stdout.flush()
+		self.totalCoverage = self.calc.totalCoverage
+		for calc in self.nextRoomCalcs :
+			check()
+			self.totalCoverage = self.totalCoverage.Union(calc.calc_total_coverage())
+		return self.totalCoverage
+		
+		
+	def doCalc(self) :
+		check()
+		sys.stdout.flush()
+		# Рассчитать покрытие в комнате
+		roomBnd = self.room.getRoomContour()
+		pgRoomBoundary = dmNTS.getCurveLoopsAsNTSPolygon(roomBnd)		
+		self.calc = dmCalcVisibility.dmVisibilityCalculator(self.origin, 
+																	pgRoomBoundary, self.max_radius)
+		self.calc.calc_recursive()
+		self.calc.calc_total_coverage_polygon()
+		
+		# Теперь для каждой двери надо найти ближайший расчет и остаточную длину рукава
+		
+		self.nextRoomCalcs = []
+		newVisited = set(self.visitedRooms)
+		newVisited.add(self.room.roomElement.Id)
+		
+		for room, door in self.nextRooms :
+			check()
+			if room.roomElement :
+				newVisited.add(room.roomElement.Id)
+		
+		for room, door in self.nextRooms :
+			check()
+			
+			if room.roomElement is None : continue
+			if room.roomElement.Id in self.visitedRooms : continue
+			
+			print("Обрабатываем соседнюю комнату {}".format(room.roomElement.Name))
+			
+			_p0 = door.getLocationPoint()
+			if not _p0 : 
+				print("Точка не найдена, пропускаем")
+				continue
+			nextOrigin = nts.Geometries.Point(_p0[0], _p0[1])
+			
+			nextOriginPg = nextOrigin.Buffer(1000*dut)			
+			toCheck = [self.calc]
+			candidates = []
+			while toCheck :
+				check()
+				currentCalc = toCheck.pop()
+				
+				#добавляем для проверки следующие расчеты если они есть
+				for calc in currentCalc.nextCalcs :
+					toCheck.append(calc)
+				
+				#если окружность двери пересекается с областью видимости то добавляем ее в candidates
+				if currentCalc.visibility_polygon.Intersects(nextOriginPg) :
+					candidates.append(currentCalc)
+					
+			#из кандидатов надо выбрать расчет у которого получается самая большая остаточная длина
+			if candidates :
+				print("Найдены {} расчетов для продолжения ".format(len(candidates)))
+				foundCalc = max(candidates, key =  lambda x : x.max_radius - x.origin.Distance(nextOrigin))
+				rest_radius = foundCalc.max_radius - foundCalc.origin.Distance(nextOrigin)-500*dut
+				print("Выбран расчет с остаточной длиной {}м ".format(rest_radius/dut /1000))
+				print(room)
+				print(room.roomElement.Name)
+				#nextRoomBnd = room.getRoomContour()
+				#nextPgRoomBoundary = dmNTS.getCurveLoopsAsNTSPolygon(nextRoomBnd)
+				#nOrigin = (nextOrigin.X, nextOrigin.Y)
+				
+				#newCalc = dmCalcVisibility\
+				#			.dmVisibilityCalculator(nOrigin, nextPgRoomBoundary, rest_radius)
+				newCalc = dmCalc(room, nextOrigin, rest_radius, newVisited) 
+				self.nextRoomCalcs.append(newCalc)
+			else :
+				print("Кандидатов не найдено ")
+				
+	
+			
+			
+			
+pnt = uidoc.Selection.PickPoint()
+z = uidoc.ActiveView.GenLevel.ProjectElevation + 100*dut
+pnt = XYZ(pnt.X, pnt.Y, z)
+origin = (pnt.X, pnt.Y)	
+room = dmDoc.findRoomByPointInAllLinks(pnt)
+print(20*"-")
+nextR = room.getNextRooms()
+print(20*"-")
+print("Количество дверей {}".format(len(nextR)))
+for r, d in nextR :
+	print(d)
+
+
+
+
+
+origin = (pnt.X, pnt.Y)		
+	
+		
+
+calc = dmCalc(room, origin, 18800*dut)
+calc.doCalc()
+calc.calc_next()
+tc = calc.calc_total_coverage()
+dmNTS.create_filled_region(tc.Buffer(0.01).Buffer(-0.02).Buffer(0.01))
+
+calc10 = calc.nextRoomCalcs[0].calc
+
+
+
+
+"""
+roomBnd = room.getRoomContour()
+pgRoomBoundary = dmNTS.getCurveLoopsAsNTSPolygon(roomBnd)			
+
+
+
+vc = dmCalcVisibility.dmVisibilityCalculator(origin, pgRoomBoundary, 20000*dut)
+vc.calc_recursive()
+vc.calc_total_coverage_polygon()
+vc.draw_total_coverage_polygon()
+"""
+"""
+bo = DB.SpatialElementBoundaryOptions()
+for cont1  in room.roomElement.GetBoundarySegments(bo) :
+	for boundE in cont1 :
+		be = room.linkedDocument.document.GetElement(boundE.ElementId)		
+		print(be)
+		
+for r, d in room.getAdjacentRooms() :
+	d.
+	print(d)
+
+"""
+
+"""
+for _pg in upg.Geometries :
+	try :
+		#dmNTS.create_filled_region(_pg)
+		dmNTS.draw_nts_geometry(doc, upg.Buffer(0.01).Buffer(-0.02).Buffer(0.01))
+		dmNTS.create_filled_region(upg.Buffer(0.01).Buffer(-0.02).Buffer(0.01))
+		
+	except :
+		print("ошибка")
+		pass
+"""
+
+
+
+
+
+
+
+	
+	
+	
+
+
+
+
+	

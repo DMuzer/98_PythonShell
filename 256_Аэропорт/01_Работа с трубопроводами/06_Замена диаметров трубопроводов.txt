@@ -225,13 +225,13 @@ class dmBranch(object) :
 		tr = None
 		pipeD = {
 			1 : 25 * dut,
-			2 : 32 * dut,
-			3 : 40 * dut,
-			4 : 50 * dut,
-			5 : 50 * dut,
-			6 : 50 * dut,
-			7 : 50 * dut,
-			8 : 50 * dut,
+			2 : 25 * dut,
+			3 : 25 * dut,
+			4 : 32 * dut,
+			5 : 32 * dut,
+			6 : 32 * dut,
+			7 : 32 * dut,
+			8 : 32 * dut,
 			9 : 50 * dut,
 			10 : 50 * dut,
 			11 : 50 * dut,
@@ -243,7 +243,7 @@ class dmBranch(object) :
 			if sprNum in pipeD :
 				d = pipeD[sprNum]
 			else :
-				d = 65 * dut
+				d = 40 * dut
 			
 		if not doc.IsModifiable :
 			tr = Transaction(doc, "Замена диаметров ветки")

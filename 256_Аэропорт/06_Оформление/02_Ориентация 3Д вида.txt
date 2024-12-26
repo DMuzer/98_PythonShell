@@ -1,0 +1,33 @@
+import Autodesk.Revit.UI as UI
+import sys
+from collections import deque
+import math
+from imp import reload
+libpath = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libpath not in sys.path :
+	sys.path.append(libpath)
+dut = 0.0032808398950131233	
+try :
+	reload(dm)
+except :
+	import dmRevitClasses as dm
+import System, clr
+from System.Collections.Generic import IList, List
+bic = BuiltInCategory
+dsid = ElementId(bic.OST_GenericModel)
+
+views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+
+view1 = views['Схема секции 4 верхний ярус']
+view2 = views['Схема секции 4 доп защита конструкций 1']
+view2 = uidoc.ActiveView
+
+tr  = Transaction(doc, "Копирование ориентации вида")
+tr.Start()
+
+o1 = view1.GetOrientation()
+view2.Unlock()
+view2.SetOrientation(o1)
+view2.SaveOrientationAndLock()
+
+tr.Commit()

@@ -1,0 +1,126 @@
+# Расстановка настенных спринклеров вдоль стены
+import clr
+from Autodesk.Revit import DB, UI
+import System, sys
+from imp import reload
+import time, math
+import json
+dut = 0.0032808398950131233
+bic = BuiltInCategory
+
+refLocations = []
+for assembly in clr.References :
+	refLocations.append(assembly.Location)
+
+libFolder = r"D:\18_проектирование\98_PythonShell"
+if libFolder not in sys.path :
+	sys.path.append(libFolder)
+	
+	
+libFolder2 = r"D:\18_проектирование\pyRevitExtension\DMuzer.extension\lib"
+if libFolder2 not in sys.path :
+	sys.path.append(libFolder2)
+	
+try :
+	reload(dm)
+	print("Перезагрузка dmRevitClasses ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitClasses as dm
+	print("импорт dmRevitClasses ok")
+	
+try :
+	reload(dmDoc)
+	print("Перезагрузка dmRevitDoc ok")
+except Exception as ex :
+	print(ex)
+	import dmRevitDoc as dmDoc
+	print("импорт dmRevitDoc ok")
+	
+	
+try :
+	spr = [s for s in dm.getSelection() if s.IsSprinkler][0]
+except :
+	pass
+sprPnt = spr.Location.Point
+
+sprPnt0 = XYZ(sprPnt.X, sprPnt.Y,0)
+
+while True :
+	try :
+		p = uidoc.Selection.PickPoint()
+	except :
+		break
+
+	av = uidoc.ActiveView
+	
+	vr = av.GetViewRange()
+	sLevel = doc.GetElement(vr.GetLevelId(PlanViewPlane.CutPlane))
+	sOffset = vr.GetOffset(PlanViewPlane.CutPlane)
+	
+	z = sLevel.ProjectElevation + sOffset
+	z = sLevel.ProjectElevation + 2400 * dut
+	
+	p0 = XYZ(p.X, p.Y, z)
+	
+	maxStep = 3000 * dut
+	
+	views = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}
+	fview = views['DM_Пересечения']
+	
+	ud = av.UpDirection
+	rd = av.RightDirection
+	
+	viewName = "DM_Пересечения"
+	
+	refView = {v.Name : v for v in FilteredElementCollector(doc).OfClass(View3D).ToElements()}[viewName]
+	
+	fltCats = System.Array[bic]([
+	     bic.OST_Walls, 
+	 
+	     bic.OST_Floors
+	])
+	flt = ElementMulticategoryFilter(fltCats)
+	
+	refInt = ReferenceIntersector(flt, FindReferenceTarget.Face, refView)
+	refInt.FindReferencesInRevitLinks = True 
+	
+	ref11 = refInt.FindNearest(p0, rd)
+	p11 = ref11.GetReference().GlobalPoint
+	
+	ref12 = refInt.FindNearest(p0, -rd)
+	p12 = ref12.GetReference().GlobalPoint
+	
+	ref21 = refInt.FindNearest(p0, ud)
+	p21 = ref21.GetReference().GlobalPoint
+	
+	ref22 = refInt.FindNearest(p0, -ud)
+	p22 = ref22.GetReference().GlobalPoint
+	
+	width = ref11.Proximity + ref12.Proximity
+	height = ref21.Proximity + ref22.Proximity
+	
+	refs = [ref11, ref12, ref21, ref22]
+	
+	nearestWall = min(refs, key = lambda x : x.Proximity)
+	
+	_startPnt = p0 - rd * ref12.Proximity - ud * ref22.Proximity
+	
+	startPnt = XYZ(_startPnt.X, _startPnt.Y, 0)
+	
+	
+	numW = math.ceil(width / maxStep)
+	numH = math.ceil(height / maxStep)
+	
+	stepW = width / numW
+	stepH = height / numH
+	
+	with dm.trans(doc, a="Расстановка горизонтальных спринклеров вдоль стены") :
+	
+		for i1 in range(numW) :
+			for i2 in range(numH) :
+				p = startPnt + rd * stepW * (0.5 + i1) + ud * stepH * (0.5 + i2)
+				dv =  p -sprPnt0
+				#newSpr = spr.copy(dv)
+				print(p)
+

@@ -1,0 +1,150 @@
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitServices')
+clr.AddReference('System.Windows.Forms')
+clr.AddReference('System.Drawing')
+
+from Autodesk.Revit.DB import *
+from RevitServices.Persistence import DocumentManager
+from System.Windows.Forms import Application, Form, Label, TrackBar, NumericUpDown, Button, FormStartPosition
+from System.Drawing import Point, Size
+from System import EventHandler
+from Autodesk.Revit.UI import IExternalEventHandler, ExternalEvent
+
+# Получение текущего документа Revit
+doc = DocumentManager.Instance.CurrentDBDocument
+
+# Форма Windows Forms
+class LengthInputForm(Form):
+    def __init__(self, sv=1):
+        self.Text = 'Длина'
+        self.Size = Size(300, 200)
+        self.StartPosition = FormStartPosition.CenterScreen
+        self.TopMost = True
+        
+        
+        # Подпись "Длина, м"
+        self.label = Label()
+        self.label.Text = 'Длина, м'
+        self.label.Location = Point(10, 20)
+        self.Controls.Add(self.label)
+        
+        # Поле для ввода числового значения
+        self.numericUpDown = NumericUpDown()
+        self.numericUpDown.Minimum = 0.1
+        self.numericUpDown.Maximum = 10
+        self.numericUpDown.DecimalPlaces = 1
+        self.numericUpDown.Increment = 0.1
+        self.numericUpDown.Location = Point(140, 20)
+        self.numericUpDown.Size = Size(80, 20)
+        self.numericUpDown.Value = sv/10
+        self.numericUpDown.ValueChanged += self.on_value_changed
+        self.Controls.Add(self.numericUpDown)
+        
+        # Бегунок для выбора значения
+        self.trackBar = TrackBar()
+        self.trackBar.Minimum = 1
+        self.trackBar.Maximum = 100
+        self.trackBar.TickFrequency = 10
+        self.trackBar.Value = sv
+        self.trackBar.Location = Point(10, 60)
+        self.trackBar.Size = Size(250, 30)
+        self.trackBar.Scroll += self.on_scroll
+        self.Controls.Add(self.trackBar)
+        
+        # Кнопка "Ок"
+        self.okButton = Button()
+        self.okButton.Text = 'Ок'
+        self.okButton.Location = Point(50, 120)
+        self.okButton.Click += self.on_ok
+        self.Controls.Add(self.okButton)
+        
+        # Кнопка "Закрыть"
+        self.closeButton = Button()
+        self.closeButton.Text = 'Закрыть'
+        self.closeButton.Location = Point(150, 120)
+        self.closeButton.Click += self.on_close
+        self.Controls.Add(self.closeButton)
+    
+    def on_value_changed(self, sender, args):
+        self.trackBar.Value = int(self.numericUpDown.Value * 10)
+        self.trigger_revit_event()
+    
+    def on_scroll(self, sender, args):
+        self.numericUpDown.Value = self.trackBar.Value / 10.0
+        self.trigger_revit_event()
+    
+    def on_ok(self, sender, args):
+        # Здесь можно добавить действия при нажатии "Ок"
+        self.Close()
+    
+    def on_close(self, sender, args):
+        self.Close()
+    
+    def trigger_revit_event(self):
+        # Вызов функции взаимодействия с RevitAPI через механизм событий
+        ExternalEventHelper.instance.raise_event(self.numericUpDown.Value)
+        pass
+
+# Вспомогательный класс для работы с внешними событиями
+class ExternalEventHelper:
+    instance = None
+
+    def __init__(self):
+        self.handler = ExternalEventHandler()
+        self.external_event = ExternalEvent.Create(self.handler)
+        ExternalEventHelper.instance = self
+    
+    def raise_event(self, length_value):
+        self.handler.length_value = length_value
+        self.external_event.Raise()
+import math
+doc = __revit__.ActiveUIDocument.Document
+# Обработчик внешнего события
+try : 
+	lastCreated 
+except :
+	lastCreated = None
+class ExternalEventHandler(IExternalEventHandler):
+    def __init__(self):
+        self.length_value = 0.1
+
+    def Execute(self, app):
+    	global lastCreated, form
+    	try:
+    		active_view = doc.ActiveView
+    		bounding_box = active_view.CropBox
+    		center_x = (bounding_box.Min.X + bounding_box.Max.X) / 2
+    		center_y = (bounding_box.Min.Y + bounding_box.Max.Y) / 2
+    		center = XYZ(center_x, center_y, 0)
+    		
+    		scale = active_view.Scale
+    		radius = form.numericUpDown.Value * (20.0 / 304.8) * scale
+    		
+    		plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, center)
+    		arcArray = Arc.Create(plane, radius, 0, 2 * math.pi)
+    		
+    		t = Transaction(doc, 'Добавление круга на активный вид')
+    		t.Start()
+    		if lastCreated is not None : doc.Delete(lastCreated.Id)
+    		
+    		lastCreated = doc.Create.NewDetailCurve(active_view, arcArray)
+    		t.Commit()
+    	except Exception as ex:
+    		TaskDialog.Show('Ошибка', str(ex))
+
+    def GetName(self):
+        return 'External Event Handler for Length Input'
+
+# Создание и запуск формы
+ExternalEventHelper()  # Инициализация обработчика событий
+try :
+	del(form)
+except : pass
+form = LengthInputForm(sv=5)
+
+form.Show()
+#Application.Show(form)
+
+
+
